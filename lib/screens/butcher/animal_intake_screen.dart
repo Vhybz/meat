@@ -1,29 +1,40 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants.dart';
+import '../../core/utils.dart';
 import '../../widgets/responsive_layout.dart';
 import '../../models/butcher_models.dart';
+import '../../services/butcher_service.dart';
 
-class AnimalIntakeScreen extends StatefulWidget {
+class AnimalIntakeScreen extends ConsumerStatefulWidget {
   const AnimalIntakeScreen({super.key});
 
   @override
-  State<AnimalIntakeScreen> createState() => _AnimalIntakeScreenState();
+  ConsumerState<AnimalIntakeScreen> createState() => _AnimalIntakeScreenState();
 }
 
-class _AnimalIntakeScreenState extends State<AnimalIntakeScreen> {
+class _AnimalIntakeScreenState extends ConsumerState<AnimalIntakeScreen> {
   final _formKey = GlobalKey<FormState>();
   final _idController = TextEditingController();
   final _sourceController = TextEditingController();
   final _weightController = TextEditingController();
+  final _dateTimeController = TextEditingController();
   
   AnimalType? _selectedType;
   double _estimatedYield = 0.0;
+  DateTime _intakeDateTime = DateTime.now();
 
   @override
   void initState() {
     super.initState();
+    _updateDateTime();
     _generateSmartID();
+  }
+
+  void _updateDateTime() {
+    _intakeDateTime = DateTime.now();
+    _dateTimeController.text = DateFormat('yyyy-MM-dd HH:mm:ss').format(_intakeDateTime);
   }
 
   void _generateSmartID() {
@@ -88,6 +99,26 @@ class _AnimalIntakeScreenState extends State<AnimalIntakeScreen> {
                           validator: (v) => v!.isEmpty ? 'ID required' : null,
                         ),
                         TextFormField(
+                          controller: _dateTimeController,
+                          readOnly: true,
+                          decoration: InputDecoration(
+                            labelText: 'Intake Date & Time',
+                            border: const OutlineInputBorder(),
+                            prefixIcon: const Icon(Icons.calendar_today),
+                            suffixIcon: IconButton(
+                              icon: const Icon(Icons.access_time),
+                              onPressed: _updateDateTime,
+                              tooltip: 'Refresh to current time',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.m),
+                    _buildResponsiveRow(
+                      isMobile,
+                      [
+                        TextFormField(
                           controller: _sourceController,
                           decoration: const InputDecoration(
                             labelText: 'Source/Farm', 
@@ -96,14 +127,8 @@ class _AnimalIntakeScreenState extends State<AnimalIntakeScreen> {
                           ),
                           validator: (v) => v!.isEmpty ? 'Farm source required' : null,
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.m),
-                    _buildResponsiveRow(
-                      isMobile,
-                      [
                         DropdownButtonFormField<AnimalType>(
-                          value: _selectedType,
+                          initialValue: _selectedType,
                           decoration: const InputDecoration(
                             labelText: 'Animal Type',
                             border: OutlineInputBorder(),
@@ -158,7 +183,7 @@ class _AnimalIntakeScreenState extends State<AnimalIntakeScreen> {
                               children: [
                                 const Text('Smart Prediction', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.accentGreen, fontSize: 12)),
                                 Text(
-                                  'Estimated Meat Yield: ${_estimatedYield.toStringAsFixed(2)} kg',
+                                  'Estimated Meat Yield: ${WeightConverter.format(_estimatedYield)}',
                                   style: const TextStyle(fontWeight: FontWeight.w600),
                                 ),
                                 Text(
@@ -178,9 +203,44 @@ class _AnimalIntakeScreenState extends State<AnimalIntakeScreen> {
                       child: ElevatedButton(
                         onPressed: () {
                           if (_formKey.currentState!.validate()) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Animal Intake Recorded Successfully')),
+                            final timeStr = DateFormat('jm').format(_intakeDateTime);
+                            final dateStr = DateFormat('yMMMd').format(_intakeDateTime);
+                            final weightKg = double.tryParse(_weightController.text) ?? 0.0;
+                            
+                            // Create a new SlaughterLog and add it to the provider
+                            final newLog = SlaughterLog(
+                              id: _idController.text,
+                              animalId: _sourceController.text, // Using source as dummy animal ref
+                              type: _selectedType!,
+                              weight: weightKg,
+                              status: SlaughterStatus.pending,
+                              slaughterTime: _intakeDateTime,
                             );
+                            
+                            ref.read(slaughterLogsProvider.notifier).addLog(newLog);
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Animal recorded and added to Slaughter Log!'),
+                                backgroundColor: AppColors.accentGreen,
+                                behavior: SnackBarBehavior.floating,
+                                action: SnackBarAction(
+                                  label: 'VIEW LOG',
+                                  textColor: Colors.white,
+                                  onPressed: () {
+                                    // You could navigate to logs here if desired
+                                  },
+                                ),
+                              ),
+                            );
+                            
+                            _generateSmartID();
+                            _updateDateTime();
+                            _sourceController.clear();
+                            _weightController.clear();
+                            setState(() {
+                              _estimatedYield = 0.0;
+                            });
                           }
                         },
                         style: ElevatedButton.styleFrom(

@@ -57,7 +57,7 @@ class AppSidebar extends StatelessWidget {
             ),
           ),
           _buildUserSection(),
-          _buildLogoutButton(),
+          _buildLogoutButton(context),
         ],
       ),
     );
@@ -69,12 +69,16 @@ class AppSidebar extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(AppRadius.s),
+              image: const DecorationImage(
+                image: AssetImage('assets/logo/logo.jpg'),
+                fit: BoxFit.cover,
+              ),
             ),
-            child: const Icon(Icons.restaurant_menu, color: Colors.white, size: 24),
           ),
           const SizedBox(width: AppSpacing.m),
           const Expanded(
@@ -82,12 +86,12 @@ class AppSidebar extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Meat Shop',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                  'Mi CORAZON',
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  'MS System',
+                  'Freshmeat Butchery',
                   style: TextStyle(color: Colors.white70, fontSize: 10),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -168,11 +172,11 @@ class AppSidebar extends StatelessWidget {
     );
   }
 
-  Widget _buildLogoutButton() {
+  Widget _buildLogoutButton(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.m),
       child: TextButton.icon(
-        onPressed: () {},
+        onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
         icon: const Icon(Icons.logout, color: Colors.white70, size: 18),
         label: const Expanded(child: Text('Log Out', style: TextStyle(color: Colors.white70), overflow: TextOverflow.ellipsis)),
         style: TextButton.styleFrom(alignment: Alignment.centerLeft, padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s)),

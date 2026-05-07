@@ -15,6 +15,13 @@ class ProductCard extends StatelessWidget {
     required this.onTap,
   });
 
+  Widget _buildErrorIcon() {
+    return Container(
+      color: AppColors.surfaceWhite,
+      child: const Icon(Icons.image, color: AppColors.borderGray),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -25,15 +32,21 @@ class ProductCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: Image.network(
-                imageUrl,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  color: AppColors.surfaceWhite,
-                  child: const Icon(Icons.image, color: AppColors.borderGray),
-                ),
-              ),
+              child: imageUrl.isEmpty 
+                ? _buildErrorIcon()
+                : imageUrl.startsWith('assets/') 
+                  ? Image.asset(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      errorBuilder: (context, error, stackTrace) => _buildErrorIcon(),
+                    )
+                  : Image.network(
+                      imageUrl,
+                      fit: BoxFit.cover,
+                      width: double.infinity,
+                      errorBuilder: (context, error, stackTrace) => _buildErrorIcon(),
+                    ),
             ),
             Padding(
               padding: const EdgeInsets.all(8.0),

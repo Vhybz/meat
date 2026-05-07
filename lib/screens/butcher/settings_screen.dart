@@ -67,7 +67,7 @@ class SettingsScreen extends ConsumerWidget {
                 subtitle: const Text('Notify when stock is below threshold'),
                 value: true,
                 onChanged: (v) {},
-                activeColor: AppColors.primaryMaroon,
+                activeThumbColor: AppColors.primaryMaroon,
               ),
               SwitchListTile(
                 secondary: const Icon(Icons.timer_outlined),
@@ -75,7 +75,7 @@ class SettingsScreen extends ConsumerWidget {
                 subtitle: const Text('Track duration of each slaughter'),
                 value: true,
                 onChanged: (v) {},
-                activeColor: AppColors.primaryMaroon,
+                activeThumbColor: AppColors.primaryMaroon,
               ),
             ],
           ),

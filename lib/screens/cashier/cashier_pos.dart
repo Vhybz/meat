@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants.dart';
+import '../../core/utils.dart';
 import '../../widgets/responsive_layout.dart';
 import '../../widgets/product_card.dart';
 import '../../widgets/cart_item_tile.dart';
@@ -15,6 +16,7 @@ import '../../models/sale_model.dart';
 import '../../models/product.dart';
 import '../../services/receipt_service.dart';
 import '../../services/sms_service.dart';
+import '../../services/notification_service.dart';
 
 enum POSView { sales, history }
 
@@ -29,6 +31,10 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
   POSView _currentView = POSView.sales;
   String _selectedCategory = 'All';
   final List<String> _categories = ['All', 'Beef', 'Pork', 'Chicken', 'Others'];
+  
+  // Filtering states for History
+  String _historySearchQuery = '';
+  DateTime? _historyFilterDate;
 
   @override
   Widget build(BuildContext context) {
@@ -126,7 +132,7 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
           }),
           const Spacer(),
           _buildSidebarIcon(Icons.logout_rounded, 'Logout', false, () {
-            Navigator.pushReplacementNamed(context, '/');
+            Navigator.pushReplacementNamed(context, '/login');
           }),
           const SizedBox(height: AppSpacing.m),
         ],
@@ -169,10 +175,13 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
                   itemCount: filtered.length,
                   itemBuilder: (context, index) {
                     final product = filtered[index];
+                    final pricePerKg = product.unit == 'kg' ? product.price : product.price * WeightConverter.kgToLb;
+                    final pricePerLb = product.unit == 'lb' ? product.price : product.price / WeightConverter.kgToLb;
+                    
                     return ProductCard(
                       name: product.name,
-                      price: '₵${product.price} / kg',
-                      imageUrl: 'https://images.unsplash.com/photo-1588168333986-5078d3ae3976?w=200',
+                      price: '₵${pricePerKg.toStringAsFixed(2)}/kg | ₵${pricePerLb.toStringAsFixed(2)}/lb',
+                      imageUrl: product.imageUrl,
                       onTap: () => _showWeightInputDialog(product),
                     );
                   },
@@ -261,7 +270,7 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
                     return CartItemTile(
                       name: item.product.name,
                       qty: '1',
-                      weight: '${item.quantity}kg',
+                      weight: WeightConverter.formatShort(item.quantity),
                       amount: '₵${item.total.toStringAsFixed(2)}',
                       onDelete: () => notifier.removeItem(index),
                     );
@@ -274,7 +283,9 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
   }
 
   Widget _buildCartSummary(WidgetRef ref) {
-    final subtotal = ref.watch(cartProvider.notifier).subtotal;
+    final netValue = ref.watch(cartProvider.notifier).subtotal;
+    final basic = netValue;
+    final taxes = 0.00;
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.m),
@@ -284,8 +295,23 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Total', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              Text('₵${subtotal.toStringAsFixed(2)}',
+              const Text('Basic Amount', style: TextStyle(fontSize: 12, color: AppColors.textLight)),
+              Text('₵${basic.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
+            ],
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Taxes (Inc. VAT)', style: TextStyle(fontSize: 12, color: AppColors.textLight)),
+              Text('₵${taxes.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
+            ],
+          ),
+          const Divider(),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Net Total', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Text('₵${netValue.toStringAsFixed(2)}',
                   style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.primaryMaroon)),
             ],
           ),
@@ -293,7 +319,7 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: subtotal > 0 ? () => _showPaymentDialog(ref) : null,
+              onPressed: netValue > 0 ? () => _showPaymentDialog(ref) : null,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primaryMaroon,
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -323,7 +349,7 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
     final total = ref.read(cartProvider.notifier).subtotal;
 
     final sale = SaleRecord(
-      id: 'INV-${DateTime.now().millisecond}',
+      id: 'INV-${DateTime.now().millisecondsSinceEpoch}',
       items: cartItems.map((item) => SaleItem(
         product: item.product,
         quantity: item.quantity,
@@ -337,6 +363,9 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
 
     ref.read(saleHistoryProvider.notifier).addSale(sale);
     ref.read(cartProvider.notifier).clear();
+
+    // Automatically trigger receipt printing
+    ReceiptService.printReceipt(sale);
 
     _showPrintConfirmation(sale);
   }
@@ -354,26 +383,111 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
 
   Widget _buildHistoryLayout() {
     final history = ref.watch(saleHistoryProvider);
+    
+    final filteredHistory = history.where((sale) {
+      final matchesSearch = sale.id.toLowerCase().contains(_historySearchQuery.toLowerCase());
+      final matchesDate = _historyFilterDate == null || 
+          DateFormat('yyyy-MM-dd').format(sale.timestamp) == DateFormat('yyyy-MM-dd').format(_historyFilterDate!);
+      return matchesSearch && matchesDate;
+    }).toList();
 
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.l),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Recent Transactions', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Recent Transactions', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+              ElevatedButton.icon(
+                onPressed: () => ReceiptService.printSalesReport(filteredHistory, title: 'Cashier Daily Sales Report'),
+                icon: const Icon(Icons.print),
+                label: const Text('Print Filtered Report'),
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMaroon, foregroundColor: Colors.white),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.m),
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: TextField(
+                  onChanged: (v) => setState(() => _historySearchQuery = v),
+                  decoration: InputDecoration(
+                    hintText: 'Search Receipt #...',
+                    prefixIcon: const Icon(Icons.search),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.s)),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.m),
+              Expanded(
+                child: TextButton.icon(
+                  onPressed: () async {
+                    final picked = await showDatePicker(
+                      context: context,
+                      initialDate: DateTime.now(),
+                      firstDate: DateTime(2023),
+                      lastDate: DateTime.now(),
+                    );
+                    if (picked != null) setState(() => _historyFilterDate = picked);
+                  },
+                  icon: const Icon(Icons.calendar_month),
+                  label: Text(_historyFilterDate == null ? 'Select Date' : DateFormat('MMM dd').format(_historyFilterDate!)),
+                ),
+              ),
+              if (_historyFilterDate != null || _historySearchQuery.isNotEmpty)
+                IconButton(onPressed: () => setState(() { _historyFilterDate = null; _historySearchQuery = ''; }), icon: const Icon(Icons.clear)),
+            ],
+          ),
           const SizedBox(height: AppSpacing.m),
           Expanded(
-            child: history.isEmpty
-              ? const Center(child: Text('No transactions recorded yet.'))
+            child: filteredHistory.isEmpty
+              ? const Center(child: Text('No transactions found.'))
               : ListView.builder(
-                  itemCount: history.length,
+                  itemCount: filteredHistory.length,
                   itemBuilder: (context, index) {
-                    final sale = history[index];
+                    final sale = filteredHistory[index];
+                    Color statusColor = AppColors.primaryMaroon;
+                    IconData statusIcon = Icons.receipt_long;
+                    
+                    if (sale.status == SaleStatus.pendingCorrection) {
+                      statusColor = Colors.orange;
+                      statusIcon = Icons.warning_amber_rounded;
+                    } else if (sale.status == SaleStatus.rectified) {
+                      statusColor = Colors.green;
+                      statusIcon = Icons.check_circle_outline;
+                    }
+
                     return Card(
                       margin: const EdgeInsets.only(bottom: AppSpacing.m),
                       child: ListTile(
-                        leading: const CircleAvatar(backgroundColor: AppColors.surfaceWhite, child: Icon(Icons.receipt_long, color: AppColors.primaryMaroon)),
-                        title: Text('Sale ${sale.id}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        leading: CircleAvatar(
+                          backgroundColor: statusColor.withValues(alpha: 0.1), 
+                          child: Icon(statusIcon, color: statusColor),
+                        ),
+                        title: Row(
+                          children: [
+                            Text('Sale ${sale.id}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                            if (sale.status != SaleStatus.completed) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: statusColor,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  sale.status == SaleStatus.pendingCorrection ? 'PENDING ERROR' : 'RECTIFIED',
+                                  style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
                         subtitle: Text(DateFormat('MMM dd, hh:mm a').format(sale.timestamp)),
                         trailing: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -400,7 +514,7 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
       context: context,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
-        child: Container(
+        child: SizedBox(
           width: 450,
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -464,21 +578,22 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
                         child: Row(
                           children: [
                             Expanded(child: Text(item.product.name)),
-                            Text('${item.quantity}kg x ₵${item.priceAtSale.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, color: AppColors.textLight)),
+                            Text('${WeightConverter.formatShort(item.quantity)} x ₵${item.priceAtSale.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, color: AppColors.textLight)),
                             const SizedBox(width: 16),
                             Text('₵${item.total.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
                           ],
                         ),
                       )),
                       const Divider(height: 32),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text('SUBTOTAL', style: TextStyle(fontSize: 12, color: AppColors.textLight)),
-                          Text('₵${sale.totalAmount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
+                      const Text('FINANCIAL BREAKDOWN', style: TextStyle(fontSize: 10, color: AppColors.textLight, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      _detailRow('Basic Amount', '₵${sale.basicAmount.toStringAsFixed(2)}'),
+                      _detailRow('GETFUND (2.5%)', '₵${sale.getFund.toStringAsFixed(2)}'),
+                      _detailRow('NHIL (2.5%)', '₵${sale.nhil.toStringAsFixed(2)}'),
+                      _detailRow('VAT (15%)', '₵${sale.vat.toStringAsFixed(2)}'),
+                      const Divider(height: 16),
+                      _detailRow('NET INVOICE VALUE', '₵${sale.netInvoiceValue.toStringAsFixed(2)}', isBold: true, color: AppColors.primaryMaroon),
+                      const Divider(height: 32),
                       const Text('PAYMENTS', style: TextStyle(fontSize: 10, color: AppColors.textLight, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
                       ...sale.payments.map((p) => Padding(
@@ -517,6 +632,38 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
                                 ],
                               ),
                             ],
+                            if (sale.status != SaleStatus.completed) ...[
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: sale.status == SaleStatus.pendingCorrection ? Colors.orange.withValues(alpha: 0.1) : Colors.green.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      sale.status == SaleStatus.pendingCorrection ? Icons.warning_amber_rounded : Icons.check_circle_outline,
+                                      size: 16,
+                                      color: sale.status == SaleStatus.pendingCorrection ? Colors.orange : Colors.green,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        sale.status == SaleStatus.pendingCorrection 
+                                          ? 'Correction Requested: ${sale.correctionReason}'
+                                          : 'Sale Rectified by Admin',
+                                        style: TextStyle(
+                                          fontSize: 11, 
+                                          fontWeight: FontWeight.bold,
+                                          color: sale.status == SaleStatus.pendingCorrection ? Colors.orange : Colors.green,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -532,6 +679,13 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
+                    if (sale.status == SaleStatus.completed)
+                      TextButton.icon(
+                        onPressed: () => _showReportErrorDialog(sale),
+                        icon: const Icon(Icons.report_problem_outlined, size: 18, color: Colors.orange),
+                        label: const Text('Report Mistake', style: TextStyle(color: Colors.orange)),
+                      ),
+                    const Spacer(),
                     TextButton(
                       onPressed: () => Navigator.pop(context),
                       child: const Text('Close', style: TextStyle(color: AppColors.textLight)),
@@ -558,12 +712,89 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
     );
   }
 
+  void _showReportErrorDialog(SaleRecord sale) {
+    final reasonController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Report Sale Mistake'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Describe the mistake (e.g., wrong weight, wrong product). This will notify the Admin for rectification.', 
+              style: TextStyle(fontSize: 12, color: AppColors.textLight)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: reasonController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: 'Reason for correction...',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              if (reasonController.text.isNotEmpty) {
+                final updatedSale = sale.copyWith(
+                  status: SaleStatus.pendingCorrection,
+                  correctionReason: reasonController.text,
+                );
+                ref.read(saleHistoryProvider.notifier).updateSale(updatedSale);
+                
+                // Notify Admin via SMS and Mock Push
+                await SmsService.notifyAdmin(
+                  title: 'POS CORRECTION REQUEST',
+                  message: 'Cashier Maria reported a mistake in Sale ${sale.id}. Reason: ${reasonController.text}',
+                );
+
+                ref.read(notificationProvider.notifier).addNotification(
+                  'POS CORRECTION REQUEST',
+                  'Cashier Maria reported a mistake in Sale ${sale.id}. Reason: ${reasonController.text}',
+                );
+
+                if (mounted) {
+                  Navigator.pop(context); // Close dialog
+                  Navigator.pop(context); // Close details
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Mistake reported and Admin notified via SMS.'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+            child: const Text('Send Report'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value, {bool isBold = false, Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(fontSize: 12, color: isBold ? AppColors.textDark : AppColors.textLight, fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
+          Text(value, style: TextStyle(fontSize: 12, fontWeight: isBold ? FontWeight.bold : FontWeight.normal, color: color)),
+        ],
+      ),
+    );
+  }
+
   void _showIncomingStockDialog(BuildContext context, WidgetRef ref, List<StockTransfer> transfers) {
     showDialog(
       context: context,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
-        child: Container(
+        child: SizedBox(
           width: 500,
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -626,7 +857,7 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
                               child: Row(
                                 children: [
                                   CircleAvatar(
-                                    backgroundColor: AppColors.primaryMaroon.withOpacity(0.1),
+                                    backgroundColor: AppColors.primaryMaroon.withValues(alpha: 0.1),
                                     child: const Icon(Icons.restaurant_menu, color: AppColors.primaryMaroon, size: 20),
                                   ),
                                   const SizedBox(width: AppSpacing.m),
@@ -726,6 +957,7 @@ class _ProductWeightDialogState extends State<ProductWeightDialog> {
   late TextEditingController _qtyController;
   double _weight = 1.0;
   int _quantity = 1;
+  WeightUnit _unit = WeightUnit.kg;
 
   @override
   void initState() {
@@ -756,7 +988,7 @@ class _ProductWeightDialogState extends State<ProductWeightDialog> {
 
   void _updateWeight(double delta) {
     setState(() {
-      _weight = (_weight + delta).clamp(0.1, 100.0);
+      _weight = (_weight + delta).clamp(0.1, 500.0);
       _weightController.text = _weight.toStringAsFixed(1);
     });
   }
@@ -775,6 +1007,19 @@ class _ProductWeightDialogState extends State<ProductWeightDialog> {
     });
   }
 
+  void _toggleUnit(WeightUnit unit) {
+    if (_unit == unit) return;
+    setState(() {
+      if (unit == WeightUnit.lb) {
+        _weight = WeightConverter.toLb(_weight);
+      } else {
+        _weight = WeightConverter.toKg(_weight);
+      }
+      _unit = unit;
+      _weightController.text = _weight.toStringAsFixed(1);
+    });
+  }
+
   @override
   void dispose() {
     _weightController.dispose();
@@ -784,12 +1029,14 @@ class _ProductWeightDialogState extends State<ProductWeightDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final total = _weight * widget.product.price * _quantity;
+    final double kgWeight = _unit == WeightUnit.kg ? _weight : WeightConverter.toKg(_weight);
+    final pricePerKg = widget.product.unit == 'kg' ? widget.product.price : widget.product.price * WeightConverter.kgToLb;
+    final total = kgWeight * pricePerKg * _quantity;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
-      child: Container(
-        width: 450,
+      child: SizedBox(
+        width: 480,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -808,7 +1055,14 @@ class _ProductWeightDialogState extends State<ProductWeightDialog> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(widget.product.name, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                        Text('₵${widget.product.price.toStringAsFixed(2)} / kg', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                        Builder(
+                          builder: (context) {
+                            final pricePerKg = widget.product.unit == 'kg' ? widget.product.price : widget.product.price * WeightConverter.kgToLb;
+                            final pricePerLb = widget.product.unit == 'lb' ? widget.product.price : widget.product.price / WeightConverter.kgToLb;
+                            return Text('Price: ₵${pricePerKg.toStringAsFixed(2)}/kg (₵${pricePerLb.toStringAsFixed(2)}/lb)', 
+                              style: const TextStyle(color: Colors.white70, fontSize: 11));
+                          }
+                        ),
                       ],
                     ),
                   ),
@@ -824,11 +1078,20 @@ class _ProductWeightDialogState extends State<ProductWeightDialog> {
               child: Column(
                 children: [
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      _unitToggleButton(WeightUnit.kg, 'Kilograms'),
+                      const SizedBox(width: 8),
+                      _unitToggleButton(WeightUnit.lb, 'Pounds'),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.l),
+                  Row(
                     children: [
                       Expanded(
                         child: Column(
                           children: [
-                            const Text('Weight (kg)', style: TextStyle(fontSize: 12, color: AppColors.textLight, fontWeight: FontWeight.bold)),
+                            Text('Input Weight (${_unit.name})', style: const TextStyle(fontSize: 12, color: AppColors.textLight, fontWeight: FontWeight.bold)),
                             const SizedBox(height: 8),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -879,15 +1142,15 @@ class _ProductWeightDialogState extends State<ProductWeightDialog> {
                     ],
                   ),
                   const SizedBox(height: AppSpacing.l),
-                  const Text('Quick Weight Select', style: TextStyle(fontSize: 10, color: AppColors.textLight, fontWeight: FontWeight.bold)),
+                  const Text('Quick Select', style: TextStyle(fontSize: 10, color: AppColors.textLight, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
-                    children: [0.5, 1.0, 1.5, 2.0, 5.0].map((w) => ChoiceChip(
-                      label: Text('${w}kg'),
+                    children: (_unit == WeightUnit.kg ? [0.5, 1.0, 2.0, 5.0, 10.0] : [1.0, 2.0, 5.0, 10.0, 20.0]).map((w) => ChoiceChip(
+                      label: Text('$w${_unit.name}'),
                       selected: _weight == w,
                       onSelected: (selected) { if (selected) _setWeight(w); },
-                      selectedColor: AppColors.primaryMaroon.withOpacity(0.1),
+                      selectedColor: AppColors.primaryMaroon.withValues(alpha: 0.1),
                       labelStyle: TextStyle(color: _weight == w ? AppColors.primaryMaroon : AppColors.textDark, fontSize: 11),
                     )).toList(),
                   ),
@@ -905,7 +1168,7 @@ class _ProductWeightDialogState extends State<ProductWeightDialog> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             const Text('Total Weight', style: TextStyle(fontSize: 12, color: AppColors.textLight)),
-                            Text('${(_weight * _quantity).toStringAsFixed(2)} kg', style: const TextStyle(fontWeight: FontWeight.bold)),
+                            Text(WeightConverter.formatShort(kgWeight * _quantity), style: const TextStyle(fontWeight: FontWeight.bold)),
                           ],
                         ),
                         const Divider(height: 16),
@@ -937,7 +1200,7 @@ class _ProductWeightDialogState extends State<ProductWeightDialog> {
                   const SizedBox(width: AppSpacing.m),
                   ElevatedButton(
                     onPressed: () {
-                      widget.onAdd(_weight * _quantity);
+                      widget.onAdd(kgWeight * _quantity);
                       Navigator.pop(context);
                     },
                     style: ElevatedButton.styleFrom(
@@ -954,6 +1217,17 @@ class _ProductWeightDialogState extends State<ProductWeightDialog> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _unitToggleButton(WeightUnit unit, String label) {
+    final bool isSelected = _unit == unit;
+    return ChoiceChip(
+      label: Text(label),
+      selected: isSelected,
+      onSelected: (_) => _toggleUnit(unit),
+      selectedColor: AppColors.primaryMaroon,
+      labelStyle: TextStyle(color: isSelected ? Colors.white : AppColors.primaryMaroon, fontWeight: FontWeight.bold),
     );
   }
 
@@ -1412,14 +1686,60 @@ class _ReceiptSuccessDialogState extends State<ReceiptSuccessDialog> {
   }
 
   Widget _buildReceiptSummary() {
+    final bool isFullPayment = widget.sale.balance <= 0;
+
     return Column(
       children: [
-        const Text('RECEIPT SUMMARY', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textLight)),
-        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: isFullPayment ? AppColors.accentGreen.withValues(alpha: 0.1) : Colors.orange.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: isFullPayment ? AppColors.accentGreen : Colors.orange),
+              ),
+              child: Text(
+                isFullPayment ? 'FULL PAYMENT' : 'PARTIAL PAYMENT',
+                style: TextStyle(
+                  color: isFullPayment ? AppColors.accentGreen : Colors.orange,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        const Text('TOTAL AMOUNT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textLight)),
         Text('₵${widget.sale.totalAmount.toStringAsFixed(2)}', 
           style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: AppColors.primaryMaroon)),
-        Text('Order ID: ${widget.sale.id}', style: const TextStyle(fontSize: 12, color: AppColors.textLight)),
+        
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('Qty: ${WeightConverter.formatShort(widget.sale.totalQty)}', style: const TextStyle(fontSize: 11, color: AppColors.textLight)),
+            const SizedBox(width: 16),
+            Text('SKU: ${widget.sale.skuCount}', style: const TextStyle(fontSize: 11, color: AppColors.textLight)),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _miniSummary('Paid', widget.sale.amountPaid, AppColors.accentGreen),
+            const SizedBox(width: 24),
+            _miniSummary(widget.sale.balance <= 0 ? 'Change' : 'Balance', widget.sale.balance.abs(), 
+                widget.sale.balance <= 0 ? AppColors.textLight : Colors.red),
+          ],
+        ),
+        
         const SizedBox(height: 16),
+        Text('Order ID: ${widget.sale.id}', style: const TextStyle(fontSize: 12, color: AppColors.textLight)),
+        const Divider(height: 32),
+        
         ...widget.sale.items.take(3).map((item) => Padding(
           padding: const EdgeInsets.symmetric(vertical: 2),
           child: Row(
@@ -1434,6 +1754,7 @@ class _ReceiptSuccessDialogState extends State<ReceiptSuccessDialog> {
           const Text('...and more items', style: TextStyle(fontSize: 10, fontStyle: FontStyle.italic)),
         const SizedBox(height: 20),
         Container(
+          width: double.infinity,
           padding: const EdgeInsets.all(AppSpacing.m),
           decoration: BoxDecoration(
             color: AppColors.surfaceWhite,
@@ -1452,6 +1773,16 @@ class _ReceiptSuccessDialogState extends State<ReceiptSuccessDialog> {
             ],
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _miniSummary(String label, double amount, Color color) {
+    return Column(
+      children: [
+        Text(label, style: const TextStyle(fontSize: 10, color: AppColors.textLight)),
+        Text('₵${amount.toStringAsFixed(2)}', 
+            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color)),
       ],
     );
   }
@@ -1499,7 +1830,7 @@ class _ReceiptSuccessDialogState extends State<ReceiptSuccessDialog> {
                 child: OutlinedButton.icon(
                   onPressed: _isSendingSms ? null : _handlePrintOnly,
                   icon: const Icon(Icons.print),
-                  label: const Text('Print Only'),
+                  label: const Text('Reprint Receipt'),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     side: const BorderSide(color: AppColors.primaryMaroon),

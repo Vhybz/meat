@@ -2,6 +2,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import '../models/transfer_models.dart';
+import '../core/utils.dart';
 import 'package:intl/intl.dart';
 
 class LabelService {
@@ -17,7 +18,7 @@ class LabelService {
               mainAxisAlignment: pw.MainAxisAlignment.center,
               children: [
                 pw.Text(transfer.meatType.toUpperCase(), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
-                pw.Text('Weight: ${transfer.weight}kg', style: const pw.TextStyle(fontSize: 8)),
+                pw.Text('Weight: ${WeightConverter.formatShort(transfer.weight)}', style: const pw.TextStyle(fontSize: 8)),
                 pw.Text('ID: ${transfer.id}', style: const pw.TextStyle(fontSize: 6)),
                 pw.Text('Dest: ${transfer.destination}', style: const pw.TextStyle(fontSize: 6)),
                 pw.Text(DateFormat('yyyy-MM-dd HH:mm').format(transfer.transferTime), style: const pw.TextStyle(fontSize: 6)),

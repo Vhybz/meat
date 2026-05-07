@@ -66,7 +66,7 @@ class ProfileScreen extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: () {},
+              onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
               icon: const Icon(Icons.logout, color: Colors.red),
               label: const Text('Log Out', style: TextStyle(color: Colors.red)),
               style: OutlinedButton.styleFrom(

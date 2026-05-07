@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../core/constants.dart';
+import '../../core/utils.dart';
 import '../../services/butcher_service.dart';
 import '../../widgets/status_chip.dart';
 import '../../models/butcher_models.dart';
@@ -59,6 +61,7 @@ class _SlaughterLogScreenState extends ConsumerState<SlaughterLogScreen> {
                         DataColumn(label: Text('ID')),
                         DataColumn(label: Text('Animal ID')),
                         DataColumn(label: Text('Type')),
+                        DataColumn(label: Text('Date & Time')),
                         DataColumn(label: Text('Weight')),
                         DataColumn(label: Text('Est. Yield')),
                         DataColumn(label: Text('Status')),
@@ -68,9 +71,15 @@ class _SlaughterLogScreenState extends ConsumerState<SlaughterLogScreen> {
                         DataCell(Text(log.id, style: const TextStyle(fontSize: 12))),
                         DataCell(Text(log.animalId, style: const TextStyle(fontSize: 12))),
                         DataCell(Text(log.type.displayName, style: const TextStyle(fontSize: 12))),
-                        DataCell(Text('${log.weight} kg', style: const TextStyle(fontSize: 12))),
-                        DataCell(Text('${log.estimatedYield.toStringAsFixed(1)} kg', 
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.accentGreen))),
+                        DataCell(Text(
+                          log.slaughterTime != null 
+                            ? DateFormat('MM/dd HH:mm').format(log.slaughterTime!) 
+                            : 'Pending',
+                          style: const TextStyle(fontSize: 11),
+                        )),
+                        DataCell(Text(WeightConverter.formatShort(log.weight), style: const TextStyle(fontSize: 10))),
+                        DataCell(Text(WeightConverter.formatShort(log.estimatedYield), 
+                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.accentGreen))),
                         DataCell(StatusChip(
                           label: log.status.name.toUpperCase(),
                           color: log.status == SlaughterStatus.completed ? Colors.green : Colors.blue,
@@ -118,7 +127,7 @@ class _SlaughterLogScreenState extends ConsumerState<SlaughterLogScreen> {
           Expanded(
             flex: 2,
             child: DropdownButtonFormField<AnimalType>(
-              value: _filterType,
+              initialValue: _filterType,
               decoration: InputDecoration(
                 hintText: 'All Animals',
                 prefixIcon: const Icon(Icons.filter_list, size: 20),

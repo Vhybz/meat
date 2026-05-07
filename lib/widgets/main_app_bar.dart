@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../core/constants.dart';
 import 'responsive_layout.dart';
+import '../services/notification_service.dart';
 
-class MainAppBar extends StatelessWidget implements PreferredSizeWidget {
+class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
   final String title;
   final List<Widget>? actions;
   final bool showMenuButton;
@@ -18,10 +20,12 @@ class MainAppBar extends StatelessWidget implements PreferredSizeWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDesktop = ResponsiveLayout.isDesktop(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final now = DateTime.now();
+    final notifications = ref.watch(notificationProvider);
+    final unreadCount = notifications.where((n) => !n.isRead).length;
 
     return Container(
       decoration: BoxDecoration(
@@ -95,10 +99,82 @@ class MainAppBar extends StatelessWidget implements PreferredSizeWidget {
               
               const SizedBox(width: AppSpacing.m),
               
-              _buildRoundButton(context, Icons.notifications_none_rounded, () {}),
+              _buildNotificationButton(context, unreadCount, () => _showNotificationsDialog(context, ref, notifications)),
               const SizedBox(width: AppSpacing.s),
               
               _buildProfileAvatar(context),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationButton(BuildContext context, int count, VoidCallback onTap) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Stack(
+      children: [
+        _buildRoundButton(context, Icons.notifications_none_rounded, onTap),
+        if (count > 0)
+          Positioned(
+            right: 4,
+            top: 4,
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+              constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+              child: Text(
+                '$count',
+                style: const TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _showNotificationsDialog(BuildContext context, WidgetRef ref, List<AppNotification> notifications) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
+        child: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.m),
+                decoration: const BoxDecoration(
+                  color: AppColors.primaryMaroon,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.l)),
+                ),
+                child: const Text('Recent Notifications', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+              if (notifications.isEmpty)
+                const Padding(padding: EdgeInsets.all(40), child: Text('No new notifications.'))
+              else
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: notifications.length,
+                    itemBuilder: (context, index) {
+                      final n = notifications[index];
+                      return ListTile(
+                        leading: Icon(n.title.contains('BUTCHER') ? Icons.warning : Icons.report, color: Colors.orange),
+                        title: Text(n.title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        subtitle: Text(n.message, style: const TextStyle(fontSize: 11)),
+                        trailing: Text(DateFormat('hh:mm').format(n.timestamp), style: const TextStyle(fontSize: 10)),
+                        tileColor: n.isRead ? null : Colors.orange.withValues(alpha: 0.05),
+                        onTap: () {
+                          ref.read(notificationProvider.notifier).markAsRead(n.id);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
             ],
           ),
         ),

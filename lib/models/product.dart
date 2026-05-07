@@ -5,6 +5,7 @@ class Product {
   final String imageUrl;
   final String category;
   final double stockQuantity;
+  final String unit; // e.g., 'kg' or 'lb'
 
   Product({
     required this.id,
@@ -13,6 +14,7 @@ class Product {
     required this.imageUrl,
     required this.category,
     this.stockQuantity = 0,
+    this.unit = 'kg',
   });
 
   factory Product.fromJson(Map<String, dynamic> json) {
@@ -23,6 +25,7 @@ class Product {
       imageUrl: json['imageUrl'] as String,
       category: json['category'] as String,
       stockQuantity: (json['stockQuantity'] as num? ?? 0).toDouble(),
+      unit: json['unit'] as String? ?? 'kg',
     );
   }
 
@@ -33,6 +36,7 @@ class Product {
         'imageUrl': imageUrl,
         'category': category,
         'stockQuantity': stockQuantity,
+        'unit': unit,
       };
 }
 

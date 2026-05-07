@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants.dart';
+import '../../core/utils.dart';
 import '../../widgets/status_chip.dart';
 import '../../services/transfer_provider.dart';
 import '../../services/butcher_service.dart';
 import '../../models/transfer_models.dart';
 import '../../models/butcher_models.dart';
 import '../../services/user_provider.dart';
-import '../../models/user_model.dart';
 import '../../services/label_service.dart';
 
 class StockTransferScreen extends ConsumerStatefulWidget {
@@ -77,8 +77,8 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
 
     return Row(
       children: [
-        _summaryCard('In Transit', '${pendingWeight.toStringAsFixed(1)} kg', Icons.local_shipping, Colors.blue),
-        _summaryCard('Completed Today', '${completedTodayWeight.toStringAsFixed(1)} kg', Icons.check_circle, Colors.green),
+        _summaryCard('In Transit', WeightConverter.formatShort(pendingWeight), Icons.local_shipping, Colors.blue),
+        _summaryCard('Completed Today', WeightConverter.formatShort(completedTodayWeight), Icons.check_circle, Colors.green),
       ],
     );
   }
@@ -142,7 +142,7 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
                     children: [
                       Padding(padding: const EdgeInsets.all(12), child: Text(t.id, style: const TextStyle(fontSize: 12))),
                       Padding(padding: const EdgeInsets.all(12), child: Text(DateFormat('hh:mm a').format(t.transferTime), style: const TextStyle(fontSize: 12))),
-                      Padding(padding: const EdgeInsets.all(12), child: Text('${t.meatType} (${t.weight}kg)', style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis)),
+                      Padding(padding: const EdgeInsets.all(12), child: Text('${t.meatType} (${WeightConverter.formatShort(t.weight)})', style: const TextStyle(fontSize: 10), overflow: TextOverflow.ellipsis)),
                       Padding(padding: const EdgeInsets.all(12), child: Text(t.destination, style: const TextStyle(fontSize: 12))),
                       Padding(padding: const EdgeInsets.all(8), child: StatusChip(
                         label: t.status.name.toUpperCase(), 
@@ -207,7 +207,7 @@ class _NewTransferDialogState extends ConsumerState<NewTransferDialog> {
           const SizedBox(height: 16),
           if (cashiers.isNotEmpty)
             DropdownButtonFormField<String>(
-              value: _destination,
+              initialValue: _destination,
               decoration: const InputDecoration(labelText: 'Destination (Cashier Account)'),
               items: cashiers.map((u) {
                 final label = u.shopLocation != null ? '${u.name} (${u.shopLocation})' : u.name;

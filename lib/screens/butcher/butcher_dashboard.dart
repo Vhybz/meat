@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../core/constants.dart';
+import '../../core/utils.dart';
 import '../../widgets/kpi_card.dart';
 import '../../widgets/status_chip.dart';
 import '../../widgets/summary_row.dart';
@@ -27,10 +29,39 @@ class ButcherDashboard extends ConsumerWidget {
           padding: EdgeInsets.all(isDesktop ? AppSpacing.l : AppSpacing.m),
           child: Column(
             children: [
+              if (isDesktop)
+                Container(
+                  height: 150,
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: AppSpacing.l),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppRadius.m),
+                    image: const DecorationImage(
+                      image: AssetImage('assets/images/butcher_beef.jpg'),
+                      fit: BoxFit.cover,
+                      alignment: Alignment.center,
+                    ),
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(AppRadius.m),
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomRight,
+                        colors: [Colors.black.withValues(alpha: 0.8), Colors.transparent],
+                      ),
+                    ),
+                    padding: const EdgeInsets.all(AppSpacing.xl),
+                    alignment: Alignment.bottomLeft,
+                    child: const Text(
+                      'Butcher Operations Overview',
+                      style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
               logsAsync.when(
                 data: (logs) => _buildKPIGrid(constraints.maxWidth, logs, batchesAsync.value ?? []),
                 loading: () => const LinearProgressIndicator(),
-                error: (_, __) => const Text('Error loading stats'),
+                error: (err, stack) => const Text('Error loading stats'),
               ),
               const SizedBox(height: AppSpacing.l),
               if (isDesktop)
@@ -140,7 +171,7 @@ class ButcherDashboard extends ConsumerWidget {
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (_, __) => const Text("Failed to calculate insights"),
+              error: (err, stack) => const Text("Failed to calculate insights"),
             ),
           ],
         ),
@@ -251,6 +282,7 @@ class ButcherDashboard extends ConsumerWidget {
                       DataColumn(label: Text('ID', style: TextStyle(fontSize: 11))),
                       DataColumn(label: Text('Animal', style: TextStyle(fontSize: 11))),
                       DataColumn(label: Text('Type', style: TextStyle(fontSize: 11))),
+                      DataColumn(label: Text('Date/Time', style: TextStyle(fontSize: 11))),
                       DataColumn(label: Text('Weight', style: TextStyle(fontSize: 11))),
                       DataColumn(label: Text('Status', style: TextStyle(fontSize: 11))),
                     ],
@@ -258,7 +290,13 @@ class ButcherDashboard extends ConsumerWidget {
                       DataCell(Text(log.id, style: const TextStyle(fontSize: 11))),
                       DataCell(Text(log.animalId, style: const TextStyle(fontSize: 11))),
                       DataCell(Text(log.type.displayName, style: const TextStyle(fontSize: 11))),
-                      DataCell(Text('${log.weight}kg', style: const TextStyle(fontSize: 11))),
+                      DataCell(Text(
+                        log.slaughterTime != null 
+                          ? DateFormat('MM/dd HH:mm').format(log.slaughterTime!) 
+                          : 'Pending',
+                        style: const TextStyle(fontSize: 10),
+                      )),
+                      DataCell(Text(WeightConverter.formatShort(log.weight), style: const TextStyle(fontSize: 10))),
                       DataCell(StatusChip(label: log.status.name.toUpperCase(), color: _getStatusColor(log.status))),
                     ])).toList(),
                   ),
@@ -303,7 +341,7 @@ class ButcherDashboard extends ConsumerWidget {
                 );
               },
               loading: () => const LinearProgressIndicator(),
-              error: (_, __) => const Text("Error loading summary"),
+              error: (err, stack) => const Text("Error loading summary"),
             ),
           ],
         ),

@@ -4,6 +4,8 @@ import '../../widgets/app_sidebar.dart';
 import '../../widgets/responsive_layout.dart';
 import '../../widgets/main_app_bar.dart';
 import '../../services/butcher_navigation_provider.dart';
+import '../../services/sms_service.dart';
+import '../../services/notification_service.dart';
 import 'butcher_dashboard.dart';
 import 'animal_intake_screen.dart';
 import 'slaughter_log_screen.dart';
@@ -31,6 +33,13 @@ class ButcherShell extends ConsumerWidget {
       appBar: MainAppBar(
         title: _getScreenTitle(currentScreen),
         onProfileTap: () => ref.read(butcherNavProvider.notifier).setScreen(ButcherScreen.profile),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.report_gmailerrorred_rounded, color: Colors.orange),
+            tooltip: 'Report Issue to Admin',
+            onPressed: () => _showButcherReportDialog(context, ref),
+          ),
+        ],
       ),
       drawer: isDesktop ? null : Drawer(child: _buildSidebar(ref, currentScreen)),
       body: Row(
@@ -110,5 +119,62 @@ class ButcherShell extends ConsumerWidget {
       case ButcherScreen.profile: return const ProfileScreen();
       case ButcherScreen.howToUse: return const HowToUseScreen();
     }
+  }
+
+  void _showButcherReportDialog(BuildContext context, WidgetRef ref) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Report Issue to Admin'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Reporting equipment failure, stock discrepancies, or safety issues will immediately alert the Administrator via SMS.', 
+              style: TextStyle(fontSize: 12)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                hintText: 'Describe the issue...',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              if (controller.text.isNotEmpty) {
+                // Simulate SMS and Notification
+                await SmsService.notifyAdmin(
+                  title: 'BUTCHER UNIT ALERT',
+                  message: 'Butcher Ramon reported an issue: ${controller.text}',
+                );
+
+                ref.read(notificationProvider.notifier).addNotification(
+                  'BUTCHER UNIT ALERT',
+                  'Butcher Ramon reported an issue: ${controller.text}',
+                );
+                
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Report sent. Admin notified via SMS.'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+            child: const Text('Send Urgent Report'),
+          ),
+        ],
+      ),
+    );
   }
 }
