@@ -1,25 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/constants.dart';
+import '../services/auth_service.dart';
+import '../services/user_provider.dart';
+import '../models/user_model.dart';
 
-class SplashScreen extends StatefulWidget {
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
   late Animation<double> _progressAnimation;
+  final _authService = AuthService();
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 5),
+      duration: const Duration(seconds: 3),
     );
     
     _fadeAnimation = CurvedAnimation(
@@ -39,11 +44,58 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       ),
     );
 
-    _navigateToNext();
+    _checkAuthAndNavigate();
   }
 
-  void _navigateToNext() async {
-    await _controller.forward();
+  Future<void> _checkAuthAndNavigate() async {
+    // Start animation immediately
+    _controller.forward();
+    
+    // Give time for animation and Supabase to be ready
+    await Future.delayed(const Duration(seconds: 3));
+    
+    if (!mounted) return;
+
+    final currentUser = _authService.currentUser;
+    
+    if (currentUser != null) {
+      ref.read(currentUserIdProvider.notifier).state = currentUser.id;
+      
+      try {
+        final users = await ref.read(userProvider.notifier).service.getUsers();
+        UserAccount? userAccount;
+        try {
+          userAccount = users.firstWhere((u) => u.id == currentUser.id);
+        } catch (_) {
+          userAccount = null;
+        }
+
+        if (userAccount != null && userAccount.status == AccountStatus.approved) {
+          if (mounted) {
+            switch (userAccount.activePrimaryRole) {
+              case UserRole.admin:
+                Navigator.pushReplacementNamed(context, '/admin');
+                break;
+              case UserRole.butcher:
+                Navigator.pushReplacementNamed(context, '/butcher');
+                break;
+              case UserRole.cashier:
+                Navigator.pushReplacementNamed(context, '/cashier');
+                break;
+              case UserRole.superAdmin:
+                Navigator.pushReplacementNamed(context, '/admin/super');
+                break;
+            }
+          }
+          return;
+        }
+      } catch (e) {
+        debugPrint('Splash Auth Error: $e');
+        // If profile fetch fails, we don't necessarily want to sign out
+        // but we should probably go to onboarding or login
+      }
+    }
+
     if (mounted) {
       Navigator.pushReplacementNamed(context, '/onboarding');
     }

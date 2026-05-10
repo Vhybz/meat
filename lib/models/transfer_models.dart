@@ -19,6 +19,30 @@ class StockTransfer {
     this.status = TransferStatus.pending,
   });
 
+  factory StockTransfer.fromJson(Map<String, dynamic> json) {
+    return StockTransfer(
+      id: json['id'],
+      batchId: json['batch_id'],
+      meatType: json['meat_type'],
+      weight: (json['weight'] as num).toDouble(),
+      destination: json['destination'],
+      transferTime: DateTime.parse(json['transfer_time']),
+      status: TransferStatus.values.byName(json['status']),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'batch_id': batchId,
+      'meat_type': meatType,
+      'weight': weight,
+      'destination': destination,
+      'transfer_time': transferTime.toIso8601String(),
+      'status': status.name,
+    };
+  }
+
   StockTransfer copyWith({
     TransferStatus? status,
   }) {

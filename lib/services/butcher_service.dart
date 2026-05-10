@@ -12,10 +12,10 @@ class MockButcherService implements ButcherService {
   Future<List<SlaughterLog>> getSlaughterLogs() async {
     await Future.delayed(const Duration(milliseconds: 500));
     return [
-      SlaughterLog(id: 'SL-240501-102', animalId: 'ANM-B01', type: AnimalType.cow, weight: 450.0, status: SlaughterStatus.completed, slaughterTime: DateTime.now().subtract(const Duration(hours: 4))),
-      SlaughterLog(id: 'SL-240501-105', animalId: 'ANM-B02', type: AnimalType.cow, weight: 420.0, status: SlaughterStatus.completed, slaughterTime: DateTime.now().subtract(const Duration(hours: 2))),
-      SlaughterLog(id: 'SL-240501-108', animalId: 'ANM-L03', type: AnimalType.bull, weight: 500.0, status: SlaughterStatus.processing),
-      SlaughterLog(id: 'SL-240501-110', animalId: 'ANM-B04', type: AnimalType.cow, weight: 430.0, status: SlaughterStatus.pending),
+      SlaughterLog(id: 'BF-20240501-0930-102', animalId: 'ANM-B01', type: AnimalType.cow, weight: 450.0, status: SlaughterStatus.completed, slaughterTime: DateTime.now().subtract(const Duration(hours: 4))),
+      SlaughterLog(id: 'CH-H-20240501-1015-105', animalId: 'ANM-C01', type: AnimalType.hardChicken, weight: 3.5, status: SlaughterStatus.completed, slaughterTime: DateTime.now().subtract(const Duration(hours: 2))),
+      SlaughterLog(id: 'BF-20240501-1100-108', animalId: 'ANM-L03', type: AnimalType.bull, weight: 500.0, status: SlaughterStatus.processing),
+      SlaughterLog(id: 'CH-S-20240501-1130-110', animalId: 'ANM-C04', type: AnimalType.softChicken, weight: 2.8, status: SlaughterStatus.pending),
     ];
   }
 
@@ -23,8 +23,22 @@ class MockButcherService implements ButcherService {
   Future<List<MeatBatch>> getActiveBatches() async {
     await Future.delayed(const Duration(milliseconds: 500));
     return [
-      MeatBatch(id: 'BCH-102', meatType: 'Beef', weight: 450.0, createdAt: DateTime.now(), status: 'Processing'),
-      MeatBatch(id: 'BCH-105', meatType: 'Pork', weight: 220.0, createdAt: DateTime.now(), status: 'Processing'),
+      MeatBatch(
+        id: 'BF-20240501-0930-102', 
+        meatType: 'Beef', 
+        weight: 450.0, 
+        createdAt: DateTime.now(), 
+        status: 'Processing',
+        source: BatchSource(name: 'Green Valley Farm', location: 'Sunyani', owner: 'John Mensah'),
+      ),
+      MeatBatch(
+        id: 'PK-20240501-1420-105', 
+        meatType: 'Pork', 
+        weight: 220.0, 
+        createdAt: DateTime.now(), 
+        status: 'Processing',
+        source: BatchSource(name: 'Healthy Pig Farm', location: 'Dormaa', owner: 'Kofi Boakye'),
+      ),
     ];
   }
 
@@ -32,10 +46,10 @@ class MockButcherService implements ButcherService {
   Future<List<MeatCut>> getRecentCuts() async {
     await Future.delayed(const Duration(milliseconds: 500));
     return [
-      MeatCut(id: 'CUT-001', name: 'Beef Brisket', batchId: 'BCH-102', weight: 15.4, processedAt: DateTime.now().subtract(const Duration(minutes: 15))),
-      MeatCut(id: 'CUT-002', name: 'Beef Ribs', batchId: 'BCH-102', weight: 8.2, processedAt: DateTime.now().subtract(const Duration(minutes: 45))),
-      MeatCut(id: 'CUT-003', name: 'Pork Belly', batchId: 'BCH-105', weight: 12.0, processedAt: DateTime.now().subtract(const Duration(hours: 1))),
-      MeatCut(id: 'CUT-004', name: 'Pork Chops', batchId: 'BCH-105', weight: 5.5, processedAt: DateTime.now().subtract(const Duration(hours: 2))),
+      MeatCut(id: 'CUT-001', name: 'Beef Brisket', batchId: 'BF-20240501-0930-102', weight: 15.4, processedAt: DateTime.now().subtract(const Duration(minutes: 15))),
+      MeatCut(id: 'CUT-002', name: 'Beef Ribs', batchId: 'BF-20240501-0930-102', weight: 8.2, processedAt: DateTime.now().subtract(const Duration(minutes: 45))),
+      MeatCut(id: 'CUT-003', name: 'Pork Belly', batchId: 'PK-20240501-1420-105', weight: 12.0, processedAt: DateTime.now().subtract(const Duration(hours: 1))),
+      MeatCut(id: 'CUT-004', name: 'Pork Chops', batchId: 'PK-20240501-1420-105', weight: 5.5, processedAt: DateTime.now().subtract(const Duration(hours: 2))),
     ];
   }
 }

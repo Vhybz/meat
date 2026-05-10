@@ -47,7 +47,7 @@ class ButcherDashboard extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(AppRadius.m),
                       gradient: LinearGradient(
                         begin: Alignment.bottomRight,
-                        colors: [Colors.black.withValues(alpha: 0.8), Colors.transparent],
+                        colors: [Colors.black.withOpacity(0.8), Colors.transparent],
                       ),
                     ),
                     padding: const EdgeInsets.all(AppSpacing.xl),

@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import '../core/constants.dart';
 import 'responsive_layout.dart';
 import '../services/notification_service.dart';
+import '../services/theme_provider.dart';
+import '../services/user_provider.dart';
 
 class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
   final String title;
@@ -22,7 +24,8 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDesktop = ResponsiveLayout.isDesktop(context);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final themeMode = ref.watch(themeProvider);
+    final isDark = themeMode == ThemeMode.dark;
     final now = DateTime.now();
     final notifications = ref.watch(notificationProvider);
     final unreadCount = notifications.where((n) => !n.isRead).length;
@@ -32,7 +35,7 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
         color: Theme.of(context).appBarTheme.backgroundColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -68,13 +71,20 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (isDesktop)
-                      Text(
-                        'Meat Shop Management System',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: isDark ? Colors.white54 : AppColors.textLight,
-                          fontWeight: FontWeight.w400,
-                        ),
+                      Consumer(
+                        builder: (context, ref, _) {
+                          final user = ref.watch(currentUserProvider);
+                          return Text(
+                            user != null 
+                              ? '${user.name} • ${user.activePrimaryRole.name.toUpperCase()}'
+                              : 'Freshmeat Butchery Management System',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark ? Colors.white54 : AppColors.textLight,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          );
+                        },
                       ),
                   ],
                 ),
@@ -99,6 +109,14 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
               
               const SizedBox(width: AppSpacing.m),
               
+              // Theme Toggle
+              _buildRoundButton(
+                context, 
+                isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, 
+                () => ref.read(themeProvider.notifier).toggleTheme(!isDark),
+              ),
+              const SizedBox(width: AppSpacing.s),
+
               _buildNotificationButton(context, unreadCount, () => _showNotificationsDialog(context, ref, notifications)),
               const SizedBox(width: AppSpacing.s),
               
@@ -111,7 +129,6 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
   }
 
   Widget _buildNotificationButton(BuildContext context, int count, VoidCallback onTap) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Stack(
       children: [
         _buildRoundButton(context, Icons.notifications_none_rounded, onTap),
@@ -166,7 +183,7 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
                         title: Text(n.title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                         subtitle: Text(n.message, style: const TextStyle(fontSize: 11)),
                         trailing: Text(DateFormat('hh:mm').format(n.timestamp), style: const TextStyle(fontSize: 10)),
-                        tileColor: n.isRead ? null : Colors.orange.withValues(alpha: 0.05),
+                        tileColor: n.isRead ? null : Colors.orange.withOpacity(0.05),
                         onTap: () {
                           ref.read(notificationProvider.notifier).markAsRead(n.id);
                         },
@@ -187,9 +204,9 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withValues(alpha: 0.05) : AppColors.surfaceWhite,
+        color: isDark ? Colors.white.withOpacity(0.05) : AppColors.surfaceWhite,
         borderRadius: BorderRadius.circular(AppRadius.l),
-        border: Border.all(color: isDark ? Colors.white12 : AppColors.borderGray.withValues(alpha: 0.5)),
+        border: Border.all(color: isDark ? Colors.white12 : AppColors.borderGray.withOpacity(0.5)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -212,7 +229,7 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
   Widget _buildRoundButton(BuildContext context, IconData icon, VoidCallback onTap) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Material(
-      color: isDark ? Colors.white.withValues(alpha: 0.05) : AppColors.surfaceWhite,
+      color: isDark ? Colors.white.withOpacity(0.05) : AppColors.surfaceWhite,
       shape: const CircleBorder(),
       child: InkWell(
         onTap: onTap,
@@ -233,7 +250,7 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
         padding: const EdgeInsets.all(2),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: Border.all(color: AppColors.primaryMaroon.withValues(alpha: 0.2), width: 2),
+          border: Border.all(color: AppColors.primaryMaroon.withOpacity(0.2), width: 2),
         ),
         child: const CircleAvatar(
           radius: 16,

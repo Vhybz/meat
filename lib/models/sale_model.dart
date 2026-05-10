@@ -15,6 +15,14 @@ class PaymentDetail {
     this.reference,
   });
 
+  factory PaymentDetail.fromJson(Map<String, dynamic> json) {
+    return PaymentDetail(
+      method: PaymentMethod.values.byName(json['method']),
+      amount: (json['amount'] as num).toDouble(),
+      reference: json['reference'],
+    );
+  }
+
   Map<String, dynamic> toJson() => {
     'method': method.name,
     'amount': amount,
@@ -33,22 +41,33 @@ class SaleItem {
     required this.priceAtSale,
   });
 
+  factory SaleItem.fromJson(Map<String, dynamic> json) {
+    return SaleItem(
+      product: Product.fromJson(json['product']),
+      quantity: (json['quantity'] as num).toDouble(),
+      priceAtSale: (json['price_at_sale'] as num).toDouble(),
+    );
+  }
+
   double get total => quantity * priceAtSale;
 
   Map<String, dynamic> toJson() => {
     'product': product.toJson(),
     'quantity': quantity,
-    'priceAtSale': priceAtSale,
+    'price_at_sale': priceAtSale,
   };
 }
 
 class SaleRecord {
   final String id;
   final List<SaleItem> items;
-  final double totalAmount; // This is the Net Invoice Value
+  final double totalAmount; // This is the Net Invoice Value (After Discount)
+  final double totalDiscount; // Total revenue loss from promotions
+  final String? appliedPromo; // Description of applied promo
   final List<PaymentDetail> payments;
   final DateTime timestamp;
   final String cashierName;
+  final String cashierId;
   final String? customerName;
   final String? customerPhone;
   final SaleStatus status;
@@ -58,22 +77,63 @@ class SaleRecord {
     required this.id,
     required this.items,
     required this.totalAmount,
+    this.totalDiscount = 0.0,
+    this.appliedPromo,
     required this.payments,
     required this.timestamp,
     required this.cashierName,
+    required this.cashierId,
     this.customerName,
     this.customerPhone,
     this.status = SaleStatus.completed,
     this.correctionReason,
   });
 
+  factory SaleRecord.fromJson(Map<String, dynamic> json) {
+    return SaleRecord(
+      id: json['id'],
+      items: (json['items'] as List).map((e) => SaleItem.fromJson(e)).toList(),
+      totalAmount: (json['total_amount'] as num).toDouble(),
+      totalDiscount: (json['total_discount'] as num? ?? 0.0).toDouble(),
+      appliedPromo: json['applied_promo'],
+      payments: (json['payments'] as List).map((e) => PaymentDetail.fromJson(e)).toList(),
+      timestamp: DateTime.parse(json['timestamp']),
+      cashierName: json['cashier_name'],
+      cashierId: json['cashier_id'],
+      customerName: json['customer_name'],
+      customerPhone: json['customer_phone'],
+      status: SaleStatus.values.byName(json['status'] ?? 'completed'),
+      correctionReason: json['correction_reason'],
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'items': items.map((e) => e.toJson()).toList(),
+      'total_amount': totalAmount,
+      'total_discount': totalDiscount,
+      'applied_promo': appliedPromo,
+      'payments': payments.map((e) => e.toJson()).toList(),
+      'timestamp': timestamp.toIso8601String(),
+      'cashier_name': cashierName,
+      'cashier_id': cashierId,
+      'customer_name': customerName,
+      'customer_phone': customerPhone,
+      'status': status.name,
+      'correction_reason': correctionReason,
+    };
+  }
+
   // Financial Breakdown Calculations
   double get totalQty => items.fold(0, (sum, item) => sum + item.quantity);
   int get skuCount => items.length;
   
+  // Base total before discounts
+  double get baseTotal => totalAmount + totalDiscount;
+
   // Calculations based on the provided receipt structure (Ghanaian Tax system)
-  // Assumes totalAmount is the final Net Invoice Value
-  double get basicAmount => totalAmount; // Taxes set to 0.00 as per request
+  double get basicAmount => totalAmount; 
   double get getFund => 0.00;
   double get nhil => 0.00;
   double get subTotal => totalAmount;
@@ -86,18 +146,25 @@ class SaleRecord {
   SaleRecord copyWith({
     List<SaleItem>? items,
     double? totalAmount,
+    double? totalDiscount,
+    String? appliedPromo,
     SaleStatus? status,
     String? correctionReason,
+    String? customerName,
+    String? customerPhone,
   }) {
     return SaleRecord(
       id: id,
       items: items ?? this.items,
       totalAmount: totalAmount ?? this.totalAmount,
+      totalDiscount: totalDiscount ?? this.totalDiscount,
+      appliedPromo: appliedPromo ?? this.appliedPromo,
       payments: payments,
       timestamp: timestamp,
       cashierName: cashierName,
-      customerName: customerName,
-      customerPhone: customerPhone,
+      cashierId: cashierId,
+      customerName: customerName ?? this.customerName,
+      customerPhone: customerPhone ?? this.customerPhone,
       status: status ?? this.status,
       correctionReason: correctionReason ?? this.correctionReason,
     );

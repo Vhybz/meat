@@ -3,13 +3,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants.dart';
 import '../../widgets/main_app_bar.dart';
 import '../../services/sale_provider.dart';
+import '../../services/expense_provider.dart';
 import '../../models/sale_model.dart';
 import '../../services/receipt_service.dart';
 import 'package:intl/intl.dart';
 
 import '../../widgets/responsive_layout.dart';
 import '../../widgets/app_sidebar.dart';
-import 'admin_menu_items.dart';
+import '../../services/menu_service.dart';
+import '../../services/user_provider.dart';
 
 class SalesReportsScreen extends ConsumerStatefulWidget {
   const SalesReportsScreen({super.key});
@@ -26,6 +28,9 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final user = ref.watch(currentUserProvider);
+    if (user == null) return const Center(child: CircularProgressIndicator());
+
     final salesHistory = ref.watch(saleHistoryProvider);
     
     final filteredSales = salesHistory.where((sale) {
@@ -46,22 +51,24 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
           ? null
           : Drawer(
               child: AppSidebar(
-                userName: 'Admin User',
-                userRole: 'Administrator',
+                userId: user.id,
+                userName: user.name,
+                userRole: user.activePrimaryRole.name.toUpperCase(),
                 currentRoute: currentRoute,
-                items: getAdminMenuItems(),
-                onTap: (route) => navigateAdmin(context, route, currentRoute),
+                items: MenuService.getMenuItemsForUser(user),
+                onTap: (route) => MenuService.navigate(context, route, currentRoute),
               ),
             ),
       body: Row(
         children: [
           if (isDesktop)
             AppSidebar(
-              userName: 'Admin User',
-              userRole: 'Administrator',
+              userId: user.id,
+              userName: user.name,
+              userRole: user.activePrimaryRole.name.toUpperCase(),
               currentRoute: currentRoute,
-              items: getAdminMenuItems(),
-              onTap: (route) => navigateAdmin(context, route, currentRoute),
+              items: MenuService.getMenuItemsForUser(user),
+              onTap: (route) => MenuService.navigate(context, route, currentRoute),
             ),
           Expanded(
             child: SingleChildScrollView(
@@ -91,14 +98,13 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
         padding: const EdgeInsets.all(AppSpacing.m),
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final isNarrow = constraints.maxWidth < 600;
             return Wrap(
               spacing: AppSpacing.m,
               runSpacing: AppSpacing.m,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 SizedBox(
-                  width: isNarrow ? constraints.maxWidth : 250,
+                  width: constraints.maxWidth < 600 ? constraints.maxWidth : 250,
                   child: TextField(
                     onChanged: (v) => setState(() => _searchQuery = v),
                     decoration: InputDecoration(
@@ -110,7 +116,7 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
                   ),
                 ),
                 SizedBox(
-                  width: isNarrow ? constraints.maxWidth : 220,
+                  width: constraints.maxWidth < 600 ? constraints.maxWidth : 220,
                   child: DropdownButtonFormField<SaleStatus>(
                     value: _statusFilter,
                     isExpanded: true,
@@ -171,82 +177,85 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
   }
 
   Widget _buildHeader(BuildContext context, List<SaleRecord> filteredSales) {
-    final isMobile = ResponsiveLayout.isMobile(context);
-    
-    final headerText = ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 600),
-      child: const Column(
+    return LayoutBuilder(builder: (context, constraints) {
+      final isMobile = constraints.maxWidth < 600;
+      
+      final headerText = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(
+          const Text(
             'Transaction History',
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
           Text(
-            'Detailed breakdown of all shop revenue',
-            style: TextStyle(color: AppColors.textLight),
+            'Detailed breakdown of all shop revenue (${filteredSales.length} items)',
+            style: const TextStyle(color: AppColors.textLight, fontSize: 12),
           ),
         ],
-      ),
-    );
+      );
 
-    final exportButton = ElevatedButton.icon(
-      onPressed: () => ReceiptService.printSalesReport(filteredSales),
-      icon: const Icon(Icons.picture_as_pdf),
-      label: const Text('Export to PDF'),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: AppColors.primaryMaroon,
-        foregroundColor: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-      ),
-    );
+      final exportButton = ElevatedButton.icon(
+        onPressed: () => ReceiptService.printSalesReport(filteredSales),
+        icon: const Icon(Icons.picture_as_pdf),
+        label: const Text('Export to PDF'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primaryMaroon,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+        ),
+      );
 
-    if (isMobile) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      if (isMobile) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            headerText,
+            const SizedBox(height: AppSpacing.m),
+            SizedBox(width: double.infinity, child: exportButton),
+          ],
+        );
+      }
+
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          headerText,
-          const SizedBox(height: AppSpacing.m),
-          SizedBox(width: double.infinity, child: exportButton),
+          Expanded(child: headerText),
+          const SizedBox(width: 16),
+          exportButton,
         ],
       );
-    }
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        headerText,
-        exportButton,
-      ],
-    );
+    });
   }
 
   Widget _buildSummaryCards(BuildContext context, List<SaleRecord> sales) {
     final totalRevenue = sales.fold(0.0, (sum, sale) => sum + sale.totalAmount);
-    final totalPaid = sales.fold(0.0, (sum, sale) => sum + sale.amountPaid);
-    final totalBalance = totalRevenue - totalPaid;
+    final expensesState = ref.watch(expenseProvider);
+    final totalExpenses = expensesState.records.fold(0.0, (sum, e) => sum + e.amount);
+    final netProfit = totalRevenue - totalExpenses;
 
     return LayoutBuilder(builder: (context, constraints) {
-      final isMobile = constraints.maxWidth < 600;
-      if (isMobile) {
+      final bool useColumn = constraints.maxWidth < 900;
+      
+      if (useColumn) {
         return Column(
           children: [
-            _reportCard('Total Volume', '₵ ${totalRevenue.toStringAsFixed(2)}', Icons.payments, Colors.blue),
+            _reportCard('Gross Volume', '₵ ${totalRevenue.toStringAsFixed(2)}', Icons.payments, Colors.blue),
             const SizedBox(height: AppSpacing.m),
-            _reportCard('Collected', '₵ ${totalPaid.toStringAsFixed(2)}', Icons.check_circle, Colors.green),
+            _reportCard('Total Expenses', '₵ ${totalExpenses.toStringAsFixed(2)}', Icons.trending_down, Colors.red),
             const SizedBox(height: AppSpacing.m),
-            _reportCard('Pending', '₵ ${totalBalance.toStringAsFixed(2)}', Icons.pending_actions, Colors.orange),
+            _reportCard('Net Profit', '₵ ${netProfit.toStringAsFixed(2)}', Icons.account_balance_wallet, Colors.green),
           ],
         );
       }
+      
       return Row(
         children: [
-          Expanded(child: _reportCard('Total Volume', '₵ ${totalRevenue.toStringAsFixed(2)}', Icons.payments, Colors.blue)),
+          Expanded(child: _reportCard('Gross Volume', '₵ ${totalRevenue.toStringAsFixed(2)}', Icons.payments, Colors.blue)),
           const SizedBox(width: AppSpacing.m),
-          Expanded(child: _reportCard('Collected', '₵ ${totalPaid.toStringAsFixed(2)}', Icons.check_circle, Colors.green)),
+          Expanded(child: _reportCard('Total Expenses', '₵ ${totalExpenses.toStringAsFixed(2)}', Icons.trending_down, Colors.red)),
           const SizedBox(width: AppSpacing.m),
-          Expanded(child: _reportCard('Pending', '₵ ${totalBalance.toStringAsFixed(2)}', Icons.pending_actions, Colors.orange)),
+          Expanded(child: _reportCard('Net Profit', '₵ ${netProfit.toStringAsFixed(2)}', Icons.account_balance_wallet, Colors.green)),
         ],
       );
     });
@@ -258,7 +267,7 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(AppRadius.m),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10)],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -268,7 +277,7 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
           const SizedBox(height: AppSpacing.m),
           Text(
             title,
-            style: const TextStyle(color: AppColors.textLight, fontSize: 13),
+            style: const TextStyle(color: AppColors.textLight, fontSize: 11),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -278,7 +287,7 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
             alignment: Alignment.centerLeft,
             child: Text(
               value,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
           ),
         ],
@@ -292,7 +301,7 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(AppRadius.m),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10)],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -301,53 +310,57 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
             padding: EdgeInsets.all(AppSpacing.l),
             child: Text('Transactions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           ),
-          sales.isEmpty
-              ? const Center(child: Padding(padding: EdgeInsets.all(AppSpacing.xl), child: Text('No transactions found.')))
-              : SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: DataTable(
-                    columnSpacing: 24,
-                    horizontalMargin: 12,
-                    columns: const [
-                      DataColumn(label: Text('Invoice ID')),
-                      DataColumn(label: Text('Date')),
-                      DataColumn(label: Text('Customer')),
-                      DataColumn(label: Text('Total')),
-                      DataColumn(label: Text('Status')),
-                    ],
-                    rows: sales.map<DataRow>((sale) {
-                      return DataRow(cells: [
-                        DataCell(Text(sale.id, style: const TextStyle(fontWeight: FontWeight.bold))),
-                        DataCell(Text(DateFormat('MMM dd, HH:mm').format(sale.timestamp))),
-                        DataCell(
-                          SizedBox(
-                            width: 120,
-                            child: Text(
-                              sale.customerName ?? 'Walk-in',
-                              overflow: TextOverflow.ellipsis,
-                            ),
+          if (sales.isEmpty)
+            const Center(child: Padding(padding: EdgeInsets.all(AppSpacing.xl), child: Text('No transactions found.')))
+          else
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 800),
+                child: DataTable(
+                  columnSpacing: 24,
+                  horizontalMargin: 12,
+                  columns: const [
+                    DataColumn(label: Text('Invoice ID')),
+                    DataColumn(label: Text('Date')),
+                    DataColumn(label: Text('Customer')),
+                    DataColumn(label: Text('Total')),
+                    DataColumn(label: Text('Status')),
+                  ],
+                  rows: sales.map<DataRow>((sale) {
+                    return DataRow(cells: [
+                      DataCell(Text(sale.id, style: const TextStyle(fontWeight: FontWeight.bold))),
+                      DataCell(Text(DateFormat('MMM dd, HH:mm').format(sale.timestamp))),
+                      DataCell(
+                        SizedBox(
+                          width: 120,
+                          child: Text(
+                            sale.customerName ?? 'Walk-in',
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        DataCell(Text('₵ ${sale.totalAmount.toStringAsFixed(2)}')),
-                        DataCell(Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: _getStatusColor(sale.status).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(4),
+                      ),
+                      DataCell(Text('₵ ${sale.totalAmount.toStringAsFixed(2)}')),
+                      DataCell(Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _getStatusColor(sale.status).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          sale.status.name.toUpperCase(),
+                          style: TextStyle(
+                            color: _getStatusColor(sale.status),
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
                           ),
-                          child: Text(
-                            sale.status.name.toUpperCase(),
-                            style: TextStyle(
-                              color: _getStatusColor(sale.status),
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        )),
-                      ]);
-                    }).toList(),
-                  ),
+                        ),
+                      )),
+                    ]);
+                  }).toList(),
                 ),
+              ),
+            ),
         ],
       ),
     );

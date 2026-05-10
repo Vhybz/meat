@@ -12,6 +12,7 @@ enum ButcherScreen {
   wasteManagement,
   documents,
   reports,
+  expenses,
   settings,
   profile,
   howToUse

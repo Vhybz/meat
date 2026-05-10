@@ -51,7 +51,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   image: AssetImage(_pages[_currentPage].bgAsset),
                   fit: BoxFit.cover,
                   colorFilter: ColorFilter.mode(
-                    Colors.black.withValues(alpha: 0.85),
+                    Colors.black.withOpacity(0.85),
                     BlendMode.darken,
                   ),
                 ),
@@ -68,8 +68,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 end: Alignment.bottomCenter,
                 colors: [
                   Colors.transparent,
-                  _pages[_currentPage].color.withValues(alpha: 0.2),
-                  Colors.black.withValues(alpha: 0.9),
+                  _pages[_currentPage].color.withOpacity(0.2),
+                  Colors.black.withOpacity(0.9),
                 ],
               ),
             ),
@@ -138,7 +138,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       backgroundColor: _pages[_currentPage].color,
                       foregroundColor: Colors.white,
                       elevation: 10,
-                      shadowColor: _pages[_currentPage].color.withValues(alpha: 0.5),
+                      shadowColor: _pages[_currentPage].color.withOpacity(0.5),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(AppRadius.l),
                       ),
@@ -185,12 +185,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             child: Container(
               padding: const EdgeInsets.all(45),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.1),
+                color: Colors.white.withOpacity(0.1),
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white24, width: 2),
                 boxShadow: [
                   BoxShadow(
-                    color: data.color.withValues(alpha: 0.3),
+                    color: data.color.withOpacity(0.3),
                     blurRadius: 30,
                     spreadRadius: 5,
                   ),

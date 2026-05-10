@@ -29,7 +29,7 @@ class ReceiptService {
               ),
               pw.Text('Invoice: ${sale.id}'),
               pw.Text('Date: ${DateFormat('yyyy-MM-dd HH:mm').format(sale.timestamp)}'),
-              pw.Text('Cashier: ${sale.cashierName}'),
+              pw.Text('Cashier: ${sale.cashierName} (${sale.cashierId})'),
               pw.Divider(),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -62,12 +62,15 @@ class ReceiptService {
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.end,
                     children: [
-                      _receiptRow('Discount', 0.0),
+                      if (sale.totalDiscount > 0)
+                        pw.Text('PROMO: ${sale.appliedPromo ?? "Applied"}', 
+                          style: pw.TextStyle(fontSize: 7, color: PdfColors.orange, fontWeight: pw.FontWeight.bold)),
+                      _receiptRow('Discount', sale.totalDiscount),
                       _receiptRow('Basic Amount', sale.basicAmount),
                       _receiptRow('GETFUND 2.5%', sale.getFund),
                       _receiptRow('NHIL 2.5%', sale.nhil),
                       _receiptRow('VAT 15%', sale.vat),
-                      pw.SizedBox(width: 100, child: pw.Divider()),
+                      pw.Divider(thickness: 0.5),
                       _receiptRow('Sub Total', sale.subTotal),
                       _receiptRow('Net Invoice Value', sale.netInvoiceValue, isBold: true),
                     ],

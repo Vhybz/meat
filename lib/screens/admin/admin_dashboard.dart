@@ -6,17 +6,22 @@ import '../../widgets/responsive_layout.dart';
 import '../../widgets/main_app_bar.dart';
 import 'package:intl/intl.dart';
 import '../../services/sale_provider.dart';
+import '../../services/expense_provider.dart';
 import '../../models/sale_model.dart';
-import '../../core/utils.dart';
 import '../../services/notification_service.dart';
+import '../../services/product_service.dart';
 
-import 'admin_menu_items.dart';
+import '../../services/menu_service.dart';
+import '../../services/user_provider.dart';
 
 class AdminDashboard extends ConsumerWidget {
   const AdminDashboard({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider);
+    if (user == null) return const Center(child: CircularProgressIndicator());
+
     final isDesktop = ResponsiveLayout.isDesktop(context);
     final now = DateTime.now();
     final dateStr = DateFormat('EEEE, d MMMM yyyy').format(now);
@@ -29,22 +34,24 @@ class AdminDashboard extends ConsumerWidget {
           ? null
           : Drawer(
               child: AppSidebar(
-                userName: 'Admin User',
-                userRole: 'Administrator',
+                userId: user.id,
+                userName: user.name,
+                userRole: user.activePrimaryRole.name.toUpperCase(),
                 currentRoute: currentRoute,
-                items: getAdminMenuItems(),
-                onTap: (route) => navigateAdmin(context, route, currentRoute),
+                items: MenuService.getMenuItemsForUser(user),
+                onTap: (route) => MenuService.navigate(context, route, currentRoute),
               ),
             ),
       body: Row(
         children: [
           if (isDesktop)
             AppSidebar(
-              userName: 'Admin User',
-              userRole: 'Administrator',
+              userId: user.id,
+              userName: user.name,
+              userRole: user.activePrimaryRole.name.toUpperCase(),
               currentRoute: currentRoute,
-              items: getAdminMenuItems(),
-              onTap: (route) => navigateAdmin(context, route, currentRoute),
+              items: MenuService.getMenuItemsForUser(user),
+              onTap: (route) => MenuService.navigate(context, route, currentRoute),
             ),
           Expanded(
             child: SingleChildScrollView(
@@ -56,13 +63,13 @@ class AdminDashboard extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.l),
                   _buildBanner(),
                   const SizedBox(height: AppSpacing.xl),
-                  _buildKPIGrid(context),
+                  _buildKPIGrid(context, ref),
                   const SizedBox(height: AppSpacing.xl),
                   _buildPendingActions(context, ref),
                   const SizedBox(height: AppSpacing.xl),
-                  _buildResponsiveMainContent(context),
+                  _buildResponsiveMainContent(context, ref),
                   const SizedBox(height: AppSpacing.xl),
-                  _buildInventoryMonitor(context),
+                  _buildInventoryMonitor(context, ref),
                 ],
               ),
             ),
@@ -189,6 +196,7 @@ class AdminDashboard extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
         title: const Text('Confirm Deletion'),
         content: Text(item is SaleRecord 
           ? 'Are you sure you want to CANCEL this sale completely? This action is irreversible.'
@@ -225,6 +233,7 @@ class AdminDashboard extends ConsumerWidget {
           double calculateNewTotal() => editedItems.fold(0, (sum, item) => sum + item.total);
 
           return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
             title: Text('Rectify Sale ${sale.id}'),
             content: SizedBox(
               width: 500,
@@ -236,7 +245,7 @@ class AdminDashboard extends ConsumerWidget {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.orange.withValues(alpha: 0.1),
+                        color: Colors.orange.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text('Cashier Report: ${sale.correctionReason}', 
@@ -339,6 +348,7 @@ class AdminDashboard extends ConsumerWidget {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
         title: const Text('Rectify Butcher Issue'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -511,31 +521,39 @@ class AdminDashboard extends ConsumerWidget {
     );
   }
 
-  Widget _buildKPIGrid(BuildContext context) {
+  Widget _buildKPIGrid(BuildContext context, WidgetRef ref) {
     final bool isMobile = ResponsiveLayout.isMobile(context);
     final bool isTablet = ResponsiveLayout.isTablet(context);
     
-    int crossAxisCount = isMobile ? 1 : (isTablet ? 2 : 4);
-    double aspectRatio = isMobile ? 3.5 : 2.2;
+    final sales = ref.watch(saleHistoryProvider);
+    final totalRevenue = sales.fold(0.0, (sum, sale) => sum + sale.totalAmount);
+    final totalDiscounts = sales.fold(0.0, (sum, sale) => sum + sale.totalDiscount);
+    final expensesState = ref.watch(expenseProvider);
+    final totalExpenses = expensesState.records.fold(0.0, (sum, e) => sum + e.amount);
+    final netProfit = totalRevenue - totalExpenses;
+
+    int crossAxisCount = isMobile ? 2 : (isTablet ? 3 : 5);
+    double aspectRatio = isMobile ? 1.8 : 2.0;
 
     return GridView.count(
       crossAxisCount: crossAxisCount,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: AppSpacing.l,
-      mainAxisSpacing: AppSpacing.l,
+      crossAxisSpacing: AppSpacing.m,
+      mainAxisSpacing: AppSpacing.m,
       childAspectRatio: aspectRatio,
       children: [
-        _kpiWithTrend("Today's Sales", 'GHS 52,340', Icons.payments, AppColors.primaryMaroon, '+12.5%'),
-        _kpiWithTrend("Kilos Sold", '248.7 kg', Icons.scale, Colors.blue, '+5.2%'),
-        _kpiWithTrend('Gross Revenue', 'GHS 1.2M', Icons.trending_up, Colors.green, '+8.1%'),
-        _kpiWithTrend('Active Orders', '356', Icons.shopping_bag, Colors.orange, '-2.4%'),
+        _kpiWithTrend("Gross Sales", '₵${totalRevenue.toStringAsFixed(0)}', Icons.payments, Colors.blue, '+12.5%'),
+        _kpiWithTrend("Expenses", '₵${totalExpenses.toStringAsFixed(0)}', Icons.trending_down, Colors.red, '+5.2%'),
+        _kpiWithTrend('Net Profit', '₵${netProfit.toStringAsFixed(0)}', Icons.account_balance_wallet, Colors.green, '+8.1%'),
+        _kpiWithTrend('Promo Impact', '₵${totalDiscounts.toStringAsFixed(0)}', Icons.auto_awesome, Colors.orange, 'SAVED'),
+        _kpiWithTrend('Stock Sold', '1,248 kg', Icons.scale, AppColors.primaryMaroon, '-2.4%'),
       ],
     );
   }
 
   Widget _kpiWithTrend(String title, String value, IconData icon, Color color, String trend) {
-    final bool isPositive = trend.startsWith('+');
+    final bool isPositive = trend.startsWith('+') || trend == 'SAVED';
     return Container(
       padding: const EdgeInsets.all(AppSpacing.m),
       decoration: BoxDecoration(
@@ -548,44 +566,38 @@ class AdminDashboard extends ConsumerWidget {
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(AppRadius.s)),
-            child: Icon(icon, color: color, size: 24),
+            child: Icon(icon, color: color, size: 22),
           ),
-          const SizedBox(width: AppSpacing.m),
+          const SizedBox(width: AppSpacing.s),
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(color: AppColors.textLight, fontSize: 12, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Expanded(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.centerLeft,
-                        child: Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textDark)),
-                      ),
+                Text(title, style: const TextStyle(color: AppColors.textLight, fontSize: 10, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textDark)),
+                ),
+                const SizedBox(height: 2),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: isPositive ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    trend,
+                    style: TextStyle(
+                      color: isPositive ? Colors.green : Colors.red,
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
                     ),
-                    const SizedBox(width: 4),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: isPositive ? Colors.green.withValues(alpha: 0.1) : Colors.red.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        trend,
-                        style: TextStyle(
-                          color: isPositive ? Colors.green : Colors.red,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),
@@ -595,8 +607,11 @@ class AdminDashboard extends ConsumerWidget {
     );
   }
 
-  Widget _buildResponsiveMainContent(BuildContext context) {
+  Widget _buildResponsiveMainContent(BuildContext context, WidgetRef ref) {
     final isDesktop = ResponsiveLayout.isDesktop(context);
+    final sales = ref.watch(saleHistoryProvider);
+    final promoSales = sales.where((s) => s.totalDiscount > 0).toList();
+    final totalImpact = promoSales.fold(0.0, (sum, s) => sum + s.totalDiscount);
 
     if (isDesktop) {
       return Row(
@@ -604,7 +619,16 @@ class AdminDashboard extends ConsumerWidget {
         children: [
           Expanded(flex: 2, child: _buildPerformanceChart()),
           const SizedBox(width: AppSpacing.l),
-          Expanded(flex: 1, child: _buildCriticalAlerts()),
+          Expanded(
+            flex: 1, 
+            child: Column(
+              children: [
+                _buildPromotionImpactCard(promoSales, totalImpact),
+                const SizedBox(height: AppSpacing.l),
+                _buildCriticalAlerts(),
+              ],
+            )
+          ),
         ],
       );
     } else {
@@ -612,10 +636,61 @@ class AdminDashboard extends ConsumerWidget {
         children: [
           _buildPerformanceChart(),
           const SizedBox(height: AppSpacing.l),
+          _buildPromotionImpactCard(promoSales, totalImpact),
+          const SizedBox(height: AppSpacing.l),
           _buildCriticalAlerts(),
         ],
       );
     }
+  }
+
+  Widget _buildPromotionImpactCard(List<SaleRecord> promoSales, double totalImpact) {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.l),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(AppRadius.l),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.auto_awesome, color: Colors.orange, size: 20),
+              const SizedBox(width: 8),
+              const Text('Promotion Analytics', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              const Spacer(),
+              Text('${promoSales.length} Active', style: const TextStyle(fontSize: 10, color: AppColors.textLight)),
+            ],
+          ),
+          const Divider(height: 24),
+          const Text('Total Revenue Impact (Money Saved for Customers)', style: TextStyle(fontSize: 11, color: AppColors.textLight)),
+          const SizedBox(height: 4),
+          Text('₵ ${totalImpact.toStringAsFixed(2)}', 
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.orange)),
+          const SizedBox(height: 16),
+          const Text('Recent Promo Transactions:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          const SizedBox(height: 8),
+          if (promoSales.isEmpty)
+            const Text('No promotions applied yet.', style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: AppColors.textLight))
+          else
+            ...promoSales.take(3).map((s) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  const Icon(Icons.circle, size: 6, color: Colors.orange),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(s.appliedPromo ?? 'Discount', style: const TextStyle(fontSize: 11))),
+                  Text('-₵${s.totalDiscount.toStringAsFixed(0)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            )),
+        ],
+      ),
+    );
   }
 
   Widget _buildPerformanceChart() {
@@ -703,7 +778,7 @@ class AdminDashboard extends ConsumerWidget {
             children: [
               Icon(Icons.notification_important, color: Colors.red, size: 20),
               SizedBox(width: 8),
-              Text('System Alerts', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              const Text('System Alerts', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             ],
           ),
           const SizedBox(height: AppSpacing.l),
@@ -751,9 +826,9 @@ class AdminDashboard extends ConsumerWidget {
     );
   }
 
-  Widget _buildInventoryMonitor(BuildContext context) {
+  Widget _buildInventoryMonitor(BuildContext context, WidgetRef ref) {
     final isMobile = ResponsiveLayout.isMobile(context);
-    final isTablet = ResponsiveLayout.isTablet(context);
+    final productsAsync = ref.watch(productsFutureProvider);
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.l),
@@ -767,32 +842,38 @@ class AdminDashboard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Stock Level Monitoring', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          const Text('Critical Stock Monitoring', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           const SizedBox(height: AppSpacing.l),
-          if (isMobile)
-            Column(
-              children: [
-                _stockIndicator('Beef Brisket', 0.85, Colors.green),
-                const SizedBox(height: AppSpacing.m),
-                _stockIndicator('Pork Ribs', 0.42, Colors.orange),
-                const SizedBox(height: AppSpacing.m),
-                _stockIndicator('Chicken Wings', 0.15, Colors.red),
-              ],
-            )
-          else
-            Row(
-              children: [
-                Expanded(child: _stockIndicator('Beef Brisket', 0.85, Colors.green)),
-                const SizedBox(width: AppSpacing.l),
-                Expanded(child: _stockIndicator('Pork Ribs', 0.42, Colors.orange)),
-                const SizedBox(width: AppSpacing.l),
-                Expanded(child: _stockIndicator('Chicken Wings', 0.15, Colors.red)),
-                if (isTablet || ResponsiveLayout.isDesktop(context)) ...[
-                  const SizedBox(width: AppSpacing.l),
-                  Expanded(child: _stockIndicator('Goat Meat', 0.64, Colors.blue)),
-                ],
-              ],
-            ),
+          productsAsync.when(
+            data: (products) {
+              final criticalStock = products
+                  .where((p) => !p.isDeleted)
+                  .toList()
+                ..sort((a, b) => a.stockQuantity.compareTo(b.stockQuantity));
+              
+              final top3 = criticalStock.take(3).toList();
+              
+              if (top3.isEmpty) return const Text('No stock data available.', style: TextStyle(color: AppColors.textLight));
+
+              return isMobile
+                  ? Column(
+                      children: top3.map((p) => Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.m),
+                        child: _stockIndicator(p.name, (p.stockQuantity / 100).clamp(0.0, 1.0), p.stockQuantity < 10 ? Colors.red : Colors.orange),
+                      )).toList(),
+                    )
+                  : Row(
+                      children: top3.map((p) => Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: AppSpacing.l),
+                          child: _stockIndicator(p.name, (p.stockQuantity / 100).clamp(0.0, 1.0), p.stockQuantity < 10 ? Colors.red : Colors.orange),
+                        ),
+                      )).toList(),
+                    );
+            },
+            loading: () => const Center(child: CircularProgressIndicator()),
+            error: (_, __) => const Text('Error loading stock levels.'),
+          ),
         ],
       ),
     );

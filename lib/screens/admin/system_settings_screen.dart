@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants.dart';
 import '../../widgets/main_app_bar.dart';
 
 import '../../widgets/responsive_layout.dart';
 import '../../widgets/app_sidebar.dart';
-import 'admin_menu_items.dart';
+import '../../services/menu_service.dart';
+import '../../services/user_provider.dart';
 
-class SystemSettingsScreen extends StatelessWidget {
+class SystemSettingsScreen extends ConsumerWidget {
   const SystemSettingsScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider);
+    if (user == null) return const Center(child: CircularProgressIndicator());
+
     final isDesktop = ResponsiveLayout.isDesktop(context);
     const currentRoute = '/admin/settings';
 
@@ -21,22 +26,24 @@ class SystemSettingsScreen extends StatelessWidget {
           ? null
           : Drawer(
               child: AppSidebar(
-                userName: 'Admin User',
-                userRole: 'Administrator',
+                userId: user.id,
+                userName: user.name,
+                userRole: user.activePrimaryRole.name.toUpperCase(),
                 currentRoute: currentRoute,
-                items: getAdminMenuItems(),
-                onTap: (route) => navigateAdmin(context, route, currentRoute),
+                items: MenuService.getMenuItemsForUser(user),
+                onTap: (route) => MenuService.navigate(context, route, currentRoute),
               ),
             ),
       body: Row(
         children: [
           if (isDesktop)
             AppSidebar(
-              userName: 'Admin User',
-              userRole: 'Administrator',
+              userId: user.id,
+              userName: user.name,
+              userRole: user.activePrimaryRole.name.toUpperCase(),
               currentRoute: currentRoute,
-              items: getAdminMenuItems(),
-              onTap: (route) => navigateAdmin(context, route, currentRoute),
+              items: MenuService.getMenuItemsForUser(user),
+              onTap: (route) => MenuService.navigate(context, route, currentRoute),
             ),
           Expanded(
             child: SingleChildScrollView(
@@ -106,7 +113,7 @@ class SystemSettingsScreen extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(AppRadius.m),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10)],
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10)],
           ),
           child: Column(children: children),
         ),

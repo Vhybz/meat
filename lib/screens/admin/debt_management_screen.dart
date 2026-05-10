@@ -2,19 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants.dart';
 import '../../widgets/main_app_bar.dart';
+import '../../services/menu_service.dart';
+import '../../services/user_provider.dart';
 import '../../services/sale_provider.dart';
 import '../../models/sale_model.dart';
 import 'package:intl/intl.dart';
 
 import '../../widgets/responsive_layout.dart';
 import '../../widgets/app_sidebar.dart';
-import 'admin_menu_items.dart';
 
 class DebtManagementScreen extends ConsumerWidget {
   const DebtManagementScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider);
+    if (user == null) return const Center(child: CircularProgressIndicator());
+
     final salesHistory = ref.watch(saleHistoryProvider);
     final debtSales = salesHistory.where((s) => s.balance > 0).toList();
     final isDesktop = ResponsiveLayout.isDesktop(context);
@@ -27,22 +31,24 @@ class DebtManagementScreen extends ConsumerWidget {
           ? null
           : Drawer(
               child: AppSidebar(
-                userName: 'Admin User',
-                userRole: 'Administrator',
+                userId: user.id,
+                userName: user.name,
+                userRole: user.activePrimaryRole.name.toUpperCase(),
                 currentRoute: currentRoute,
-                items: getAdminMenuItems(),
-                onTap: (route) => navigateAdmin(context, route, currentRoute),
+                items: MenuService.getMenuItemsForUser(user),
+                onTap: (route) => MenuService.navigate(context, route, currentRoute),
               ),
             ),
       body: Row(
         children: [
           if (isDesktop)
             AppSidebar(
-              userName: 'Admin User',
-              userRole: 'Administrator',
+              userId: user.id,
+              userName: user.name,
+              userRole: user.activePrimaryRole.name.toUpperCase(),
               currentRoute: currentRoute,
-              items: getAdminMenuItems(),
-              onTap: (route) => navigateAdmin(context, route, currentRoute),
+              items: MenuService.getMenuItemsForUser(user),
+              onTap: (route) => MenuService.navigate(context, route, currentRoute),
             ),
           Expanded(
             child: Padding(
@@ -84,7 +90,7 @@ class DebtManagementScreen extends ConsumerWidget {
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(AppRadius.l),
-        boxShadow: [BoxShadow(color: AppColors.primaryMaroon.withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 8))],
+        boxShadow: [BoxShadow(color: AppColors.primaryMaroon.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))],
       ),
       child: isMobile 
         ? Column(
@@ -150,7 +156,7 @@ class DebtManagementScreen extends ConsumerWidget {
       child: ListTile(
         contentPadding: const EdgeInsets.all(AppSpacing.m),
         leading: CircleAvatar(
-          backgroundColor: Colors.orange.withValues(alpha: 0.1),
+          backgroundColor: Colors.orange.withOpacity(0.1),
           child: const Icon(Icons.person, color: Colors.orange),
         ),
         title: Text(sale.customerName ?? 'Unregistered Customer', style: const TextStyle(fontWeight: FontWeight.bold)),
@@ -176,7 +182,7 @@ class DebtManagementScreen extends ConsumerWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.check_circle_outline, size: 64, color: Colors.green.withValues(alpha: 0.5)),
+          Icon(Icons.check_circle_outline, size: 64, color: Colors.green.withOpacity(0.5)),
           const SizedBox(height: 16),
           const Text('No outstanding debts!', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           const Text('All transactions are fully paid.', style: TextStyle(color: AppColors.textLight)),

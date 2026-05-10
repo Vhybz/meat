@@ -6,6 +6,9 @@ import '../../widgets/main_app_bar.dart';
 import '../../services/butcher_navigation_provider.dart';
 import '../../services/sms_service.dart';
 import '../../services/notification_service.dart';
+import '../../services/menu_service.dart';
+import '../../services/user_provider.dart';
+import '../../models/user_model.dart';
 import 'butcher_dashboard.dart';
 import 'animal_intake_screen.dart';
 import 'slaughter_log_screen.dart';
@@ -20,12 +23,16 @@ import 'reports_screen.dart';
 import 'settings_screen.dart';
 import 'profile_screen.dart';
 import 'how_to_use_screen.dart';
+import 'butcher_expense_screen.dart';
 
 class ButcherShell extends ConsumerWidget {
   const ButcherShell({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final user = ref.watch(currentUserProvider);
+    if (user == null) return const Center(child: CircularProgressIndicator());
+
     final currentScreen = ref.watch(butcherNavProvider);
     final isDesktop = ResponsiveLayout.isDesktop(context);
 
@@ -41,10 +48,10 @@ class ButcherShell extends ConsumerWidget {
           ),
         ],
       ),
-      drawer: isDesktop ? null : Drawer(child: _buildSidebar(ref, currentScreen)),
+      drawer: isDesktop ? null : Drawer(child: _buildSidebar(ref, currentScreen, user, context)),
       body: Row(
         children: [
-          if (isDesktop) _buildSidebar(ref, currentScreen),
+          if (isDesktop) _buildSidebar(ref, currentScreen, user, context),
           Expanded(
             child: Container(
               color: const Color(0xFFFBFBFB), // Slightly different white for content background
@@ -69,37 +76,35 @@ class ButcherShell extends ConsumerWidget {
       case ButcherScreen.wasteManagement: return 'Waste Management';
       case ButcherScreen.documents: return 'Documents & Compliance';
       case ButcherScreen.reports: return 'Operational Reports';
+      case ButcherScreen.expenses: return 'Unit Expenses';
       case ButcherScreen.settings: return 'Workstation Settings';
       case ButcherScreen.profile: return 'Personal Profile';
       case ButcherScreen.howToUse: return 'How to Use System';
     }
   }
 
-  Widget _buildSidebar(WidgetRef ref, ButcherScreen current) {
+  Widget _buildSidebar(WidgetRef ref, ButcherScreen current, UserAccount user, BuildContext context) {
+    final currentRoute = '/butcher';
     return AppSidebar(
-      userName: 'Ramon Dela Cruz',
-      userRole: 'Butcher Control',
-      currentRoute: current.name,
-      items: [
-        SidebarItem(icon: Icons.dashboard_rounded, label: 'Dashboard', route: ButcherScreen.dashboard.name),
-        SidebarItem(icon: Icons.pets_rounded, label: 'Animal Intake', route: ButcherScreen.animalIntake.name),
-        SidebarItem(icon: Icons.list_alt_rounded, label: 'Slaughter Log', route: ButcherScreen.slaughterLog.name),
-        SidebarItem(icon: Icons.layers_rounded, label: 'Meat Processing', route: ButcherScreen.meatProcessing.name),
-        SidebarItem(icon: Icons.inventory_2_rounded, label: 'Batch Management', route: ButcherScreen.batchManagement.name),
-        SidebarItem(icon: Icons.sync_alt_rounded, label: 'Stock Transfer', route: ButcherScreen.stockTransfer.name),
-        SidebarItem(icon: Icons.inventory_rounded, label: 'Inventory', route: ButcherScreen.inventory.name),
-        SidebarItem(icon: Icons.shopping_cart_rounded, label: 'Orders', route: ButcherScreen.orders.name),
-        SidebarItem(icon: Icons.delete_outline_rounded, label: 'Waste Management', route: ButcherScreen.wasteManagement.name),
-        SidebarItem(icon: Icons.description_rounded, label: 'Documents', route: ButcherScreen.documents.name),
-        SidebarItem(icon: Icons.bar_chart_rounded, label: 'Reports', route: ButcherScreen.reports.name),
-        SidebarItem(icon: Icons.settings_rounded, label: 'Settings', route: ButcherScreen.settings.name),
-        SidebarItem(icon: Icons.help_outline_rounded, label: 'How to Use', route: ButcherScreen.howToUse.name),
-      ],
+      userId: user.id,
+      userName: user.name,
+      userRole: user.activePrimaryRole.name.toUpperCase(),
+      currentRoute: _getCurrentInternalRoute(current),
+      items: MenuService.getMenuItemsForUser(user, inButcherShell: true),
       onTap: (route) {
-        final screen = ButcherScreen.values.firstWhere((e) => e.name == route);
-        ref.read(butcherNavProvider.notifier).setScreen(screen);
+        if (route.startsWith('butcher:')) {
+          final screenStr = route.split(':')[1];
+          final screen = ButcherScreen.values.byName(screenStr);
+          ref.read(butcherNavProvider.notifier).setScreen(screen);
+        } else {
+          MenuService.navigate(context, route, currentRoute);
+        }
       },
     );
+  }
+
+  String _getCurrentInternalRoute(ButcherScreen current) {
+    return 'butcher:${current.name}';
   }
 
   Widget _buildContent(ButcherScreen screen) {
@@ -113,6 +118,7 @@ class ButcherShell extends ConsumerWidget {
       case ButcherScreen.inventory: return const InventoryScreen();
       case ButcherScreen.orders: return const OrdersScreen();
       case ButcherScreen.wasteManagement: return const WasteManagementScreen();
+      case ButcherScreen.expenses: return const ButcherExpenseScreen();
       case ButcherScreen.documents: return const DocumentsScreen();
       case ButcherScreen.reports: return const ReportsScreen();
       case ButcherScreen.settings: return const SettingsScreen();

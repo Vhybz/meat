@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants.dart';
-import '../../services/theme_provider.dart';
 import '../../services/butcher_navigation_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -9,35 +8,15 @@ class SettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final themeMode = ref.watch(themeProvider);
-
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.l),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSettingsSection(
-            context,
-            'Appearance',
-            [
-              ListTile(
-                leading: Icon(
-                  themeMode == ThemeMode.dark ? Icons.dark_mode : Icons.light_mode,
-                  color: AppColors.primaryMaroon,
-                ),
-                title: const Text('Theme Mode'),
-                subtitle: Text(themeMode == ThemeMode.dark ? 'Dark Mode' : 'Light Mode'),
-                trailing: Switch(
-                  value: themeMode == ThemeMode.dark,
-                  onChanged: (isDark) {
-                    ref.read(themeProvider.notifier).toggleTheme(isDark);
-                  },
-                  activeThumbColor: AppColors.primaryMaroon,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.l),
+          const Text('Settings', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+          const Text('Configure your workstation and profile', style: TextStyle(color: AppColors.textLight)),
+          const SizedBox(height: AppSpacing.xl),
+
           _buildSettingsSection(
             context,
             'Workstation Configuration',

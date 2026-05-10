@@ -32,7 +32,7 @@ class _SlaughterLogScreenState extends ConsumerState<SlaughterLogScreen> {
           Expanded(
             child: Card(
               child: logsAsync.when(
-                data: (logs) {
+                data: (List<SlaughterLog> logs) {
                   final filteredLogs = logs.where((log) {
                     final matchesSearch = log.id.toLowerCase().contains(_searchQuery.toLowerCase()) || 
                                           log.animalId.toLowerCase().contains(_searchQuery.toLowerCase());
@@ -67,7 +67,7 @@ class _SlaughterLogScreenState extends ConsumerState<SlaughterLogScreen> {
                         DataColumn(label: Text('Status')),
                         DataColumn(label: Text('Actions')),
                       ],
-                      rows: filteredLogs.map((log) => DataRow(cells: [
+                      rows: filteredLogs.map((SlaughterLog log) => DataRow(cells: [
                         DataCell(Text(log.id, style: const TextStyle(fontSize: 12))),
                         DataCell(Text(log.animalId, style: const TextStyle(fontSize: 12))),
                         DataCell(Text(log.type.displayName, style: const TextStyle(fontSize: 12))),
@@ -106,7 +106,7 @@ class _SlaughterLogScreenState extends ConsumerState<SlaughterLogScreen> {
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(AppRadius.m),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)
         ],
       ),
       child: Row(
