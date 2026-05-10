@@ -17,6 +17,7 @@ class PriceBracket {
 
 class Product {
   final String id;
+  final String? branchCode;
   final String name;
   final double retailPrice;
   final double wholesalePrice;
@@ -35,6 +36,7 @@ class Product {
 
   Product({
     required this.id,
+    this.branchCode,
     required this.name,
     required this.retailPrice,
     required this.wholesalePrice,
@@ -104,6 +106,7 @@ class Product {
 
   Product copyWith({
     String? name,
+    String? branchCode,
     double? retailPrice,
     double? wholesalePrice,
     double? stockQuantity,
@@ -119,6 +122,7 @@ class Product {
   }) {
     return Product(
       id: id,
+      branchCode: branchCode ?? this.branchCode,
       name: name ?? this.name,
       retailPrice: retailPrice ?? this.retailPrice,
       wholesalePrice: wholesalePrice ?? this.wholesalePrice,
@@ -140,6 +144,7 @@ class Product {
   factory Product.fromJson(Map<String, dynamic> json) {
     return Product(
       id: json['id'] as String,
+      branchCode: json['branch_code'],
       name: json['name'] as String,
       retailPrice: (json['retail_price'] as num).toDouble(),
       wholesalePrice: (json['wholesale_price'] as num).toDouble(),
@@ -158,6 +163,7 @@ class Product {
 
   Map<String, dynamic> toJson() => {
         'id': id,
+        'branch_code': branchCode,
         'name': name,
         'retail_price': retailPrice,
         'wholesale_price': wholesalePrice,
@@ -178,12 +184,15 @@ class CartItem {
   final Product product;
   final double quantity;
   final double priceAtSale;
+  final double originalPrice;
 
   CartItem({
     required this.product, 
     required this.quantity,
     required this.priceAtSale,
+    required this.originalPrice,
   });
 
   double get total => priceAtSale * quantity;
+  double get discount => (originalPrice - priceAtSale) * quantity;
 }

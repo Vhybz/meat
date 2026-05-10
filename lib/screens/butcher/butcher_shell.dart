@@ -33,10 +33,23 @@ class ButcherShell extends ConsumerWidget {
     final user = ref.watch(currentUserProvider);
     if (user == null) return const Center(child: CircularProgressIndicator());
 
+    // Instant Permission Guard: Redirect to Login/Admin if access is revoked
+    final roles = user.activeRoles;
+    final hasAccess = roles.contains(UserRole.butcher) || roles.contains(UserRole.superAdmin) || user.enabledPermissions.contains('/butcher');
+    
+    if (!hasAccess) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) Navigator.pushReplacementNamed(context, '/login');
+      });
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final theme = Theme.of(context);
     final currentScreen = ref.watch(butcherNavProvider);
     final isDesktop = ResponsiveLayout.isDesktop(context);
 
     return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: MainAppBar(
         title: _getScreenTitle(currentScreen),
         onProfileTap: () => ref.read(butcherNavProvider.notifier).setScreen(ButcherScreen.profile),
@@ -54,7 +67,7 @@ class ButcherShell extends ConsumerWidget {
           if (isDesktop) _buildSidebar(ref, currentScreen, user, context),
           Expanded(
             child: Container(
-              color: const Color(0xFFFBFBFB), // Slightly different white for content background
+              color: theme.scaffoldBackgroundColor,
               child: _buildContent(currentScreen),
             ),
           ),
@@ -129,6 +142,7 @@ class ButcherShell extends ConsumerWidget {
 
   void _showButcherReportDialog(BuildContext context, WidgetRef ref) {
     final controller = TextEditingController();
+    final theme = Theme.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -136,21 +150,20 @@ class ButcherShell extends ConsumerWidget {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Reporting equipment failure, stock discrepancies, or safety issues will immediately alert the Administrator via SMS.', 
-              style: TextStyle(fontSize: 12)),
+            Text('Reporting equipment failure, stock discrepancies, or safety issues will immediately alert the Administrator via SMS.', 
+              style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant)),
             const SizedBox(height: 16),
             TextField(
               controller: controller,
               maxLines: 3,
               decoration: const InputDecoration(
                 hintText: 'Describe the issue...',
-                border: OutlineInputBorder(),
               ),
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: TextStyle(color: theme.colorScheme.onSurfaceVariant))),
           ElevatedButton(
             onPressed: () async {
               if (controller.text.isNotEmpty) {

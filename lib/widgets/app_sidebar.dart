@@ -37,15 +37,28 @@ class AppSidebar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final sidebarColor = isDark ? const Color(0xFF0F0404) : AppColors.primaryMaroon;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final sidebarColor = isDark ? theme.colorScheme.surface : AppColors.primaryMaroon;
 
     return Container(
       width: 260,
-      color: sidebarColor,
+      decoration: BoxDecoration(
+        color: sidebarColor,
+        border: isDark ? const Border(right: BorderSide(color: Color(0xFF2C2C2C))) : null,
+        boxShadow: [
+          if (!isDark)
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.1),
+              blurRadius: 10,
+              offset: const Offset(4, 0),
+            ),
+        ],
+      ),
       child: Column(
         children: [
           _buildLogo(),
+          const Divider(height: 1, color: Colors.white10),
           Expanded(
             child: SingleChildScrollView(
               child: Column(
@@ -66,8 +79,9 @@ class AppSidebar extends ConsumerWidget {
               ),
             ),
           ),
-          _buildUserSection(),
-          _buildLogoutButton(context),
+          const Divider(height: 1, color: Colors.white10),
+          _buildUserSection(isDark),
+          _buildLogoutButton(context, isDark),
         ],
       ),
     );
@@ -82,8 +96,9 @@ class AppSidebar extends ConsumerWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
+              color: Colors.white.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(AppRadius.s),
+              border: Border.all(color: Colors.white24),
               image: const DecorationImage(
                 image: AssetImage('assets/logo/logo.jpg'),
                 fit: BoxFit.cover,
@@ -101,8 +116,8 @@ class AppSidebar extends ConsumerWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
-                  'Freshmeat Butchery',
-                  style: TextStyle(color: Colors.white70, fontSize: 10),
+                  'Butchery System',
+                  style: TextStyle(color: Colors.white70, fontSize: 10, letterSpacing: 0.5),
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
@@ -115,30 +130,28 @@ class AppSidebar extends ConsumerWidget {
 
   Widget _buildMenuItem(BuildContext context, WidgetRef ref, SidebarItem item, bool isSelected) {
     final bool showCatchy = item.isCatchy && !isSelected;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Material(
       color: Colors.transparent,
       child: InkWell(
+        mouseCursor: SystemMouseCursors.click,
         onTap: () {
-          // If it was catchy, mark it as seen
           if (item.isCatchy) {
             ref.read(userProvider.notifier).markPermissionAsSeen(userId, item.route);
           }
-
-          if (onTap != null) {
-            onTap!(item.route);
-          }
-          if (Scaffold.maybeOf(context)?.isDrawerOpen ?? false) {
-            Navigator.pop(context);
-          }
+          if (onTap != null) onTap!(item.route);
+          if (Scaffold.maybeOf(context)?.isDrawerOpen ?? false) Navigator.pop(context);
         },
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.l, vertical: 12),
           decoration: BoxDecoration(
-            border: isSelected ? const Border(left: BorderSide(color: Colors.white, width: 4)) : null,
+            border: isSelected 
+              ? Border(left: BorderSide(color: isDark ? Theme.of(context).colorScheme.primary : Colors.white, width: 4)) 
+              : null,
             color: isSelected 
-              ? Colors.white.withOpacity(0.1) 
-              : (showCatchy ? Colors.white.withOpacity(0.05) : Colors.transparent),
+              ? Colors.white.withValues(alpha: 0.1) 
+              : (showCatchy ? Colors.white.withValues(alpha: 0.05) : Colors.transparent),
           ),
           child: Row(
             children: [
@@ -158,6 +171,7 @@ class AppSidebar extends ConsumerWidget {
                       ? Colors.white 
                       : (showCatchy ? Colors.orangeAccent : Colors.white70),
                     fontWeight: (isSelected || showCatchy) ? FontWeight.bold : FontWeight.normal,
+                    fontSize: 13,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -181,20 +195,20 @@ class AppSidebar extends ConsumerWidget {
     );
   }
 
-  Widget _buildUserSection() {
+  Widget _buildUserSection(bool isDark) {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.m),
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
+      margin: const EdgeInsets.all(AppSpacing.m),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
+        color: Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(AppRadius.m),
       ),
       child: Row(
         children: [
-          const CircleAvatar(
+          CircleAvatar(
             radius: 18,
-            backgroundColor: Colors.white24,
-            child: Icon(Icons.person, color: Colors.white, size: 20),
+            backgroundColor: isDark ? Colors.white12 : Colors.white24,
+            child: const Icon(Icons.person, color: Colors.white, size: 20),
           ),
           const SizedBox(width: AppSpacing.s),
           Expanded(
@@ -211,14 +225,19 @@ class AppSidebar extends ConsumerWidget {
     );
   }
 
-  Widget _buildLogoutButton(BuildContext context) {
+  Widget _buildLogoutButton(BuildContext context, bool isDark) {
     return Padding(
-      padding: const EdgeInsets.all(AppSpacing.m),
+      padding: const EdgeInsets.fromLTRB(AppSpacing.m, 0, AppSpacing.m, AppSpacing.m),
       child: TextButton.icon(
         onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
         icon: const Icon(Icons.logout, color: Colors.white70, size: 18),
-        label: const Expanded(child: Text('Log Out', style: TextStyle(color: Colors.white70), overflow: TextOverflow.ellipsis)),
-        style: TextButton.styleFrom(alignment: Alignment.centerLeft, padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s)),
+        label: const Text('Log Out System', style: TextStyle(color: Colors.white70, fontSize: 13), overflow: TextOverflow.ellipsis),
+        style: TextButton.styleFrom(
+          alignment: Alignment.centerLeft, 
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.s)),
+          enabledMouseCursor: SystemMouseCursors.click,
+        ),
       ),
     );
   }

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_model.dart';
 import '../core/supabase_config.dart';
@@ -15,7 +16,7 @@ class SupabaseUserService {
   }
 
   Future<void> addUser(UserAccount account) async {
-    await _client.from('users').insert(account.toJson());
+    await _client.from('users').upsert(account.toJson(), onConflict: 'email');
   }
 
   Future<void> updateUser(UserAccount account) async {
@@ -67,5 +68,46 @@ class SupabaseUserService {
         .maybeSingle();
     
     return response != null;
+  }
+
+  Future<String?> uploadProfilePicture(String userId, Uint8List bytes) async {
+    try {
+      // Use a unique name including timestamp to avoid caching issues
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = '${userId}_$timestamp.jpg';
+      final path = 'profiles/$fileName';
+      
+      // Optional: Delete old profile pictures to keep storage clean
+      try {
+        final List<FileObject> existingFiles = await _client.storage.from('user-profiles').list(path: 'profiles');
+        final List<String> userFiles = existingFiles
+            .map((f) => f.name)
+            .where((name) => name.startsWith(userId))
+            .toList();
+        if (userFiles.isNotEmpty) {
+          await _client.storage.from('user-profiles').remove(userFiles.map((name) => 'profiles/$name').toList());
+        }
+      } catch (e) {
+        debugPrint('Cleanup old profiles error (non-critical): $e');
+      }
+
+      await _client.storage.from('user-profiles').uploadBinary(
+        path,
+        bytes,
+        fileOptions: const FileOptions(cacheControl: '3600', upsert: true),
+      );
+      return _client.storage.from('user-profiles').getPublicUrl(path);
+    } catch (e) {
+      debugPrint('Error uploading profile picture: $e');
+      return null;
+    }
+  }
+
+  Stream<UserAccount?> streamUser(String id) {
+    return _client
+        .from('users')
+        .stream(primaryKey: ['id'])
+        .eq('id', id)
+        .map((data) => data.isEmpty ? null : UserAccount.fromJson(data.first));
   }
 }

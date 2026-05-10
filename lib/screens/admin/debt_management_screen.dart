@@ -19,13 +19,14 @@ class DebtManagementScreen extends ConsumerWidget {
     final user = ref.watch(currentUserProvider);
     if (user == null) return const Center(child: CircularProgressIndicator());
 
+    final theme = Theme.of(context);
     final salesHistory = ref.watch(saleHistoryProvider);
     final debtSales = salesHistory.where((s) => s.balance > 0).toList();
     final isDesktop = ResponsiveLayout.isDesktop(context);
     const currentRoute = '/admin/debts';
 
     return Scaffold(
-      backgroundColor: AppColors.surfaceWhite,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: const MainAppBar(title: 'Debt & Credit Tracker', showMenuButton: true),
       drawer: isDesktop
           ? null
@@ -58,11 +59,11 @@ class DebtManagementScreen extends ConsumerWidget {
                 children: [
                   _buildDebtSummary(context, debtSales),
                   const SizedBox(height: AppSpacing.xl),
-                  const Text('Outstanding Balances', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                  Text('Outstanding Balances', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
                   const SizedBox(height: AppSpacing.m),
                   Expanded(
                     child: debtSales.isEmpty
-                        ? _buildEmptyState()
+                        ? _buildEmptyState(context)
                         : ListView.builder(
                             itemCount: debtSales.length,
                             itemBuilder: (context, index) => _buildDebtTile(context, debtSales[index]),
@@ -78,19 +79,20 @@ class DebtManagementScreen extends ConsumerWidget {
   }
 
   Widget _buildDebtSummary(BuildContext context, List<SaleRecord> debtSales) {
+    final theme = Theme.of(context);
     final totalDebt = debtSales.fold(0.0, (sum, s) => sum + s.balance);
     final isMobile = MediaQuery.of(context).size.width < 700;
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.xl),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.primaryMaroon, AppColors.secondaryMaroon],
+        gradient: LinearGradient(
+          colors: [theme.colorScheme.primary, theme.colorScheme.primary.withValues(alpha: 0.8)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(AppRadius.l),
-        boxShadow: [BoxShadow(color: AppColors.primaryMaroon.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))],
+        boxShadow: [BoxShadow(color: theme.colorScheme.primary.withValues(alpha: 0.3), blurRadius: 15, offset: const Offset(0, 8))],
       ),
       child: isMobile 
         ? Column(
@@ -117,7 +119,7 @@ class DebtManagementScreen extends ConsumerWidget {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () {},
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: AppColors.primaryMaroon),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: theme.colorScheme.primary),
                   child: const Text('Generate Debt Report'),
                 ),
               ),
@@ -141,7 +143,7 @@ class DebtManagementScreen extends ConsumerWidget {
               const Spacer(),
               ElevatedButton(
                 onPressed: () {},
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: AppColors.primaryMaroon),
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: theme.colorScheme.primary),
                 child: const Text('Generate Debt Report'),
               ),
             ],
@@ -150,22 +152,23 @@ class DebtManagementScreen extends ConsumerWidget {
   }
 
   Widget _buildDebtTile(BuildContext context, SaleRecord sale) {
+    final theme = Theme.of(context);
     return Card(
       margin: const EdgeInsets.only(bottom: AppSpacing.m),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.m)),
       child: ListTile(
         contentPadding: const EdgeInsets.all(AppSpacing.m),
         leading: CircleAvatar(
-          backgroundColor: Colors.orange.withOpacity(0.1),
+          backgroundColor: Colors.orange.withValues(alpha: 0.1),
           child: const Icon(Icons.person, color: Colors.orange),
         ),
-        title: Text(sale.customerName ?? 'Unregistered Customer', style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text('Invoice: ${sale.id} • ${DateFormat('MMM dd').format(sale.timestamp)}'),
+        title: Text(sale.customerName ?? 'Unregistered Customer', style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+        subtitle: Text('Invoice: ${sale.id} • ${DateFormat('MMM dd, HH:mm').format(sale.timestamp)}', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            const Text('Balance Due', style: TextStyle(fontSize: 10, color: AppColors.textLight)),
+            Text('Balance Due', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant)),
             Text(
               'GHS ${sale.balance.toStringAsFixed(2)}',
               style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16),
@@ -177,21 +180,22 @@ class DebtManagementScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(BuildContext context) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.check_circle_outline, size: 64, color: Colors.green.withOpacity(0.5)),
+          Icon(Icons.check_circle_outline, size: 64, color: Colors.green.withValues(alpha: 0.5)),
           const SizedBox(height: 16),
-          const Text('No outstanding debts!', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-          const Text('All transactions are fully paid.', style: TextStyle(color: AppColors.textLight)),
+          Text('No outstanding debts!', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Theme.of(context).colorScheme.onSurface)),
+          Text('All transactions are fully paid.', style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant)),
         ],
       ),
     );
   }
 
   void _showCollectionDialog(BuildContext context, SaleRecord sale) {
+    final theme = Theme.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -206,14 +210,13 @@ class DebtManagementScreen extends ConsumerWidget {
               decoration: InputDecoration(
                 labelText: 'Amount Received',
                 prefixText: 'GHS ',
-                border: OutlineInputBorder(),
               ),
               keyboardType: TextInputType.number,
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: TextStyle(color: theme.colorScheme.onSurfaceVariant))),
           ElevatedButton(
             onPressed: () => Navigator.pop(context),
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentGreen, foregroundColor: Colors.white),

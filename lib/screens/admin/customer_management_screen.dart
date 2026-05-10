@@ -18,12 +18,13 @@ class CustomerManagementScreen extends ConsumerWidget {
     final user = ref.watch(currentUserProvider);
     if (user == null) return const Center(child: CircularProgressIndicator());
 
+    final theme = Theme.of(context);
     final customers = ref.watch(customerProvider);
     final isDesktop = ResponsiveLayout.isDesktop(context);
     const currentRoute = '/admin/customers';
 
     return Scaffold(
-      backgroundColor: AppColors.surfaceWhite,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: const MainAppBar(title: 'Customer Directory'),
       drawer: isDesktop ? null : Drawer(
         child: AppSidebar(
@@ -65,14 +66,15 @@ class CustomerManagementScreen extends ConsumerWidget {
   }
 
   Widget _buildHeader(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        const Column(
+        Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Manage Regulars', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            Text('Maintain a directory of favorite and wholesale customers', style: TextStyle(color: AppColors.textLight)),
+            Text('Manage Regulars', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+            Text('Maintain a directory of favorite and wholesale customers', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
           ],
         ),
         ElevatedButton.icon(
@@ -80,7 +82,7 @@ class CustomerManagementScreen extends ConsumerWidget {
           icon: const Icon(Icons.person_add),
           label: const Text('Add Customer'),
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primaryMaroon,
+            backgroundColor: theme.colorScheme.primary,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           ),
@@ -90,8 +92,9 @@ class CustomerManagementScreen extends ConsumerWidget {
   }
 
   Widget _buildCustomerGrid(BuildContext context, WidgetRef ref, List<Customer> customers) {
+    final theme = Theme.of(context);
     if (customers.isEmpty) {
-      return const Center(child: Padding(padding: EdgeInsets.all(40), child: Text('No customers in directory yet.')));
+      return Center(child: Padding(padding: const EdgeInsets.all(40), child: Text('No customers in directory yet.', style: TextStyle(color: theme.colorScheme.onSurfaceVariant))));
     }
 
     return LayoutBuilder(builder: (context, constraints) {
@@ -111,11 +114,11 @@ class CustomerManagementScreen extends ConsumerWidget {
           return Card(
             child: ListTile(
               leading: CircleAvatar(
-                backgroundColor: AppColors.primaryMaroon.withOpacity(0.1),
-                child: Icon(c.isFavorite ? Icons.star : Icons.person, color: c.isFavorite ? Colors.orange : AppColors.primaryMaroon),
+                backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
+                child: Icon(c.isFavorite ? Icons.star : Icons.person, color: c.isFavorite ? Colors.orange : theme.colorScheme.primary),
               ),
-              title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: Text(c.phone, style: const TextStyle(fontSize: 12)),
+              title: Text(c.name, style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+              subtitle: Text(c.phone, style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant)),
               trailing: PopupMenuButton<String>(
                 onSelected: (val) {
                   if (val == 'fav') {
@@ -140,6 +143,7 @@ class CustomerManagementScreen extends ConsumerWidget {
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController();
     final phoneController = TextEditingController();
+    final theme = Theme.of(context);
 
     showDialog(
       context: context,
@@ -153,14 +157,14 @@ class CustomerManagementScreen extends ConsumerWidget {
             children: [
               TextFormField(
                 controller: nameController, 
-                decoration: const InputDecoration(labelText: 'Full Name', border: OutlineInputBorder()),
+                decoration: const InputDecoration(labelText: 'Full Name'),
                 inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]'))],
                 validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: phoneController, 
-                decoration: const InputDecoration(labelText: 'Phone Number', border: OutlineInputBorder(), hintText: '10 digits'), 
+                decoration: const InputDecoration(labelText: 'Phone Number', hintText: '10 digits'), 
                 keyboardType: TextInputType.phone,
                 inputFormatters: [
                   FilteringTextInputFormatter.digitsOnly,
@@ -176,12 +180,16 @@ class CustomerManagementScreen extends ConsumerWidget {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: TextStyle(color: theme.colorScheme.onSurfaceVariant))),
           ElevatedButton(
             onPressed: () {
               if (formKey.currentState!.validate()) {
+                final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+                final String suffix = timestamp.substring(timestamp.length - 12);
+                final String validUuid = '00000000-0000-0000-0000-$suffix';
+
                 final newCustomer = Customer(
-                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  id: validUuid,
                   name: nameController.text,
                   phone: phoneController.text,
                 );
@@ -189,7 +197,7 @@ class CustomerManagementScreen extends ConsumerWidget {
                 Navigator.pop(context);
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMaroon, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: theme.colorScheme.primary, foregroundColor: Colors.white),
             child: const Text('Save Customer'),
           ),
         ],

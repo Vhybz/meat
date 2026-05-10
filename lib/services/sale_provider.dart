@@ -1,39 +1,54 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/sale_model.dart';
 import 'supabase_sale_service.dart';
+import 'user_provider.dart';
 
 class SaleHistoryNotifier extends StateNotifier<List<SaleRecord>> {
   final SupabaseSaleService _service;
+  final Ref ref;
+  StreamSubscription? _subscription;
 
-  SaleHistoryNotifier(this._service) : super([]) {
-    loadSales();
+  SaleHistoryNotifier(this._service, this.ref) : super([]) {
+    _initStream();
+  }
+
+  void _initStream() {
+    final user = ref.read(currentUserProvider);
+    if (user?.branchCode == null) return;
+
+    _subscription?.cancel();
+    _subscription = _service.getSalesStream(user!.branchCode!).listen((sales) {
+      state = sales;
+    });
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
   }
 
   Future<void> loadSales() async {
-    try {
-      final sales = await _service.getSales();
-      state = sales;
-    } catch (e) {
-      // Handle error
-    }
+    _initStream();
   }
 
   Future<void> addSale(SaleRecord sale) async {
     try {
-      await _service.saveSale(sale);
-      state = [sale, ...state];
+      final user = ref.read(currentUserProvider);
+      final saleWithBranch = sale.copyWith(branchCode: user?.branchCode);
+      await _service.saveSale(saleWithBranch);
+      // State is updated automatically by stream
     } catch (e) {
-      // Handle error
+      debugPrint('Add Sale Error: $e');
     }
   }
 
   Future<void> updateSale(SaleRecord updatedSale) async {
     try {
       await _service.updateSale(updatedSale);
-      state = [
-        for (final sale in state)
-          if (sale.id == updatedSale.id) updatedSale else sale
-      ];
+      // State is updated automatically by stream
     } catch (e) {
       // Handle error
     }
@@ -45,5 +60,5 @@ final saleServiceProvider = Provider<SupabaseSaleService>((ref) {
 });
 
 final saleHistoryProvider = StateNotifierProvider<SaleHistoryNotifier, List<SaleRecord>>((ref) {
-  return SaleHistoryNotifier(ref.watch(saleServiceProvider));
+  return SaleHistoryNotifier(ref.watch(saleServiceProvider), ref);
 });

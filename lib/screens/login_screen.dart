@@ -136,50 +136,60 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final size = MediaQuery.of(context).size;
+    final bool isMobile = size.width < 600;
+
     return Scaffold(
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              AppColors.primaryMaroon,
-              Color(0xFF4A0808),
-            ],
+            colors: isDark 
+              ? [const Color(0xFF121212), const Color(0xFF000000)]
+              : [AppColors.primaryMaroon, const Color(0xFF4A0808)],
           ),
         ),
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(AppSpacing.l),
+            padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.l),
             child: Container(
-              width: 420,
-              padding: const EdgeInsets.all(AppSpacing.xl),
+              constraints: const BoxConstraints(maxWidth: 420),
+              width: size.width * (isMobile ? 0.9 : 0.8),
+              padding: EdgeInsets.all(isMobile ? AppSpacing.l : AppSpacing.xl),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: theme.cardTheme.color,
                 borderRadius: BorderRadius.circular(AppRadius.l),
-                boxShadow: const [
-                  BoxShadow(color: Colors.black45, blurRadius: 20, offset: Offset(0, 10)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.3), 
+                    blurRadius: 20, 
+                    offset: const Offset(0, 10)
+                  ),
                 ],
+                border: isDark ? Border.all(color: theme.dividerColor) : null,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    width: 120,
-                    height: 120,
+                    width: isMobile ? 100 : 120,
+                    height: isMobile ? 100 : 120,
                     decoration: BoxDecoration(
                       color: Colors.white,
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
+                          color: Colors.black.withValues(alpha: 0.1),
                           blurRadius: 20,
                           offset: const Offset(0, 10),
                         ),
                       ],
-                      border: Border.all(color: AppColors.primaryMaroon.withOpacity(0.1), width: 6),
+                      border: Border.all(color: AppColors.primaryMaroon.withValues(alpha: 0.1), width: 6),
                     ),
                     child: ClipOval(
                       child: Image.asset(
@@ -189,21 +199,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.l),
-                  const Text(
+                  Text(
                     'Mi CORAZON',
+                    textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 28, 
+                      fontSize: isMobile ? 24 : 28, 
                       fontWeight: FontWeight.bold, 
-                      color: AppColors.primaryMaroon,
+                      color: isDark ? theme.colorScheme.primary : AppColors.primaryMaroon,
                       letterSpacing: 1.2,
                     ),
                   ),
-                  const Text(
+                  Text(
                     'FRESHMEAT BUTCHERY',
+                    textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 12, 
+                      fontSize: 10, 
                       fontWeight: FontWeight.w600, 
-                      color: AppColors.primaryMaroon, 
+                      color: isDark ? theme.colorScheme.primary.withValues(alpha: 0.8) : AppColors.primaryMaroon, 
                       letterSpacing: 2.5,
                     ),
                   ),
@@ -211,12 +223,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   Container(
                     height: 2,
                     width: 40,
-                    color: AppColors.primaryMaroon.withOpacity(0.2),
+                    color: (isDark ? theme.colorScheme.primary : AppColors.primaryMaroon).withValues(alpha: 0.2),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
+                  Text(
                     'Sign in to your account', 
-                    style: TextStyle(color: AppColors.textLight, fontSize: 14),
+                    style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 14),
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   TextField(
@@ -224,12 +236,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     keyboardType: TextInputType.emailAddress,
                     autofillHints: const [AutofillHints.email],
                     inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s'))],
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       labelText: 'Email Address',
-                      prefixIcon: const Icon(Icons.email_outlined),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.s)),
-                      filled: true,
-                      fillColor: Colors.grey.shade50,
+                      prefixIcon: Icon(Icons.email_outlined),
                     ),
                   ),
                   const SizedBox(height: AppSpacing.m),
@@ -244,9 +253,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
                         onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                       ),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.s)),
-                      filled: true,
-                      fillColor: Colors.grey.shade50,
                     ),
                   ),
                   const SizedBox(height: AppSpacing.xl),
@@ -256,24 +262,32 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : _handleLogin,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryMaroon,
+                        backgroundColor: theme.colorScheme.primary,
                         foregroundColor: Colors.white,
                         elevation: 2,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.s)),
                       ),
                       child: _isLoading 
-                          ? const CircularProgressIndicator(color: Colors.white)
+                          ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)))
                           : const Text('Login', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
                   ),
                   const SizedBox(height: AppSpacing.l),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      const Text('Don\'t have an account?', style: TextStyle(color: AppColors.textLight)),
+                      Text('Don\'t have an account?', style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 13)),
                       TextButton(
                         onPressed: () => Navigator.pushNamed(context, '/signup'),
-                        child: const Text('Register Here', style: TextStyle(fontWeight: FontWeight.bold)),
+                        child: Text(
+                          'Register Here', 
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.primary,
+                            fontSize: 13,
+                          )
+                        ),
                       ),
                     ],
                   ),

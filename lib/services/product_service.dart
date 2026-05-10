@@ -1,11 +1,12 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'dart:typed_data';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/product.dart';
 import 'supabase_product_service.dart';
+import 'user_provider.dart';
 
 abstract class ProductService {
-  Future<List<Product>> getProducts();
+  Future<List<Product>> getProducts(String branchCode);
   Future<Product> getProductById(String id);
   Future<void> addProduct(Product product);
   Future<void> updateProduct(Product product);
@@ -13,6 +14,7 @@ abstract class ProductService {
   Future<void> updateStock(String id, double newQuantity);
   Future<void> applyPromotion(String id, double percentage, DateTime? start, DateTime? end, PromoTarget target, PromoCustomerTarget customerTarget);
   Future<String?> uploadProductImage(Uint8List bytes, String fileName);
+  Stream<List<Product>> watchProducts(String branchCode);
 }
 
 final productServiceProvider = Provider<ProductService>((ref) {
@@ -21,27 +23,59 @@ final productServiceProvider = Provider<ProductService>((ref) {
 
 class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
   final ProductService _service;
-  ProductNotifier(this._service) : super(const AsyncValue.loading()) {
-    loadProducts();
+  final Ref ref;
+  StreamSubscription<List<Product>>? _subscription;
+
+  ProductNotifier(this._service, this.ref) : super(const AsyncValue.loading()) {
+    _init();
+  }
+
+  void _init() {
+    // Watch current user and restart subscription if branch changes
+    ref.listen(currentUserProvider, (previous, next) {
+      if (next?.branchCode != previous?.branchCode) {
+        _startSubscription();
+      }
+    });
+    
+    _startSubscription();
+  }
+
+  void _startSubscription() {
+    _subscription?.cancel();
+    final user = ref.read(currentUserProvider);
+    if (user != null && user.branchCode != null) {
+      _subscription = _service.watchProducts(user.branchCode!).listen(
+        (products) {
+          state = AsyncValue.data(products);
+        },
+        onError: (e, st) => state = AsyncValue.error(e, st),
+      );
+    } else {
+      state = const AsyncValue.data([]);
+    }
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
   }
 
   Future<void> loadProducts() async {
-    try {
-      state = const AsyncValue.loading();
-      final products = await _service.getProducts();
-      state = AsyncValue.data(products);
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
-    }
+    // The stream handles loading automatically, but we can keep this for manual refreshes if needed
+    _startSubscription();
   }
 
   Future<void> addProduct(Product product) async {
     try {
-      await _service.addProduct(product);
-      state.whenData((products) {
-        state = AsyncValue.data([...products, product]);
-      });
-    } catch (e) {}
+      final user = ref.read(currentUserProvider);
+      final productWithBranch = product.copyWith(branchCode: user?.branchCode);
+      await _service.addProduct(productWithBranch);
+      // No need to manually update state, the stream will catch it
+    } catch (e) {
+      debugPrint('Add Product Error: $e');
+    }
   }
 
   Future<void> updateProduct(Product updatedProduct) async {
@@ -50,7 +84,9 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
       state.whenData((products) {
         state = AsyncValue.data(products.map((p) => p.id == updatedProduct.id ? updatedProduct : p).toList());
       });
-    } catch (e) {}
+    } catch (e) {
+      debugPrint('Update Product Error: $e');
+    }
   }
 
   Future<void> deleteProduct(String id) async {
@@ -59,7 +95,9 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
       state.whenData((products) {
         state = AsyncValue.data(products.map((p) => p.id == id ? p.copyWith(isDeleted: true) : p).toList());
       });
-    } catch (e) {}
+    } catch (e) {
+      debugPrint('Delete Product Error: $e');
+    }
   }
 
   Future<void> restoreProduct(String id) async {
@@ -109,7 +147,9 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
           }
           return p;
         }).toList());
-      } catch (e) {}
+      } catch (e) {
+        debugPrint('Apply Promotion Error: $e');
+      }
     });
   }
 
@@ -126,7 +166,9 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
           promoStartDate: null,
           promoEndDate: null,
         )).toList());
-      } catch (e) {}
+      } catch (e) {
+        debugPrint('Clear Promotions Error: $e');
+      }
     });
   }
 
@@ -136,5 +178,5 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
 }
 
 final productsFutureProvider = StateNotifierProvider<ProductNotifier, AsyncValue<List<Product>>>((ref) {
-  return ProductNotifier(ref.watch(productServiceProvider));
+  return ProductNotifier(ref.watch(productServiceProvider), ref);
 });

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../../core/constants.dart';
 import '../../widgets/main_app_bar.dart';
 import '../../services/user_provider.dart';
@@ -89,8 +90,8 @@ class SuperAdminScreen extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.l),
       decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.05),
-        border: Border.all(color: Colors.orange.withOpacity(0.3)),
+        color: Colors.orange.withValues(alpha: 0.05),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
         borderRadius: BorderRadius.circular(AppRadius.m),
       ),
       child: Column(
@@ -192,8 +193,8 @@ class SuperAdminScreen extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.l),
       decoration: BoxDecoration(
-        color: Colors.red.withOpacity(0.1),
-        border: Border.all(color: Colors.red.withOpacity(0.3)),
+        color: Colors.red.withValues(alpha: 0.1),
+        border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
         borderRadius: BorderRadius.circular(AppRadius.m),
       ),
       child: const Row(
@@ -237,7 +238,7 @@ class SuperAdminScreen extends ConsumerWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF1A1A1E),
           foregroundColor: color,
-          side: BorderSide(color: color.withOpacity(0.3)),
+          side: BorderSide(color: color.withValues(alpha: 0.3)),
           padding: const EdgeInsets.all(20),
         ),
       ),
@@ -245,6 +246,9 @@ class SuperAdminScreen extends ConsumerWidget {
   }
 
   Widget _buildGlobalLogs() {
+    final now = DateTime.now();
+    final format = DateFormat('HH:mm:ss');
+    
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.l),
@@ -255,9 +259,9 @@ class SuperAdminScreen extends ConsumerWidget {
       ),
       child: Column(
         children: [
-          _logEntry('Admin', 'Deleted User Maria Santos', '1 min ago'),
-          _logEntry('Admin', 'Deleted Stock Item "Goat Meat"', '5 mins ago'),
-          _logEntry('System', 'Automatic Backup success', '1 hour ago'),
+          _logEntry('Admin', 'Deleted User Maria Santos', format.format(now.subtract(const Duration(minutes: 1)))),
+          _logEntry('Admin', 'Deleted Stock Item "Goat Meat"', format.format(now.subtract(const Duration(minutes: 5)))),
+          _logEntry('System', 'Automatic Backup success', format.format(now.subtract(const Duration(hours: 1)))),
         ],
       ),
     );

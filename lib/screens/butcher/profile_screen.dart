@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants.dart';
 import '../../models/user_model.dart';
@@ -56,10 +57,45 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         padding: const EdgeInsets.all(AppSpacing.xl),
         child: Row(
           children: [
-            CircleAvatar(
-              radius: 50,
-              backgroundColor: AppColors.primaryMaroon.withOpacity(0.1),
-              child: const Icon(Icons.person, size: 50, color: AppColors.primaryMaroon),
+            InkWell(
+              onTap: _updatePhoto,
+              borderRadius: BorderRadius.circular(50),
+              child: Stack(
+                children: [
+                  Container(
+                    width: 100,
+                    height: 100,
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryMaroon.withValues(alpha: 0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: ClipOval(
+                      child: user.photoUrl != null
+                          ? Image.network(
+                              user.photoUrl!,
+                              fit: BoxFit.cover,
+                              loadingBuilder: (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return const Center(child: CircularProgressIndicator());
+                              },
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Icon(Icons.person, size: 50, color: AppColors.primaryMaroon);
+                              },
+                            )
+                          : const Icon(Icons.person, size: 50, color: AppColors.primaryMaroon),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(color: AppColors.primaryMaroon, shape: BoxShape.circle),
+                      child: const Icon(Icons.camera_alt, size: 16, color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
             ),
             const SizedBox(width: AppSpacing.xl),
             Expanded(
@@ -111,12 +147,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               _buildEditField(_phoneController, 'Phone Number'),
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
-                value: _selectedGender,
+                initialValue: _selectedGender,
                 decoration: const InputDecoration(labelText: 'Gender', border: OutlineInputBorder()),
                 items: ['Male', 'Female', 'Other'].map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
                 onChanged: (v) => setState(() => _selectedGender = v),
               ),
-              const SizedBox(height: 16),
+                const SizedBox(height: 16),
               InkWell(
                 onTap: () async {
                   final picked = await showDatePicker(
@@ -174,6 +210,27 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       controller: controller,
       decoration: InputDecoration(labelText: label, border: const OutlineInputBorder()),
     );
+  }
+
+  Future<void> _updatePhoto() async {
+    final user = ref.read(currentUserProvider);
+    if (user == null) return;
+
+    final picker = ImagePicker();
+    final XFile? image = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 512,
+      maxHeight: 512,
+      imageQuality: 75,
+    );
+
+    if (image != null) {
+      final bytes = await image.readAsBytes();
+      await ref.read(userProvider.notifier).updatePhoto(user.id, bytes);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile picture updated!')));
+      }
+    }
   }
 
   void _saveProfile() {

@@ -1,93 +1,201 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/butcher_models.dart';
+import 'supabase_butcher_service.dart';
 
-abstract class ButcherService {
-  Future<List<SlaughterLog>> getSlaughterLogs();
-  Future<List<MeatBatch>> getActiveBatches();
-  Future<List<MeatCut>> getRecentCuts();
-}
+import 'user_provider.dart';
 
-class MockButcherService implements ButcherService {
-  @override
-  Future<List<SlaughterLog>> getSlaughterLogs() async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    return [
-      SlaughterLog(id: 'BF-20240501-0930-102', animalId: 'ANM-B01', type: AnimalType.cow, weight: 450.0, status: SlaughterStatus.completed, slaughterTime: DateTime.now().subtract(const Duration(hours: 4))),
-      SlaughterLog(id: 'CH-H-20240501-1015-105', animalId: 'ANM-C01', type: AnimalType.hardChicken, weight: 3.5, status: SlaughterStatus.completed, slaughterTime: DateTime.now().subtract(const Duration(hours: 2))),
-      SlaughterLog(id: 'BF-20240501-1100-108', animalId: 'ANM-L03', type: AnimalType.bull, weight: 500.0, status: SlaughterStatus.processing),
-      SlaughterLog(id: 'CH-S-20240501-1130-110', animalId: 'ANM-C04', type: AnimalType.softChicken, weight: 2.8, status: SlaughterStatus.pending),
-    ];
-  }
-
-  @override
-  Future<List<MeatBatch>> getActiveBatches() async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    return [
-      MeatBatch(
-        id: 'BF-20240501-0930-102', 
-        meatType: 'Beef', 
-        weight: 450.0, 
-        createdAt: DateTime.now(), 
-        status: 'Processing',
-        source: BatchSource(name: 'Green Valley Farm', location: 'Sunyani', owner: 'John Mensah'),
-      ),
-      MeatBatch(
-        id: 'PK-20240501-1420-105', 
-        meatType: 'Pork', 
-        weight: 220.0, 
-        createdAt: DateTime.now(), 
-        status: 'Processing',
-        source: BatchSource(name: 'Healthy Pig Farm', location: 'Dormaa', owner: 'Kofi Boakye'),
-      ),
-    ];
-  }
-
-  @override
-  Future<List<MeatCut>> getRecentCuts() async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    return [
-      MeatCut(id: 'CUT-001', name: 'Beef Brisket', batchId: 'BF-20240501-0930-102', weight: 15.4, processedAt: DateTime.now().subtract(const Duration(minutes: 15))),
-      MeatCut(id: 'CUT-002', name: 'Beef Ribs', batchId: 'BF-20240501-0930-102', weight: 8.2, processedAt: DateTime.now().subtract(const Duration(minutes: 45))),
-      MeatCut(id: 'CUT-003', name: 'Pork Belly', batchId: 'PK-20240501-1420-105', weight: 12.0, processedAt: DateTime.now().subtract(const Duration(hours: 1))),
-      MeatCut(id: 'CUT-004', name: 'Pork Chops', batchId: 'PK-20240501-1420-105', weight: 5.5, processedAt: DateTime.now().subtract(const Duration(hours: 2))),
-    ];
-  }
-}
-
-final butcherServiceProvider = Provider<ButcherService>((ref) => MockButcherService());
-
-// Using StateNotifier to manage the list locally before Supabase integration
 class SlaughterLogNotifier extends StateNotifier<AsyncValue<List<SlaughterLog>>> {
-  final ButcherService _service;
-  SlaughterLogNotifier(this._service) : super(const AsyncValue.loading()) {
+  final SupabaseButcherService _service;
+  final Ref ref;
+
+  SlaughterLogNotifier(this._service, this.ref) : super(const AsyncValue.loading()) {
     loadLogs();
   }
 
   Future<void> loadLogs() async {
     try {
       state = const AsyncValue.loading();
-      final logs = await _service.getSlaughterLogs();
+      final user = ref.read(currentUserProvider);
+      if (user == null || user.branchCode == null) {
+        state = const AsyncValue.data([]);
+        return;
+      }
+      final logs = await _service.getSlaughterLogs(user.branchCode!);
       state = AsyncValue.data(logs);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }
   }
 
-  void addLog(SlaughterLog log) {
-    state.whenData((logs) {
-      state = AsyncValue.data([log, ...logs]);
-    });
+  Future<void> addLog(SlaughterLog log) async {
+    try {
+      final user = ref.read(currentUserProvider);
+      final logWithBranch = log.copyWith(branchCode: user?.branchCode);
+      await _service.addSlaughterLog(logWithBranch);
+      state.whenData((logs) {
+        state = AsyncValue.data([logWithBranch, ...logs]);
+      });
+    } catch (e) {
+      debugPrint('Error adding slaughter log: $e');
+    }
+  }
+
+  Future<void> updateStatus(String id, SlaughterStatus status) async {
+    try {
+      final time = status == SlaughterStatus.completed ? DateTime.now() : null;
+      await _service.updateSlaughterStatus(id, status, time: time);
+      
+      state.whenData((logs) {
+        state = AsyncValue.data([
+          for (final log in logs)
+            if (log.id == id) 
+              log.copyWith(status: status, slaughterTime: time ?? log.slaughterTime)
+            else 
+              log
+        ]);
+      });
+    } catch (e) {
+      debugPrint('Error updating status: $e');
+    }
   }
 }
 
+final butcherServiceProvider = Provider<SupabaseButcherService>((ref) => SupabaseButcherService());
+
 final slaughterLogsProvider = StateNotifierProvider<SlaughterLogNotifier, AsyncValue<List<SlaughterLog>>>((ref) {
-  return SlaughterLogNotifier(ref.watch(butcherServiceProvider));
+  return SlaughterLogNotifier(ref.watch(butcherServiceProvider), ref);
 });
 
-final activeBatchesProvider = FutureProvider<List<MeatBatch>>((ref) {
-  return ref.watch(butcherServiceProvider).getActiveBatches();
+class MeatBatchNotifier extends StateNotifier<AsyncValue<List<MeatBatch>>> {
+  final SupabaseButcherService _service;
+  final Ref ref;
+
+  MeatBatchNotifier(this._service, this.ref) : super(const AsyncValue.loading()) {
+    loadBatches();
+  }
+
+  Future<void> loadBatches() async {
+    try {
+      state = const AsyncValue.loading();
+      final user = ref.read(currentUserProvider);
+      if (user == null || user.branchCode == null) {
+        state = const AsyncValue.data([]);
+        return;
+      }
+      final batches = await _service.getActiveBatches(user.branchCode!);
+      state = AsyncValue.data(batches);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+  }
+
+  Future<void> addBatch(MeatBatch batch) async {
+    try {
+      final user = ref.read(currentUserProvider);
+      final batchWithBranch = batch.copyWith(branchCode: user?.branchCode);
+      await _service.addMeatBatch(batchWithBranch);
+      state.whenData((batches) {
+        state = AsyncValue.data([batchWithBranch, ...batches]);
+      });
+    } catch (e) {
+      debugPrint('Error adding meat batch: $e');
+    }
+  }
+
+  Future<void> closeBatch(String id) async {
+    try {
+      await _service.updateBatchStatus(id, 'completed');
+      state.whenData((batches) {
+        state = AsyncValue.data(batches.where((b) => b.id != id).toList());
+      });
+    } catch (e) {
+      debugPrint('Error closing batch: $e');
+    }
+  }
+}
+
+final activeBatchesProvider = StateNotifierProvider<MeatBatchNotifier, AsyncValue<List<MeatBatch>>>((ref) {
+  return MeatBatchNotifier(ref.watch(butcherServiceProvider), ref);
 });
 
-final recentCutsProvider = FutureProvider<List<MeatCut>>((ref) {
-  return ref.watch(butcherServiceProvider).getRecentCuts();
+final meatBatchesProvider = activeBatchesProvider;
+
+class MeatCutNotifier extends StateNotifier<AsyncValue<List<MeatCut>>> {
+  final SupabaseButcherService _service;
+  final Ref ref;
+
+  MeatCutNotifier(this._service, this.ref) : super(const AsyncValue.loading()) {
+    loadCuts();
+  }
+
+  Future<void> loadCuts() async {
+    try {
+      state = const AsyncValue.loading();
+      final user = ref.read(currentUserProvider);
+      if (user == null || user.branchCode == null) {
+        state = const AsyncValue.data([]);
+        return;
+      }
+      final cuts = await _service.getRecentCuts(user.branchCode!);
+      state = AsyncValue.data(cuts);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+  }
+
+  Future<void> addCut(MeatCut cut) async {
+    try {
+      final user = ref.read(currentUserProvider);
+      final cutWithBranch = cut.copyWith(branchCode: user?.branchCode);
+      await _service.addMeatCut(cutWithBranch);
+      state.whenData((cuts) {
+        state = AsyncValue.data([cutWithBranch, ...cuts]);
+      });
+    } catch (e) {
+      debugPrint('Error adding meat cut: $e');
+    }
+  }
+}
+
+final recentCutsProvider = StateNotifierProvider<MeatCutNotifier, AsyncValue<List<MeatCut>>>((ref) {
+  return MeatCutNotifier(ref.watch(butcherServiceProvider), ref);
+});
+
+class ButcherWasteNotifier extends StateNotifier<AsyncValue<List<Map<String, dynamic>>>> {
+  final SupabaseButcherService _service;
+  final Ref ref;
+
+  ButcherWasteNotifier(this._service, this.ref) : super(const AsyncValue.loading()) {
+    loadWaste();
+  }
+
+  Future<void> loadWaste() async {
+    try {
+      state = const AsyncValue.loading();
+      final user = ref.read(currentUserProvider);
+      if (user == null || user.branchCode == null) {
+        state = const AsyncValue.data([]);
+        return;
+      }
+      final waste = await _service.getWaste(user.branchCode!);
+      state = AsyncValue.data(waste);
+    } catch (e, st) {
+      state = AsyncValue.error(e, st);
+    }
+  }
+
+  Future<void> addWaste(String batchId, String reason, double weight) async {
+    try {
+      final user = ref.read(currentUserProvider);
+      await _service.addWaste(user?.branchCode ?? 'GLOBAL', batchId, reason, weight);
+      loadWaste(); // Refresh
+    } catch (e) {
+      debugPrint('Error adding waste: $e');
+    }
+  }
+}
+
+final butcherWasteProvider = StateNotifierProvider<ButcherWasteNotifier, AsyncValue<List<Map<String, dynamic>>>>((ref) {
+  return ButcherWasteNotifier(ref.watch(butcherServiceProvider), ref);
 });

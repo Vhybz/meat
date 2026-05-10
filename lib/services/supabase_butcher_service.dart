@@ -1,0 +1,103 @@
+import '../models/butcher_models.dart';
+import '../core/supabase_config.dart';
+
+class SupabaseButcherService {
+  final _client = SupabaseConfig.client;
+
+  Future<List<SlaughterLog>> getSlaughterLogs(String branchCode) async {
+    final response = await _client
+        .from('slaughter_logs')
+        .select()
+        .eq('branch_code', branchCode)
+        .order('slaughter_time', ascending: false);
+    
+    return (response as List).map((json) => SlaughterLog.fromJson(json)).toList();
+  }
+
+  Future<void> addSlaughterLog(SlaughterLog log) async {
+    await _client.from('slaughter_logs').insert(log.toJson());
+  }
+
+  Future<void> updateSlaughterLog(SlaughterLog log) async {
+    await _client
+        .from('slaughter_logs')
+        .update(log.toJson())
+        .eq('id', log.id);
+  }
+
+  Future<void> updateSlaughterStatus(String id, SlaughterStatus status, {DateTime? time}) async {
+    final Map<String, dynamic> updateData = {
+      'status': status.name,
+    };
+    if (time != null) {
+      updateData['slaughter_time'] = time.toIso8601String();
+    }
+    await _client
+        .from('slaughter_logs')
+        .update(updateData)
+        .eq('id', id);
+  }
+
+  Future<List<MeatBatch>> getActiveBatches(String branchCode) async {
+    final response = await _client
+        .from('meat_batches')
+        .select()
+        .eq('branch_code', branchCode)
+        .eq('status', 'processing')
+        .order('created_at', ascending: false);
+    
+    return (response as List).map((json) => MeatBatch.fromJson(json)).toList();
+  }
+
+  Future<void> addMeatBatch(MeatBatch batch) async {
+    await _client.from('meat_batches').insert(batch.toJson());
+  }
+
+  Future<void> updateBatchStatus(String id, String status) async {
+    await _client
+        .from('meat_batches')
+        .update({'status': status})
+        .eq('id', id);
+  }
+
+  Future<List<MeatCut>> getRecentCuts(String branchCode) async {
+    final response = await _client
+        .from('meat_cuts')
+        .select()
+        .eq('branch_code', branchCode)
+        .order('processed_at', ascending: false)
+        .limit(20);
+    
+    return (response as List).map((json) => MeatCut.fromJson(json)).toList();
+  }
+
+  Future<void> addMeatCut(MeatCut cut) async {
+    await _client.from('meat_cuts').insert({
+      'id': cut.id,
+      'batch_id': cut.batchId,
+      'name': cut.name,
+      'weight': cut.weight,
+      'processed_at': cut.processedAt.toIso8601String(),
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getWaste(String branchCode) async {
+    final response = await _client
+        .from('butcher_waste')
+        .select()
+        .eq('branch_code', branchCode)
+        .order('recorded_at', ascending: false);
+    
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  Future<void> addWaste(String branchCode, String batchId, String reason, double weight) async {
+    await _client.from('butcher_waste').insert({
+      'branch_code': branchCode,
+      'batch_id': batchId,
+      'reason': reason,
+      'weight': weight,
+      'recorded_at': DateTime.now().toIso8601String(),
+    });
+  }
+}

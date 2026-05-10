@@ -4,6 +4,7 @@ import '../core/constants.dart';
 import '../services/auth_service.dart';
 import '../services/user_provider.dart';
 import '../models/user_model.dart';
+import '../widgets/butcher_loading.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -24,7 +25,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 3),
+      duration: const Duration(seconds: 4),
     );
     
     _fadeAnimation = CurvedAnimation(
@@ -40,7 +41,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
     _progressAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.2, 1.0, curve: Curves.easeInOut),
+        curve: const Interval(0.2, 0.95, curve: Curves.easeInOut),
       ),
     );
 
@@ -48,11 +49,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
   }
 
   Future<void> _checkAuthAndNavigate() async {
-    // Start animation immediately
     _controller.forward();
     
-    // Give time for animation and Supabase to be ready
-    await Future.delayed(const Duration(seconds: 3));
+    await Future.delayed(const Duration(seconds: 4));
     
     if (!mounted) return;
 
@@ -91,8 +90,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
         }
       } catch (e) {
         debugPrint('Splash Auth Error: $e');
-        // If profile fetch fails, we don't necessarily want to sign out
-        // but we should probably go to onboarding or login
       }
     }
 
@@ -127,7 +124,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
         child: Stack(
           alignment: Alignment.center,
           children: [
-            // Decorative background elements
             _buildDecor(top: -100, left: -100, size: 300),
             _buildDecor(bottom: -50, right: -50, size: 200),
             
@@ -137,25 +133,24 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
                 return Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Main App Icon
                     FadeTransition(
                       opacity: _fadeAnimation,
                       child: ScaleTransition(
                         scale: _scaleAnimation,
                         child: Container(
-                          width: 200,
-                          height: 200,
+                          width: 140,
+                          height: 140,
                           decoration: BoxDecoration(
                             color: Colors.white,
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.3),
-                                blurRadius: 30,
-                                offset: const Offset(0, 15),
+                                color: Colors.black.withValues(alpha: 0.3),
+                                blurRadius: 20,
+                                offset: const Offset(0, 10),
                               ),
                             ],
-                            border: Border.all(color: Colors.white.withOpacity(0.2), width: 8),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 6),
                           ),
                           child: ClipOval(
                             child: Image.asset(
@@ -166,9 +161,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
                         ),
                       ),
                     ),
-                    const SizedBox(height: 40),
+                    const SizedBox(height: 30),
                     
-                    // App Name
                     FadeTransition(
                       opacity: _fadeAnimation,
                       child: const Column(
@@ -177,7 +171,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
                             'Mi CORAZON',
                             style: TextStyle(
                               color: Colors.white,
-                              fontSize: 36,
+                              fontSize: 32,
                               fontWeight: FontWeight.bold,
                               letterSpacing: 4,
                             ),
@@ -186,47 +180,45 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
                             'FRESHMEAT BUTCHERY',
                             style: TextStyle(
                               color: Colors.white,
-                              fontSize: 18,
+                              fontSize: 16,
                               fontWeight: FontWeight.w500,
                               letterSpacing: 2,
-                            ),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Uncompromising Quality, Unforgettable Taste',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontSize: 12,
-                              fontStyle: FontStyle.italic,
                             ),
                           ),
                         ],
                       ),
                     ),
                     
-                    const SizedBox(height: 80),
+                    const SizedBox(height: 50),
                     
-                    // Progress Indicator
+                    FadeTransition(
+                      opacity: _fadeAnimation,
+                      child: const ButcherLoading(size: 160),
+                    ),
+
+                    const SizedBox(height: 20),
+                    
                     SizedBox(
-                      width: 240,
+                      width: 200,
                       child: Column(
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(10),
                             child: LinearProgressIndicator(
                               value: _progressAnimation.value,
-                              backgroundColor: Colors.white.withOpacity(0.1),
+                              backgroundColor: Colors.white.withValues(alpha: 0.1),
                               valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                              minHeight: 6,
+                              minHeight: 4,
                             ),
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 8),
                           Text(
-                            '${(_progressAnimation.value * 100).toInt()}%',
+                            'Preparing Fresh Cuts... ${(_progressAnimation.value * 100).toInt()}%',
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.6),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
+                              color: Colors.white.withValues(alpha: 0.6),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w400,
+                              letterSpacing: 1,
                             ),
                           ),
                         ],
@@ -253,10 +245,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
         height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Colors.white.withOpacity(0.03),
+          color: Colors.white.withValues(alpha: 0.03),
         ),
       ),
     );
   }
 }
-

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../core/constants.dart';
 import '../../widgets/status_chip.dart';
 
@@ -7,6 +8,9 @@ class OrdersScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Current time for demonstration
+    final now = DateTime.now();
+
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.l),
       child: Column(
@@ -20,7 +24,7 @@ class OrdersScreen extends StatelessWidget {
           Expanded(
             child: ListView.builder(
               itemCount: 6,
-              itemBuilder: (context, index) => _buildOrderCard(index),
+              itemBuilder: (context, index) => _buildOrderCard(index, now.subtract(Duration(hours: index))),
             ),
           ),
         ],
@@ -56,7 +60,7 @@ class OrdersScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildOrderCard(int index) {
+  Widget _buildOrderCard(int index, DateTime time) {
     return Card(
       margin: const EdgeInsets.only(bottom: AppSpacing.m),
       child: Padding(
@@ -67,11 +71,12 @@ class OrdersScreen extends StatelessWidget {
               Container(
                 width: 60,
                 decoration: BoxDecoration(color: AppColors.surfaceWhite, borderRadius: BorderRadius.circular(AppRadius.s)),
-                child: const Column(
+                child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('May', style: TextStyle(fontSize: 10, color: AppColors.textLight)),
-                    Text('14', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text(DateFormat('MMM').format(time), style: const TextStyle(fontSize: 10, color: AppColors.textLight)),
+                    Text(DateFormat('dd').format(time), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    Text(DateFormat('HH:mm').format(time), style: const TextStyle(fontSize: 8, color: AppColors.textLight)),
                   ],
                 ),
               ),

@@ -124,7 +124,7 @@ class ButcherExpenseScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: selectedCategory,
+                  initialValue: selectedCategory,
                   decoration: const InputDecoration(labelText: 'Category', border: OutlineInputBorder()),
                   items: butcherCategories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                   onChanged: (v) => setState(() => selectedCategory = v!),

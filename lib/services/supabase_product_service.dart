@@ -1,5 +1,4 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import '../models/product.dart';
 import 'product_service.dart';
@@ -9,10 +8,11 @@ class SupabaseProductService implements ProductService {
   final _client = SupabaseConfig.client;
 
   @override
-  Future<List<Product>> getProducts() async {
+  Future<List<Product>> getProducts(String branchCode) async {
     final response = await _client
         .from('products')
         .select()
+        .eq('branch_code', branchCode)
         .eq('is_deleted', false);
     
     return (response as List).map((json) => Product.fromJson(json)).toList();
@@ -76,19 +76,32 @@ class SupabaseProductService implements ProductService {
   Future<String?> uploadProductImage(Uint8List bytes, String fileName) async {
     try {
       final storage = _client.storage.from('product-images');
+      final path = 'products/$fileName';
       
       // Upload using uploadBinary for Uint8List
       await storage.uploadBinary(
-        fileName, 
+        path, 
         bytes,
         fileOptions: const FileOptions(cacheControl: '3600', upsert: true),
       );
       
       // Return the public URL
-      return storage.getPublicUrl(fileName);
+      return storage.getPublicUrl(path);
     } catch (e) {
       debugPrint('Upload Error: $e');
       return null;
     }
+  }
+
+  @override
+  Stream<List<Product>> watchProducts(String branchCode) {
+    return _client
+        .from('products')
+        .stream(primaryKey: ['id'])
+        .eq('branch_code', branchCode)
+        .map((data) => data
+            .map((json) => Product.fromJson(json))
+            .where((p) => !p.isDeleted)
+            .toList());
   }
 }

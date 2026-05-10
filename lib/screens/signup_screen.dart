@@ -5,7 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../core/constants.dart';
 import '../models/user_model.dart';
+import '../models/branch_model.dart';
 import '../services/user_provider.dart';
+import '../services/branch_provider.dart';
 import '../services/auth_service.dart';
 import '../services/sms_service.dart';
 
@@ -24,10 +26,14 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _branchNameController = TextEditingController();
+  final _branchLocationController = TextEditingController();
   
   DateTime? _selectedDob;
   String? _selectedGender;
   UserRole _selectedRole = UserRole.cashier;
+  String? _selectedBranchCode;
+  bool _isCreatingBranch = false;
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
@@ -120,55 +126,67 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final branchesAsync = ref.watch(branchesProvider);
+    final branches = branchesAsync.value ?? [];
+    final noBranchesExist = branches.isEmpty && !branchesAsync.isLoading;
+    final size = MediaQuery.of(context).size;
+    final bool isMobile = size.width < 600;
+
     return Scaffold(
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [
-              AppColors.primaryMaroon,
-              Color(0xFF4A0808),
-            ],
+            colors: isDark 
+              ? [const Color(0xFF121212), const Color(0xFF000000)]
+              : [AppColors.primaryMaroon, const Color(0xFF4A0808)],
           ),
         ),
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+            padding: EdgeInsets.symmetric(
+              vertical: isMobile ? 20 : 40, 
+              horizontal: isMobile ? 10 : 20
+            ),
             child: Container(
-              width: 500,
-              padding: const EdgeInsets.all(AppSpacing.xl),
+              constraints: const BoxConstraints(maxWidth: 550),
+              width: size.width * (isMobile ? 0.95 : 0.8),
+              padding: EdgeInsets.all(isMobile ? AppSpacing.l : AppSpacing.xl),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: theme.cardTheme.color,
                 borderRadius: BorderRadius.circular(AppRadius.l),
-                boxShadow: const [
-                  BoxShadow(color: Colors.black45, blurRadius: 20, offset: Offset(0, 10)),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.4), blurRadius: 20, offset: const Offset(0, 10)),
                 ],
+                border: isDark ? Border.all(color: theme.dividerColor) : null,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // Fixed Header Section
                   Container(
-                    padding: const EdgeInsets.all(AppSpacing.xl),
+                    padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.xl),
                     child: Column(
                       children: [
                         Container(
-                          width: 100,
-                          height: 100,
+                          width: isMobile ? 80 : 100,
+                          height: isMobile ? 80 : 100,
                           decoration: BoxDecoration(
                             color: Colors.white,
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.1),
+                                color: Colors.black.withValues(alpha: 0.1),
                                 blurRadius: 20,
                                 offset: const Offset(0, 10),
                               ),
                             ],
-                            border: Border.all(color: AppColors.primaryMaroon.withOpacity(0.1), width: 4),
+                            border: Border.all(color: AppColors.primaryMaroon.withValues(alpha: 0.1), width: 4),
                           ),
                           child: ClipOval(
                             child: Image.asset(
@@ -178,44 +196,53 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                           ),
                         ),
                         const SizedBox(height: AppSpacing.m),
-                        const Text(
+                        Text(
                           'Staff Registration',
+                          textAlign: TextAlign.center,
                           style: TextStyle(
-                            fontSize: 24, 
+                            fontSize: isMobile ? 20 : 24, 
                             fontWeight: FontWeight.bold, 
-                            color: AppColors.primaryMaroon,
+                            color: isDark ? theme.colorScheme.primary : AppColors.primaryMaroon,
                             letterSpacing: 1.1,
                           ),
                         ),
-                        const Text(
+                        Text(
                           'Apply for a Mi Corazon team account', 
-                          style: TextStyle(color: AppColors.textLight, fontSize: 13),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12),
                         ),
                       ],
                     ),
                   ),
-                  const Divider(height: 1),
+                  Divider(height: 1, color: theme.dividerColor),
                   // Scrollable Form Section
                   Flexible(
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(AppSpacing.xl),
+                      padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.xl),
                       child: Form(
                         key: _formKey,
                         child: Column(
                           children: [
-                            Row(
+                            Flex(
+                              direction: isMobile ? Axis.vertical : Axis.horizontal,
                               children: [
-                                Expanded(child: _buildTextField(_firstNameController, 'First Name', Icons.person_outline, isName: true)),
-                                const SizedBox(width: AppSpacing.m),
-                                Expanded(child: _buildTextField(_surnameController, 'Surname', Icons.person_outline, isName: true)),
+                                Expanded(
+                                  flex: isMobile ? 0 : 1,
+                                  child: _buildTextField(context, _firstNameController, 'First Name', Icons.person_outline, isName: true),
+                                ),
+                                if (!isMobile) const SizedBox(width: AppSpacing.m) else const SizedBox(height: AppSpacing.m),
+                                Expanded(
+                                  flex: isMobile ? 0 : 1,
+                                  child: _buildTextField(context, _surnameController, 'Surname', Icons.person_outline, isName: true),
+                                ),
                               ],
                             ),
                             const SizedBox(height: AppSpacing.m),
                             
-                            _buildTextField(_emailController, 'Email Address', Icons.email_outlined, isEmail: true),
+                            _buildTextField(context, _emailController, 'Email Address', Icons.email_outlined, isEmail: true),
                             const SizedBox(height: AppSpacing.m),
                             
-                            _buildTextField(_phoneController, 'Phone Number', Icons.phone_android_outlined, isPhone: true),
+                            _buildTextField(context, _phoneController, 'Phone Number', Icons.phone_android_outlined, isPhone: true),
                             if (_phoneExists) ...[
                               const SizedBox(height: 4),
                               const Align(
@@ -228,19 +255,22 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                             ],
                             const SizedBox(height: AppSpacing.m),
                             
-                            Row(
+                            Flex(
+                              direction: isMobile ? Axis.vertical : Axis.horizontal,
                               children: [
                                 Expanded(
+                                  flex: isMobile ? 0 : 1,
                                   child: DropdownButtonFormField<String>(
-                                    value: _selectedGender,
-                                    decoration: const InputDecoration(labelText: 'Gender', border: OutlineInputBorder(), prefixIcon: Icon(Icons.wc)),
+                                    initialValue: _selectedGender,
+                                    decoration: const InputDecoration(labelText: 'Gender', prefixIcon: Icon(Icons.wc)),
                                     items: ['Male', 'Female', 'Other'].map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
                                     onChanged: (v) => setState(() => _selectedGender = v),
                                     validator: (v) => v == null ? 'Required' : null,
                                   ),
                                 ),
-                                const SizedBox(width: AppSpacing.m),
+                                if (!isMobile) const SizedBox(width: AppSpacing.m) else const SizedBox(height: AppSpacing.m),
                                 Expanded(
+                                  flex: isMobile ? 0 : 1,
                                   child: InkWell(
                                     onTap: () async {
                                       final picked = await showDatePicker(
@@ -252,14 +282,19 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                                       if (picked != null) setState(() => _selectedDob = picked);
                                     },
                                     child: Container(
-                                      padding: const EdgeInsets.all(12),
-                                      decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(4)),
+                                      height: 56, // Match standard input height
+                                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                                      decoration: BoxDecoration(
+                                        border: Border.all(color: theme.dividerColor), 
+                                        borderRadius: BorderRadius.circular(AppRadius.s),
+                                        color: theme.inputDecorationTheme.fillColor,
+                                      ),
                                       child: Row(
                                         children: [
-                                          const Icon(Icons.cake_outlined, size: 20, color: AppColors.textLight),
+                                          Icon(Icons.cake_outlined, size: 20, color: theme.colorScheme.onSurfaceVariant),
                                           const SizedBox(width: 8),
                                           Text(_selectedDob == null ? 'Date of Birth' : DateFormat('yyyy-MM-dd').format(_selectedDob!), 
-                                            style: TextStyle(fontSize: 12, color: _selectedDob == null ? AppColors.textLight : AppColors.textDark)),
+                                            style: TextStyle(fontSize: 12, color: _selectedDob == null ? theme.colorScheme.onSurfaceVariant : theme.colorScheme.onSurface)),
                                         ],
                                       ),
                                     ),
@@ -270,14 +305,48 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                             const SizedBox(height: AppSpacing.m),
                             
                             DropdownButtonFormField<UserRole>(
-                              value: _selectedRole,
-                              decoration: const InputDecoration(labelText: 'Applying For Role', border: OutlineInputBorder(), prefixIcon: Icon(Icons.work_outline)),
+                              initialValue: _selectedRole,
+                              decoration: const InputDecoration(labelText: 'Applying For Role', prefixIcon: Icon(Icons.work_outline)),
                               items: [UserRole.cashier, UserRole.butcher, UserRole.admin].map((r) => DropdownMenuItem(value: r, child: Text(r.name.toUpperCase()))).toList(),
-                              onChanged: (v) => setState(() => _selectedRole = v!),
+                              onChanged: (v) {
+                                setState(() {
+                                  _selectedRole = v!;
+                                  if (v != UserRole.admin) _isCreatingBranch = false;
+                                });
+                              },
                             ),
                             const SizedBox(height: AppSpacing.m),
                             
-                            _buildTextField(_passwordController, 'Password', Icons.lock_outline, isPassword: true),
+                            if (_selectedRole == UserRole.admin || noBranchesExist) ...[
+                              CheckboxListTile(
+                                title: Text('Setup New Branch?', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+                                subtitle: Text(noBranchesExist ? 'Required: No branches found.' : 'Create a separate business unit', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant)),
+                                value: _isCreatingBranch || noBranchesExist,
+                                onChanged: noBranchesExist ? null : (v) => setState(() => _isCreatingBranch = v!),
+                                activeColor: theme.colorScheme.primary,
+                                dense: true,
+                              ),
+                              const SizedBox(height: AppSpacing.m),
+                            ],
+
+                            if (_isCreatingBranch || noBranchesExist) ...[
+                              _buildTextField(context, _branchNameController, 'Shop/Branch Name', Icons.store_mall_directory_outlined),
+                              const SizedBox(height: AppSpacing.m),
+                              _buildTextField(context, _branchLocationController, 'Branch Location (City/Town)', Icons.location_on_outlined),
+                              const SizedBox(height: AppSpacing.m),
+                            ] else ...[
+                              DropdownButtonFormField<String>(
+                                isExpanded: true,
+                                initialValue: _selectedBranchCode,
+                                decoration: const InputDecoration(labelText: 'Select Working Branch', prefixIcon: Icon(Icons.map_outlined)),
+                                items: branches.map((b) => DropdownMenuItem(value: b.code, child: Text('${b.name} (${b.location})', style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis))).toList(),
+                                onChanged: (v) => setState(() => _selectedBranchCode = v),
+                                validator: (v) => v == null ? 'Please select a branch' : null,
+                              ),
+                              const SizedBox(height: AppSpacing.m),
+                            ],
+                            
+                            _buildTextField(context, _passwordController, 'Password', Icons.lock_outline, isPassword: true),
                             if (_passwordController.text.isNotEmpty) ...[
                               const SizedBox(height: 8),
                               Column(
@@ -285,21 +354,21 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                                 children: [
                                   Row(
                                     children: [
-                                      const Text('Strength: ', style: TextStyle(fontSize: 12)),
+                                      Text('Strength: ', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant)),
                                       Text(_strengthLabel, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _strengthColor)),
                                     ],
                                   ),
                                   const SizedBox(height: 4),
                                   LinearProgressIndicator(
                                     value: _strength,
-                                    backgroundColor: Colors.grey.shade200,
+                                    backgroundColor: isDark ? Colors.white10 : Colors.grey.shade200,
                                     valueColor: AlwaysStoppedAnimation<Color>(_strengthColor),
                                   ),
                                 ],
                               ),
                             ],
                             const SizedBox(height: AppSpacing.m),
-                            _buildTextField(_confirmPasswordController, 'Confirm Password', Icons.lock_reset_outlined, isPassword: true),
+                            _buildTextField(context, _confirmPasswordController, 'Confirm Password', Icons.lock_reset_outlined, isPassword: true),
                             
                             const SizedBox(height: AppSpacing.xl),
                             
@@ -309,24 +378,25 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                               child: ElevatedButton(
                                 onPressed: _isLoading ? null : _handleSignup,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primaryMaroon,
+                                  backgroundColor: theme.colorScheme.primary,
                                   foregroundColor: Colors.white,
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.s)),
                                 ),
                                 child: _isLoading 
-                                    ? const CircularProgressIndicator(color: Colors.white)
+                                    ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)))
                                     : const Text('Submit Application', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                               ),
                             ),
                             
                             const SizedBox(height: AppSpacing.l),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
+                            Wrap(
+                              alignment: WrapAlignment.center,
+                              crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
-                                const Text('Already have an account?'),
+                                Text('Already have an account?', style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 13)),
                                 TextButton(
                                   onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
-                                  child: const Text('Login'),
+                                  child: Text('Login', style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.primary, fontSize: 13)),
                                 ),
                               ],
                             ),
@@ -344,7 +414,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String label, IconData icon, {bool isEmail = false, bool isPassword = false, bool isPhone = false, bool isName = false}) {
+  Widget _buildTextField(BuildContext context, TextEditingController controller, String label, IconData icon, {bool isEmail = false, bool isPassword = false, bool isPhone = false, bool isName = false}) {
     bool obscure = false;
     if (isPassword) {
       if (controller == _passwordController) {
@@ -383,9 +453,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 },
               )
             : null,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.s)),
-        filled: true,
-        fillColor: Colors.grey.shade50,
         hintText: isPhone ? '10 digits' : null,
       ),
       validator: (v) {
@@ -422,24 +489,48 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
       setState(() => _isLoading = true);
 
       try {
+        final userNotifier = ref.read(userProvider.notifier);
+        final branchesAsync = ref.read(branchesProvider);
+        final noBranchesExist = (branchesAsync.value ?? []).isEmpty;
+        String? branchCode = _selectedBranchCode;
+
+        final existingProfiles = ref.read(userProvider);
+        final existingProfile = existingProfiles.where((u) => u.email.toLowerCase() == _emailController.text.trim().toLowerCase()).firstOrNull;
+
+        if (_isCreatingBranch || noBranchesExist) {
+          final String firstName = _firstNameController.text.trim();
+          final String location = _branchLocationController.text.trim();
+          final String random = (100 + (DateTime.now().millisecond % 900)).toString();
+          
+          branchCode = '${firstName.toUpperCase()}_${location.replaceAll(' ', '').toUpperCase()}_$random';
+          
+          final newBranch = Branch(
+            code: branchCode,
+            name: _branchNameController.text.trim(),
+            location: location,
+          );
+          
+          await ref.read(branchesProvider.notifier).addBranch(newBranch);
+        }
+
         final authResponse = await _authService.signUp(_emailController.text, _passwordController.text);
         
         if (authResponse.user != null) {
-          final userNotifier = ref.read(userProvider.notifier);
           final adminExists = userNotifier.isAdminExists;
           final isFirstAdmin = !adminExists && _selectedRole == UserRole.admin;
           
           final newUser = UserAccount(
             id: authResponse.user!.id,
-            firstName: _firstNameController.text,
-            surname: _surnameController.text,
-            email: _emailController.text,
-            phone: _phoneController.text,
+            firstName: _firstNameController.text.trim(),
+            surname: _surnameController.text.trim(),
+            email: _emailController.text.trim(),
+            phone: _phoneController.text.trim(),
             gender: _selectedGender,
             dob: _selectedDob,
-            role: _selectedRole,
-            status: isFirstAdmin ? AccountStatus.approved : AccountStatus.pending,
-            enabledPermissions: isFirstAdmin 
+            role: existingProfile?.role ?? _selectedRole,
+            branchCode: existingProfile?.branchCode ?? branchCode,
+            status: existingProfile != null ? AccountStatus.approved : (isFirstAdmin ? AccountStatus.approved : AccountStatus.pending),
+            enabledPermissions: existingProfile?.enabledPermissions ?? (isFirstAdmin 
               ? {
                   '/admin', 
                   '/admin/sales', 
@@ -452,16 +543,20 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                   '/butcher', 
                   '/settings'
                 } 
-              : {'/settings'},
+              : {'/settings'}),
           );
 
           try {
             await userNotifier.addAccount(newUser);
-            
-            // Send confirmation SMS to the user
-            await SmsService.sendSignupConfirmationSms(newUser, isFirstAdmin);
-
-            if (!isFirstAdmin) {
+            if (_isCreatingBranch || noBranchesExist) {
+              await ref.read(branchesProvider.notifier).setBranchAdmin(branchCode!, newUser.id);
+            }
+            if (existingProfile != null) {
+              await SmsService.sendStaffOnboardingSms(newUser);
+            } else {
+              await SmsService.sendSignupConfirmationSms(newUser, isFirstAdmin);
+            }
+            if (!isFirstAdmin && existingProfile == null) {
               final allUsers = ref.read(userProvider);
               await SmsService.sendApprovalRequestSms(newUser, allUsers);
             }
@@ -472,10 +567,12 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 barrierDismissible: false,
                 builder: (context) => AlertDialog(
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
-                  title: Text(isFirstAdmin ? 'Registration Successful' : 'Application Submitted'),
+                  title: Text(isFirstAdmin || existingProfile != null ? 'Registration Successful' : 'Application Submitted'),
                   content: Text(isFirstAdmin 
                     ? 'Your account has been created and approved as the primary administrator. You can now sign in.' 
-                    : 'Your registration is pending administrator approval. You will be notified once approved.'),
+                    : (existingProfile != null 
+                        ? 'Your account has been linked to your staff profile. You can now sign in.' 
+                        : 'Your registration is pending administrator approval. You will be notified once approved.')),
                   actions: [
                     ElevatedButton(
                       onPressed: () {
@@ -489,7 +586,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
               );
             }
           } catch (dbError) {
-            // Rollback: Sign out user if profile creation fails
             await _authService.signOut();
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(

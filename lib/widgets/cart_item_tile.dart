@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../core/constants.dart';
 
 class CartItemTile extends StatelessWidget {
   final String name;
@@ -19,6 +18,7 @@ class CartItemTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
@@ -27,25 +27,26 @@ class CartItemTile extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: AppColors.surfaceWhite,
+              color: theme.colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(4),
             ),
-            child: const Icon(Icons.image, size: 20, color: AppColors.borderGray),
+            child: Icon(Icons.image, size: 20, color: theme.dividerColor),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                Text('$qty x $weight', style: const TextStyle(color: AppColors.textLight, fontSize: 11)),
+                Text(name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: theme.colorScheme.onSurface)),
+                Text('$qty x $weight', style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 11)),
               ],
             ),
           ),
-          Text(amount, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          Text(amount, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: theme.colorScheme.onSurface)),
+          const SizedBox(width: 8),
           IconButton(
             onPressed: onDelete,
-            icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.textLight),
+            icon: Icon(Icons.delete_outline, size: 18, color: theme.colorScheme.error.withValues(alpha: 0.7)),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
           ),

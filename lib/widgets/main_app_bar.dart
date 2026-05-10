@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../core/constants.dart';
 import 'responsive_layout.dart';
 import '../services/notification_service.dart';
 import '../services/theme_provider.dart';
 import '../services/user_provider.dart';
+import '../models/user_model.dart';
 
 class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
   final String title;
@@ -24,22 +26,31 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isDesktop = ResponsiveLayout.isDesktop(context);
+    final theme = Theme.of(context);
+    final user = ref.watch(currentUserProvider);
+    final role = user?.activePrimaryRole;
+    
     final themeMode = ref.watch(themeProvider);
     final isDark = themeMode == ThemeMode.dark;
+    
+    final Color roleColor = _getRoleColor(role, isDark, theme);
+    final Color contentColor = Colors.white; // Contrast for role-based background
+    
     final now = DateTime.now();
     final notifications = ref.watch(notificationProvider);
     final unreadCount = notifications.where((n) => !n.isRead).length;
 
     return Container(
       decoration: BoxDecoration(
-        color: Theme.of(context).appBarTheme.backgroundColor,
+        color: roleColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.2 : 0.03),
+            color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.1),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
+        border: isDark ? Border(bottom: BorderSide(color: theme.dividerColor)) : null,
       ),
       child: SafeArea(
         child: Padding(
@@ -49,7 +60,7 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
               if (!isDesktop && showMenuButton)
                 Builder(
                   builder: (context) => IconButton(
-                    icon: Icon(Icons.menu_rounded, color: isDark ? Colors.white : AppColors.primaryMaroon),
+                    icon: const Icon(Icons.menu_rounded, color: Colors.white),
                     onPressed: () => Scaffold.of(context).openDrawer(),
                   ),
                 ),
@@ -65,26 +76,21 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
                       style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.onSurface,
+                        color: contentColor,
                         letterSpacing: -0.5,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
                     if (isDesktop)
-                      Consumer(
-                        builder: (context, ref, _) {
-                          final user = ref.watch(currentUserProvider);
-                          return Text(
-                            user != null 
-                              ? '${user.name} • ${user.activePrimaryRole.name.toUpperCase()}'
-                              : 'Freshmeat Butchery Management System',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: isDark ? Colors.white54 : AppColors.textLight,
-                              fontWeight: FontWeight.w400,
-                            ),
-                          );
-                        },
+                      Text(
+                        user != null 
+                          ? '${user.name} • ${user.activePrimaryRole.name.toUpperCase()}'
+                          : 'Mi Corazon Butchery System',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontWeight: FontWeight.w400,
+                        ),
                       ),
                   ],
                 ),
@@ -120,12 +126,18 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
               _buildNotificationButton(context, unreadCount, () => _showNotificationsDialog(context, ref, notifications)),
               const SizedBox(width: AppSpacing.s),
               
-              _buildProfileAvatar(context),
+              _buildProfileAvatar(context, ref, roleColor),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Color _getRoleColor(UserRole? role, bool isDark, ThemeData theme) {
+    if (isDark) return theme.appBarTheme.backgroundColor ?? const Color(0xFF1E1E1E);
+    
+    return AppColors.primaryMaroon; // Deep Red like splashscreen
   }
 
   Widget _buildNotificationButton(BuildContext context, int count, VoidCallback onTap) {
@@ -152,10 +164,12 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
   }
 
   void _showNotificationsDialog(BuildContext context, WidgetRef ref, List<AppNotification> notifications) {
+    final theme = Theme.of(context);
     showDialog(
       context: context,
       builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
+        backgroundColor: theme.colorScheme.surface,
         child: SizedBox(
           width: 400,
           child: Column(
@@ -167,7 +181,12 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
                   color: AppColors.primaryMaroon,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.l)),
                 ),
-                child: const Text('Recent Notifications', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                child: const Center(
+                  child: Text(
+                    'Recent Notifications', 
+                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
+                  ),
+                ),
               ),
               if (notifications.isEmpty)
                 const Padding(padding: EdgeInsets.all(40), child: Text('No new notifications.'))
@@ -179,11 +198,14 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
                     itemBuilder: (context, index) {
                       final n = notifications[index];
                       return ListTile(
-                        leading: Icon(n.title.contains('BUTCHER') ? Icons.warning : Icons.report, color: Colors.orange),
+                        leading: Icon(
+                          n.title.contains('BUTCHER') ? Icons.warning : Icons.report, 
+                          color: Colors.orange
+                        ),
                         title: Text(n.title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                         subtitle: Text(n.message, style: const TextStyle(fontSize: 11)),
                         trailing: Text(DateFormat('hh:mm').format(n.timestamp), style: const TextStyle(fontSize: 10)),
-                        tileColor: n.isRead ? null : Colors.orange.withOpacity(0.05),
+                        tileColor: n.isRead ? null : Colors.orange.withValues(alpha: 0.05),
                         onTap: () {
                           ref.read(notificationProvider.notifier).markAsRead(n.id);
                         },
@@ -191,7 +213,13 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
                     },
                   ),
                 ),
-              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+              Padding(
+                padding: const EdgeInsets.all(AppSpacing.s),
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context), 
+                  child: const Text('Dismiss View')
+                ),
+              ),
             ],
           ),
         ),
@@ -200,25 +228,24 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
   }
 
   Widget _buildInfoChip(BuildContext context, {required IconData icon, required String label}) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: isDark ? Colors.white.withOpacity(0.05) : AppColors.surfaceWhite,
+        color: Colors.white.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(AppRadius.l),
-        border: Border.all(color: isDark ? Colors.white12 : AppColors.borderGray.withOpacity(0.5)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: AppColors.primaryMaroon),
+          Icon(icon, size: 14, color: Colors.white),
           const SizedBox(width: 8),
           Text(
             label,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: isDark ? Colors.white70 : AppColors.textDark,
+              color: Colors.white,
             ),
           ),
         ],
@@ -227,35 +254,74 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
   }
 
   Widget _buildRoundButton(BuildContext context, IconData icon, VoidCallback onTap) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Material(
-      color: isDark ? Colors.white.withOpacity(0.05) : AppColors.surfaceWhite,
+      color: Colors.white.withValues(alpha: 0.15),
       shape: const CircleBorder(),
       child: InkWell(
         onTap: onTap,
         customBorder: const CircleBorder(),
         child: Padding(
           padding: const EdgeInsets.all(8.0),
-          child: Icon(icon, size: 20, color: isDark ? Colors.white70 : AppColors.textDark),
+          child: Icon(icon, size: 20, color: Colors.white),
         ),
       ),
     );
   }
 
-  Widget _buildProfileAvatar(BuildContext context) {
+  Widget _buildProfileAvatar(BuildContext context, WidgetRef ref, Color roleColor) {
+    final user = ref.watch(currentUserProvider);
+
     return InkWell(
-      onTap: onProfileTap,
+      onTap: () async {
+        if (onProfileTap != null) {
+          onProfileTap!();
+        } else {
+          final picker = ImagePicker();
+          final XFile? image = await picker.pickImage(
+            source: ImageSource.gallery,
+            maxWidth: 512,
+            maxHeight: 512,
+            imageQuality: 75,
+          );
+
+          if (image != null && user != null) {
+            final bytes = await image.readAsBytes();
+            await ref.read(userProvider.notifier).updatePhoto(user.id, bytes);
+          }
+        }
+      },
       borderRadius: BorderRadius.circular(20),
       child: Container(
         padding: const EdgeInsets.all(2),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: Border.all(color: AppColors.primaryMaroon.withOpacity(0.2), width: 2),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 2),
         ),
-        child: const CircleAvatar(
-          radius: 16,
-          backgroundColor: AppColors.primaryMaroon,
-          child: Icon(Icons.person_rounded, size: 20, color: Colors.white),
+        child: SizedBox(
+          width: 32,
+          height: 32,
+          child: ClipOval(
+            child: user?.photoUrl != null
+                ? Image.network(
+                    user!.photoUrl!,
+                    fit: BoxFit.cover,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return const Center(child: SizedBox(width: 10, height: 10, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)));
+                    },
+                    errorBuilder: (context, error, stackTrace) {
+                      debugPrint('Profile image load error: $error');
+                      return Container(
+                        color: Colors.white,
+                        child: Icon(Icons.person_rounded, size: 20, color: roleColor),
+                      );
+                    },
+                  )
+                : Container(
+                    color: Colors.white,
+                    child: Icon(Icons.person_rounded, size: 20, color: roleColor),
+                  ),
+          ),
         ),
       ),
     );

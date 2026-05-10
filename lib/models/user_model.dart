@@ -9,7 +9,9 @@ class UserAccount {
   final String? phone;
   final String? gender;
   final DateTime? dob;
+  final String? photoUrl;
   final UserRole role; // Permanent primary role
+  final String? branchCode; // Branch the user belongs to
   final List<UserRole> secondaryRoles; // Permanent secondary roles
   final String? shopLocation;
   final AccountStatus status;
@@ -33,7 +35,9 @@ class UserAccount {
     this.phone,
     this.gender,
     this.dob,
+    this.photoUrl,
     required this.role,
+    this.branchCode,
     this.secondaryRoles = const [],
     this.shopLocation,
     this.status = AccountStatus.approved,
@@ -57,7 +61,9 @@ class UserAccount {
       phone: json['phone'],
       gender: json['gender'],
       dob: json['dob'] != null ? DateTime.parse(json['dob']) : null,
+      photoUrl: json['photo_url'],
       role: UserRole.values.byName(json['role']),
+      branchCode: json['branch_code'],
       secondaryRoles: (json['secondary_roles'] as List? ?? [])
           .map((e) => UserRole.values.byName(e))
           .toList(),
@@ -88,7 +94,9 @@ class UserAccount {
       'phone': phone,
       'gender': gender,
       'dob': dob?.toIso8601String(),
+      'photo_url': photoUrl,
       'role': role.name,
+      'branch_code': branchCode,
       'secondary_roles': secondaryRoles.map((e) => e.name).toList(),
       'shop_location': shopLocation,
       'status': status.name,
@@ -140,7 +148,9 @@ class UserAccount {
     String? phone,
     String? gender,
     DateTime? dob,
+    String? photoUrl,
     UserRole? role,
+    String? branchCode,
     List<UserRole>? secondaryRoles,
     String? shopLocation,
     AccountStatus? status,
@@ -160,7 +170,9 @@ class UserAccount {
       phone: phone ?? this.phone,
       gender: gender ?? this.gender,
       dob: dob ?? this.dob,
+      photoUrl: photoUrl ?? this.photoUrl,
       role: role ?? this.role,
+      branchCode: branchCode ?? this.branchCode,
       secondaryRoles: secondaryRoles ?? this.secondaryRoles,
       shopLocation: shopLocation ?? this.shopLocation,
       status: status ?? this.status,

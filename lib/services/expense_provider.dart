@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/expense_model.dart';
 import 'supabase_expense_service.dart';
+import 'user_provider.dart';
 
 class ExpenseState {
   final List<ExpenseRecord> records;
@@ -18,8 +19,9 @@ class ExpenseState {
 
 class ExpenseNotifier extends StateNotifier<ExpenseState> {
   final SupabaseExpenseService _service;
+  final Ref ref;
 
-  ExpenseNotifier(this._service) : super(ExpenseState(
+  ExpenseNotifier(this._service, this.ref) : super(ExpenseState(
     records: [],
     categories: ['Electricity', 'GRA Tax', 'Water', 'Rent', 'Wages', 'Transport', 'Vet Check', 'Animal Transport', 'Maintenance'],
   )) {
@@ -28,15 +30,20 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
 
   Future<void> loadExpenses() async {
     try {
-      final expenses = await _service.getExpenses();
+      final user = ref.read(currentUserProvider);
+      if (user == null || user.branchCode == null) return;
+
+      final expenses = await _service.getExpenses(user.branchCode!);
       state = state.copyWith(records: expenses);
     } catch (e) {}
   }
 
   Future<void> addExpense(ExpenseRecord expense) async {
     try {
-      await _service.addExpense(expense);
-      state = state.copyWith(records: [expense, ...state.records]);
+      final user = ref.read(currentUserProvider);
+      final expenseWithBranch = expense.copyWith(branchCode: user?.branchCode);
+      await _service.addExpense(expenseWithBranch);
+      state = state.copyWith(records: [expenseWithBranch, ...state.records]);
     } catch (e) {}
   }
 
@@ -65,5 +72,5 @@ final expenseServiceProvider = Provider<SupabaseExpenseService>((ref) {
 });
 
 final expenseProvider = StateNotifierProvider<ExpenseNotifier, ExpenseState>((ref) {
-  return ExpenseNotifier(ref.watch(expenseServiceProvider));
+  return ExpenseNotifier(ref.watch(expenseServiceProvider), ref);
 });

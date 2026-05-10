@@ -1,6 +1,6 @@
 import 'product.dart';
 
-enum PaymentMethod { cash, mobileMoney, card }
+enum PaymentMethod { cash, mobileMoney }
 
 enum SaleStatus { completed, pendingCorrection, rectified, cancelled }
 
@@ -34,11 +34,13 @@ class SaleItem {
   final Product product;
   final double quantity;
   final double priceAtSale;
+  final double originalPrice;
 
   SaleItem({
     required this.product,
     required this.quantity,
     required this.priceAtSale,
+    required this.originalPrice,
   });
 
   factory SaleItem.fromJson(Map<String, dynamic> json) {
@@ -46,20 +48,24 @@ class SaleItem {
       product: Product.fromJson(json['product']),
       quantity: (json['quantity'] as num).toDouble(),
       priceAtSale: (json['price_at_sale'] as num).toDouble(),
+      originalPrice: (json['original_price'] as num? ?? (json['price_at_sale'] as num)).toDouble(),
     );
   }
 
   double get total => quantity * priceAtSale;
+  double get discount => (originalPrice - priceAtSale) * quantity;
 
   Map<String, dynamic> toJson() => {
     'product': product.toJson(),
     'quantity': quantity,
     'price_at_sale': priceAtSale,
+    'original_price': originalPrice,
   };
 }
 
 class SaleRecord {
   final String id;
+  final String? branchCode;
   final List<SaleItem> items;
   final double totalAmount; // This is the Net Invoice Value (After Discount)
   final double totalDiscount; // Total revenue loss from promotions
@@ -75,6 +81,7 @@ class SaleRecord {
 
   SaleRecord({
     required this.id,
+    this.branchCode,
     required this.items,
     required this.totalAmount,
     this.totalDiscount = 0.0,
@@ -92,6 +99,7 @@ class SaleRecord {
   factory SaleRecord.fromJson(Map<String, dynamic> json) {
     return SaleRecord(
       id: json['id'],
+      branchCode: json['branch_code'],
       items: (json['items'] as List).map((e) => SaleItem.fromJson(e)).toList(),
       totalAmount: (json['total_amount'] as num).toDouble(),
       totalDiscount: (json['total_discount'] as num? ?? 0.0).toDouble(),
@@ -110,6 +118,7 @@ class SaleRecord {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'branch_code': branchCode,
       'items': items.map((e) => e.toJson()).toList(),
       'total_amount': totalAmount,
       'total_discount': totalDiscount,
@@ -127,7 +136,7 @@ class SaleRecord {
 
   // Financial Breakdown Calculations
   double get totalQty => items.fold(0, (sum, item) => sum + item.quantity);
-  int get skuCount => items.length;
+  int get productCount => items.length;
   
   // Base total before discounts
   double get baseTotal => totalAmount + totalDiscount;
@@ -144,6 +153,7 @@ class SaleRecord {
   double get balance => totalAmount - amountPaid;
 
   SaleRecord copyWith({
+    String? branchCode,
     List<SaleItem>? items,
     double? totalAmount,
     double? totalDiscount,
@@ -155,6 +165,7 @@ class SaleRecord {
   }) {
     return SaleRecord(
       id: id,
+      branchCode: branchCode ?? this.branchCode,
       items: items ?? this.items,
       totalAmount: totalAmount ?? this.totalAmount,
       totalDiscount: totalDiscount ?? this.totalDiscount,

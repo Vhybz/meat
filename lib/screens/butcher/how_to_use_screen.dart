@@ -176,7 +176,7 @@ class HowToUseScreen extends StatelessWidget {
   Widget _buildDivider() {
     return Padding(
       padding: const EdgeInsets.only(left: 60),
-      child: Divider(color: AppColors.borderGray.withOpacity(0.5), height: 40),
+      child: Divider(color: AppColors.borderGray.withValues(alpha: 0.5), height: 40),
     );
   }
 
@@ -184,9 +184,9 @@ class HowToUseScreen extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.l),
       decoration: BoxDecoration(
-        color: Colors.blue.withOpacity(0.05),
+        color: Colors.blue.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(AppRadius.m),
-        border: Border.all(color: Colors.blue.withOpacity(0.2)),
+        border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
       ),
       child: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants.dart';
@@ -13,14 +14,74 @@ import '../../services/product_service.dart';
 
 import '../../services/menu_service.dart';
 import '../../services/user_provider.dart';
+import '../../models/user_model.dart';
 
-class AdminDashboard extends ConsumerWidget {
+class AdminDashboard extends ConsumerStatefulWidget {
   const AdminDashboard({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AdminDashboard> createState() => _AdminDashboardState();
+}
+
+class _AdminDashboardState extends ConsumerState<AdminDashboard> {
+  late PageController _pageController;
+  int _currentPage = 0;
+  Timer? _timer;
+
+  final List<String> _bannerImages = [
+    'assets/images/meat_art.jpg',
+    'assets/images/beef_art.jpg',
+    'assets/images/pork_art.jpg',
+    'assets/images/beef_art2.jpg',
+    'assets/images/butcher_beef.jpg',
+    'assets/images/meat_on_scale.jpg',
+    'assets/images/beef.jpg',
+    'assets/images/pork.jpg',
+    'assets/images/chicken.jpg',
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: 0);
+    _startTimer();
+  }
+
+  void _startTimer() {
+    _timer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (_pageController.hasClients) {
+        _currentPage = (_currentPage + 1) % _bannerImages.length;
+        _pageController.animateToPage(
+          _currentPage,
+          duration: const Duration(milliseconds: 800),
+          curve: Curves.easeInOutCubic,
+        );
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
     if (user == null) return const Center(child: CircularProgressIndicator());
+
+    // Instant Permission Guard: Redirect if admin access is revoked
+    final roles = user.activeRoles;
+    final hasAccess = roles.contains(UserRole.admin) || roles.contains(UserRole.superAdmin) || user.enabledPermissions.contains('/admin');
+    
+    if (!hasAccess) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) Navigator.pushReplacementNamed(context, '/login');
+      });
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
     final isDesktop = ResponsiveLayout.isDesktop(context);
     final now = DateTime.now();
@@ -28,7 +89,7 @@ class AdminDashboard extends ConsumerWidget {
     const currentRoute = '/admin';
 
     return Scaffold(
-      backgroundColor: AppColors.surfaceWhite,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: const MainAppBar(title: 'Admin Command Center'),
       drawer: isDesktop
           ? null
@@ -59,9 +120,9 @@ class AdminDashboard extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildHeader(context, dateStr),
+                  _buildHeader(context, dateStr, user),
                   const SizedBox(height: AppSpacing.l),
-                  _buildBanner(),
+                  _buildBanner(context),
                   const SizedBox(height: AppSpacing.xl),
                   _buildKPIGrid(context, ref),
                   const SizedBox(height: AppSpacing.xl),
@@ -123,13 +184,16 @@ class AdminDashboard extends ConsumerWidget {
     WidgetRef ref, 
     {required String title, required IconData icon, required Color color, required List items, required Function(dynamic) onAction}
   ) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.l),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(AppRadius.l),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        border: Border.all(color: color.withValues(alpha: isDark ? 0.3 : 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -164,9 +228,10 @@ class AdminDashboard extends ConsumerWidget {
 
               return Card(
                 margin: const EdgeInsets.only(bottom: 8),
+                color: theme.cardTheme.color,
                 child: ListTile(
-                  title: Text(displayTitle, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text(displaySubtitle),
+                  title: Text(displayTitle, style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+                  subtitle: Text(displaySubtitle, style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -245,7 +310,7 @@ class AdminDashboard extends ConsumerWidget {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.1),
+                        color: Colors.orange.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text('Cashier Report: ${sale.correctionReason}', 
@@ -277,6 +342,7 @@ class AdminDashboard extends ConsumerWidget {
                                       product: item.product,
                                       quantity: newQty,
                                       priceAtSale: item.priceAtSale,
+                                      originalPrice: item.originalPrice,
                                     );
                                   });
                                 },
@@ -383,54 +449,111 @@ class AdminDashboard extends ConsumerWidget {
     );
   }
 
-  Widget _buildBanner() {
+  Widget _buildBanner(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       width: double.infinity,
-      height: 150,
+      height: 200, // Slightly taller for carousel
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppRadius.l),
-        image: const DecorationImage(
-          image: AssetImage('assets/logo/banner.jpg'),
-          fit: BoxFit.cover,
-        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.1),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
       ),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(AppRadius.l),
-          gradient: LinearGradient(
-            begin: Alignment.centerLeft,
-            end: Alignment.centerRight,
-            colors: [
-              Colors.black.withValues(alpha: 0.6),
-              Colors.transparent,
-            ],
-          ),
-        ),
-        padding: const EdgeInsets.all(AppSpacing.l),
-        child: const Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.l),
+        child: Stack(
           children: [
-            Text(
-              'Uncompromising Quality',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
+            // Image Carousel
+            PageView.builder(
+              controller: _pageController,
+              onPageChanged: (index) => setState(() => _currentPage = index),
+              itemCount: _bannerImages.length,
+              itemBuilder: (context, index) {
+                return Image.asset(
+                  _bannerImages[index],
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                );
+              },
+            ),
+            
+            // Gradient Overlay
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.8),
+                    Colors.black.withValues(alpha: 0.2),
+                    Colors.transparent,
+                  ],
+                ),
               ),
             ),
-            Text(
-              'Unforgettable Taste',
-              style: TextStyle(
-                color: Colors.white70,
-                fontSize: 14,
+            
+            // Text Content
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.xl),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.primaryMaroon,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'PREMIUM SELECTION',
+                      style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Uncompromising Quality',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      shadows: [Shadow(color: Colors.black45, blurRadius: 10, offset: Offset(0, 2))],
+                    ),
+                  ),
+                  const Text(
+                    'Unforgettable Taste from Mi Corazon',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            
+            // Carousel Indicators
+            Positioned(
+              bottom: 16,
+              right: 24,
+              child: Row(
+                children: List.generate(_bannerImages.length, (index) {
+                  return Container(
+                    width: _currentPage == index ? 24 : 8,
+                    height: 8,
+                    margin: const EdgeInsets.only(left: 4),
+                    decoration: BoxDecoration(
+                      color: _currentPage == index ? AppColors.primaryMaroon : Colors.white54,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  );
+                }),
               ),
             ),
           ],
@@ -439,21 +562,24 @@ class AdminDashboard extends ConsumerWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context, String dateStr) {
+  Widget _buildHeader(BuildContext context, String dateStr, UserAccount user) {
     final isMobile = ResponsiveLayout.isMobile(context);
+    final theme = Theme.of(context);
     
     if (isMobile) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Welcome, Admin',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textDark),
+          Text(
+            'Welcome, ${user.firstName}',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
           ),
+          if (user.branchCode != null)
+             Text('Branch Code: ${user.branchCode}', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 12)),
           const SizedBox(height: 4),
-          Text(dateStr, style: const TextStyle(color: AppColors.textLight, fontSize: 12)),
+          Text(dateStr, style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12)),
           const SizedBox(height: AppSpacing.m),
-          _buildActionButtons(isMobile),
+          _buildActionButtons(context, isMobile),
         ],
       );
     }
@@ -464,26 +590,29 @@ class AdminDashboard extends ConsumerWidget {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Welcome back, Administrator',
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: AppColors.textDark),
+            Text(
+              'Welcome back, ${user.firstName}',
+              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
             ),
+            if (user.branchCode != null)
+               Text('Branch Code: ${user.branchCode}', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 14)),
             const SizedBox(height: 4),
             Row(
               children: [
-                const Icon(Icons.calendar_today, size: 14, color: AppColors.textLight),
+                Icon(Icons.calendar_today, size: 14, color: theme.colorScheme.onSurfaceVariant),
                 const SizedBox(width: 8),
-                Text(dateStr, style: const TextStyle(color: AppColors.textLight, fontSize: 14)),
+                Text(dateStr, style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 14)),
               ],
             ),
           ],
         ),
-        _buildActionButtons(false),
+        _buildActionButtons(context, false),
       ],
     );
   }
 
-  Widget _buildActionButtons(bool isMobile) {
+  Widget _buildActionButtons(BuildContext context, bool isMobile) {
+    final theme = Theme.of(context);
     return Wrap(
       spacing: AppSpacing.s,
       runSpacing: AppSpacing.s,
@@ -493,9 +622,9 @@ class AdminDashboard extends ConsumerWidget {
           icon: const Icon(Icons.download, size: 18),
           label: const Text('Export PDF'),
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.white,
-            foregroundColor: AppColors.primaryMaroon,
-            side: const BorderSide(color: AppColors.primaryMaroon),
+            backgroundColor: theme.cardTheme.color,
+            foregroundColor: theme.colorScheme.primary,
+            side: BorderSide(color: theme.colorScheme.primary),
             elevation: 0,
             padding: EdgeInsets.symmetric(
               horizontal: isMobile ? 12 : 20, 
@@ -508,7 +637,7 @@ class AdminDashboard extends ConsumerWidget {
           icon: const Icon(Icons.add, size: 18),
           label: const Text('Add Staff'),
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primaryMaroon,
+            backgroundColor: theme.colorScheme.primary,
             foregroundColor: Colors.white,
             elevation: 2,
             padding: EdgeInsets.symmetric(
@@ -528,6 +657,8 @@ class AdminDashboard extends ConsumerWidget {
     final sales = ref.watch(saleHistoryProvider);
     final totalRevenue = sales.fold(0.0, (sum, sale) => sum + sale.totalAmount);
     final totalDiscounts = sales.fold(0.0, (sum, sale) => sum + sale.totalDiscount);
+    final totalWeightSold = sales.fold(0.0, (sum, sale) => sum + sale.totalQty);
+    
     final expensesState = ref.watch(expenseProvider);
     final totalExpenses = expensesState.records.fold(0.0, (sum, e) => sum + e.amount);
     final netProfit = totalRevenue - totalExpenses;
@@ -543,31 +674,38 @@ class AdminDashboard extends ConsumerWidget {
       mainAxisSpacing: AppSpacing.m,
       childAspectRatio: aspectRatio,
       children: [
-        _kpiWithTrend("Gross Sales", '₵${totalRevenue.toStringAsFixed(0)}', Icons.payments, Colors.blue, '+12.5%'),
-        _kpiWithTrend("Expenses", '₵${totalExpenses.toStringAsFixed(0)}', Icons.trending_down, Colors.red, '+5.2%'),
-        _kpiWithTrend('Net Profit', '₵${netProfit.toStringAsFixed(0)}', Icons.account_balance_wallet, Colors.green, '+8.1%'),
-        _kpiWithTrend('Promo Impact', '₵${totalDiscounts.toStringAsFixed(0)}', Icons.auto_awesome, Colors.orange, 'SAVED'),
-        _kpiWithTrend('Stock Sold', '1,248 kg', Icons.scale, AppColors.primaryMaroon, '-2.4%'),
+        _kpiWithTrend(context, "Gross Sales", '₵${totalRevenue.toStringAsFixed(0)}', Icons.payments, Colors.blue, '+12.5%'),
+        _kpiWithTrend(context, "Expenses", '₵${totalExpenses.toStringAsFixed(0)}', Icons.trending_down, Colors.red, '+5.2%'),
+        _kpiWithTrend(context, 'Net Profit', '₵${netProfit.toStringAsFixed(0)}', Icons.account_balance_wallet, Colors.green, '+8.1%'),
+        _kpiWithTrend(context, 'Promo Impact', '₵${totalDiscounts.toStringAsFixed(0)}', Icons.auto_awesome, Colors.orange, 'SAVED'),
+        _kpiWithTrend(context, 'Stock Sold', '${totalWeightSold.toStringAsFixed(1)} kg', Icons.scale, AppColors.primaryMaroon, 'LIVE'),
       ],
     );
   }
 
-  Widget _kpiWithTrend(String title, String value, IconData icon, Color color, String trend) {
-    final bool isPositive = trend.startsWith('+') || trend == 'SAVED';
+  Widget _kpiWithTrend(BuildContext context, String title, String value, IconData icon, Color color, String trend) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final bool isPositive = trend.startsWith('+') || trend == 'SAVED' || trend == 'LIVE';
+
     return Container(
       padding: const EdgeInsets.all(AppSpacing.m),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardTheme.color,
         borderRadius: BorderRadius.circular(AppRadius.m),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
+          if (!isDark) BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
         ],
+        border: isDark ? Border.all(color: theme.dividerColor) : null,
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(AppRadius.s)),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1), 
+              borderRadius: BorderRadius.circular(AppRadius.s)
+            ),
             child: Icon(icon, color: color, size: 22),
           ),
           const SizedBox(width: AppSpacing.s),
@@ -576,12 +714,12 @@ class AdminDashboard extends ConsumerWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(color: AppColors.textLight, fontSize: 10, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(title, style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 2),
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
-                  child: Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textDark)),
+                  child: Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
                 ),
                 const SizedBox(height: 2),
                 Container(
@@ -617,15 +755,15 @@ class AdminDashboard extends ConsumerWidget {
       return Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(flex: 2, child: _buildPerformanceChart()),
+          Expanded(flex: 2, child: _buildPerformanceChart(context, sales)),
           const SizedBox(width: AppSpacing.l),
           Expanded(
             flex: 1, 
             child: Column(
               children: [
-                _buildPromotionImpactCard(promoSales, totalImpact),
+                _buildPromotionImpactCard(context, promoSales, totalImpact),
                 const SizedBox(height: AppSpacing.l),
-                _buildCriticalAlerts(),
+                _buildCriticalAlerts(context, ref),
               ],
             )
           ),
@@ -634,25 +772,29 @@ class AdminDashboard extends ConsumerWidget {
     } else {
       return Column(
         children: [
-          _buildPerformanceChart(),
+          _buildPerformanceChart(context, sales),
           const SizedBox(height: AppSpacing.l),
-          _buildPromotionImpactCard(promoSales, totalImpact),
+          _buildPromotionImpactCard(context, promoSales, totalImpact),
           const SizedBox(height: AppSpacing.l),
-          _buildCriticalAlerts(),
+          _buildCriticalAlerts(context, ref),
         ],
       );
     }
   }
 
-  Widget _buildPromotionImpactCard(List<SaleRecord> promoSales, double totalImpact) {
+  Widget _buildPromotionImpactCard(BuildContext context, List<SaleRecord> promoSales, double totalImpact) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Container(
       padding: const EdgeInsets.all(AppSpacing.l),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardTheme.color,
         borderRadius: BorderRadius.circular(AppRadius.l),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
+          if (!isDark) BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
         ],
+        border: isDark ? Border.all(color: theme.dividerColor) : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -661,21 +803,21 @@ class AdminDashboard extends ConsumerWidget {
             children: [
               const Icon(Icons.auto_awesome, color: Colors.orange, size: 20),
               const SizedBox(width: 8),
-              const Text('Promotion Analytics', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              Text('Promotion Analytics', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: theme.colorScheme.onSurface)),
               const Spacer(),
-              Text('${promoSales.length} Active', style: const TextStyle(fontSize: 10, color: AppColors.textLight)),
+              Text('${promoSales.length} Active', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant)),
             ],
           ),
-          const Divider(height: 24),
-          const Text('Total Revenue Impact (Money Saved for Customers)', style: TextStyle(fontSize: 11, color: AppColors.textLight)),
+          Divider(height: 24, color: theme.dividerColor),
+          Text('Total Revenue Impact (Money Saved for Customers)', style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant)),
           const SizedBox(height: 4),
           Text('₵ ${totalImpact.toStringAsFixed(2)}', 
             style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.orange)),
           const SizedBox(height: 16),
-          const Text('Recent Promo Transactions:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          Text('Recent Promo Transactions:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: theme.colorScheme.onSurface)),
           const SizedBox(height: 8),
           if (promoSales.isEmpty)
-            const Text('No promotions applied yet.', style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: AppColors.textLight))
+            Text('No promotions applied yet.', style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: theme.colorScheme.onSurfaceVariant))
           else
             ...promoSales.take(3).map((s) => Padding(
               padding: const EdgeInsets.symmetric(vertical: 4),
@@ -683,8 +825,8 @@ class AdminDashboard extends ConsumerWidget {
                 children: [
                   const Icon(Icons.circle, size: 6, color: Colors.orange),
                   const SizedBox(width: 8),
-                  Expanded(child: Text(s.appliedPromo ?? 'Discount', style: const TextStyle(fontSize: 11))),
-                  Text('-₵${s.totalDiscount.toStringAsFixed(0)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                  Expanded(child: Text(s.appliedPromo ?? 'Discount', style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurface))),
+                  Text('-₵${s.totalDiscount.toStringAsFixed(0)}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
                 ],
               ),
             )),
@@ -693,16 +835,47 @@ class AdminDashboard extends ConsumerWidget {
     );
   }
 
-  Widget _buildPerformanceChart() {
+  Widget _buildPerformanceChart(BuildContext context, List<SaleRecord> sales) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    // Generate data for the last 7 days
+    final now = DateTime.now();
+    final last7Days = List.generate(7, (index) {
+      return now.subtract(Duration(days: 6 - index));
+    });
+
+    final dailyRevenue = last7Days.map((date) {
+      final total = sales
+          .where((s) => s.timestamp.year == date.year && 
+                        s.timestamp.month == date.month && 
+                        s.timestamp.day == date.day)
+          .fold(0.0, (sum, s) => sum + s.totalAmount);
+      return total;
+    }).toList();
+
+    final maxRevenue = dailyRevenue.reduce((a, b) => a > b ? a : b);
+    final double chartMax = maxRevenue == 0 ? 1000 : maxRevenue * 1.2;
+
+    // Top Selling Category Logic
+    final categoryStats = <String, double>{};
+    for (var sale in sales) {
+      for (var item in sale.items) {
+        categoryStats[item.product.category] = (categoryStats[item.product.category] ?? 0) + item.total;
+      }
+    }
+    final sortedCategories = categoryStats.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+    final topCategory = sortedCategories.isEmpty ? 'N/A' : sortedCategories.first.key;
+
     return Container(
       height: 400,
       padding: const EdgeInsets.all(AppSpacing.l),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardTheme.color,
         borderRadius: BorderRadius.circular(AppRadius.l),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
+          if (!isDark) BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
         ],
+        border: isDark ? Border.all(color: theme.dividerColor) : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -710,49 +883,75 @@ class AdminDashboard extends ConsumerWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Revenue Performance Trend', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-              DropdownButton<String>(
-                value: 'Last 7 Days',
-                underline: const SizedBox(),
-                items: ['Today', 'Last 7 Days', 'Monthly'].map((String value) {
-                  return DropdownMenuItem<String>(value: value, child: Text(value, style: const TextStyle(fontSize: 12)));
-                }).toList(),
-                onChanged: (_) {},
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('System Analytics', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: theme.colorScheme.onSurface)),
+                  Text('Real-time revenue & category performance', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant)),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text('TOP CATEGORY', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurfaceVariant)),
+                  Text(topCategory.toUpperCase(), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.l),
+          const SizedBox(height: AppSpacing.xl),
           Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(AppRadius.m),
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [AppColors.primaryMaroon.withValues(alpha: 0.05), Colors.white],
-                ),
-              ),
-              child: Stack(
-                children: [
-                  Center(
-                    child: Opacity(
-                      opacity: 0.05,
-                      child: Image.asset('assets/images/meat_on_scale.jpg', fit: BoxFit.cover, width: double.infinity),
-                    ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: List.generate(dailyRevenue.length, (index) {
+                final amount = dailyRevenue[index];
+                final date = last7Days[index];
+                final double barHeight = amount == 0 ? 5 : (amount / chartMax) * 230;
+                final isToday = index == 6;
+
+                return Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Text(
+                        amount > 0 ? '₵${amount.toStringAsFixed(0)}' : '',
+                        style: TextStyle(
+                          fontSize: 10, 
+                          fontWeight: FontWeight.bold, 
+                          color: isToday ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Tooltip(
+                        message: '₵${amount.toStringAsFixed(2)} on ${DateFormat('MMM dd').format(date)}',
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 8),
+                          height: barHeight,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: isToday 
+                                ? [theme.colorScheme.primary, theme.colorScheme.primary.withValues(alpha: 0.7)]
+                                : [Colors.blue.shade400, Colors.blue.shade200],
+                            ),
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        DateFormat('E').format(date).substring(0, 1),
+                        style: TextStyle(
+                          fontSize: 12, 
+                          fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                          color: isToday ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant
+                        ),
+                      ),
+                    ],
                   ),
-                  const Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.insights, size: 64, color: AppColors.primaryMaroon),
-                        SizedBox(height: 16),
-                        Text('Detailed Analytics Visualizer', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryMaroon)),
-                        Text('Syncing real-time market data...', style: TextStyle(fontSize: 12, color: AppColors.textLight)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
+                );
+              }),
             ),
           ),
         ],
@@ -760,44 +959,95 @@ class AdminDashboard extends ConsumerWidget {
     );
   }
 
-  Widget _buildCriticalAlerts() {
+  Widget _buildCriticalAlerts(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final productsAsync = ref.watch(productsFutureProvider);
+    final sales = ref.watch(saleHistoryProvider);
+    final notifications = ref.watch(notificationProvider);
+    
+    // Calculate real alerts
+    final lowStockItems = productsAsync.value?.where((p) => !p.isDeleted && p.stockQuantity < 10).toList() ?? [];
+    final pendingCorrections = sales.where((s) => s.status == SaleStatus.pendingCorrection).toList();
+    final unreadButcherReports = notifications.where((n) => n.title.contains('BUTCHER') && !n.isRead).toList();
+
     return Container(
       height: 400,
       padding: const EdgeInsets.all(AppSpacing.l),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardTheme.color,
         borderRadius: BorderRadius.circular(AppRadius.l),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
+          if (!isDark) BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
         ],
+        border: isDark ? Border.all(color: theme.dividerColor) : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.notification_important, color: Colors.red, size: 20),
-              SizedBox(width: 8),
-              const Text('System Alerts', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              const Icon(Icons.notification_important, color: Colors.red, size: 20),
+              const SizedBox(width: 8),
+              Text('System Alerts', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: theme.colorScheme.onSurface)),
+              const Spacer(),
+              if (lowStockItems.length + pendingCorrections.length + unreadButcherReports.length > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(10)),
+                  child: Text(
+                    '${lowStockItems.length + pendingCorrections.length + unreadButcherReports.length}',
+                    style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: AppSpacing.l),
           Expanded(
-            child: ListView(
-              children: [
-                _alertTile('Inventory Alert', 'Pork Belly is below safety stock level (2.4kg remaining).', Colors.orange, Icons.inventory_2),
-                _alertTile('System Notice', 'New Staff account created for "John Doe" (Butcher).', Colors.blue, Icons.person_add),
-                _alertTile('Payment Issue', 'A partial payment for INV-2034 is 3 days overdue.', Colors.red, Icons.warning_amber),
-                _alertTile('Batch Approval', 'Animal Intake Batch #492 requires admin sign-off.', Colors.purple, Icons.assignment_turned_in),
-              ],
-            ),
+            child: (lowStockItems.isEmpty && pendingCorrections.isEmpty && unreadButcherReports.isEmpty)
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.check_circle_outline, size: 48, color: Colors.green.withValues(alpha: 0.3)),
+                        const SizedBox(height: 8),
+                        Text('System healthy. No urgent alerts.', style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12)),
+                      ],
+                    ),
+                  )
+                : ListView(
+                    children: [
+                      ...pendingCorrections.map((s) => _alertTile(
+                        context,
+                        'Sale Correction Req', 
+                        'Invoice ${s.id} reported by ${s.cashierName}', 
+                        Colors.orange, 
+                        Icons.receipt_long
+                      )),
+                      ...unreadButcherReports.map((n) => _alertTile(
+                        context,
+                        'Butcher Unit Report', 
+                        n.message, 
+                        Colors.red, 
+                        Icons.warning_amber
+                      )),
+                      ...lowStockItems.map((p) => _alertTile(
+                        context,
+                        'Low Stock Alert', 
+                        '${p.name} is critically low (${p.stockQuantity}${p.unit} left).', 
+                        Colors.red.shade700, 
+                        Icons.inventory_2
+                      )),
+                    ],
+                  ),
           ),
         ],
       ),
     );
   }
 
-  Widget _alertTile(String title, String subtitle, Color color, IconData icon) {
+  Widget _alertTile(BuildContext context, String title, String subtitle, Color color, IconData icon) {
+    final theme = Theme.of(context);
     return Container(
       margin: const EdgeInsets.only(bottom: AppSpacing.m),
       padding: const EdgeInsets.all(AppSpacing.m),
@@ -817,7 +1067,7 @@ class AdminDashboard extends ConsumerWidget {
               children: [
                 Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: color)),
                 const SizedBox(height: 4),
-                Text(subtitle, style: const TextStyle(fontSize: 11, color: AppColors.textLight)),
+                Text(subtitle, style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant)),
               ],
             ),
           ),
@@ -828,21 +1078,24 @@ class AdminDashboard extends ConsumerWidget {
 
   Widget _buildInventoryMonitor(BuildContext context, WidgetRef ref) {
     final isMobile = ResponsiveLayout.isMobile(context);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final productsAsync = ref.watch(productsFutureProvider);
 
     return Container(
       padding: const EdgeInsets.all(AppSpacing.l),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: theme.cardTheme.color,
         borderRadius: BorderRadius.circular(AppRadius.l),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
+          if (!isDark) BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
         ],
+        border: isDark ? Border.all(color: theme.dividerColor) : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Critical Stock Monitoring', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          Text('Critical Stock Monitoring', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: theme.colorScheme.onSurface)),
           const SizedBox(height: AppSpacing.l),
           productsAsync.when(
             data: (products) {
@@ -853,33 +1106,33 @@ class AdminDashboard extends ConsumerWidget {
               
               final top3 = criticalStock.take(3).toList();
               
-              if (top3.isEmpty) return const Text('No stock data available.', style: TextStyle(color: AppColors.textLight));
+              if (top3.isEmpty) return Text('No stock data available.', style: TextStyle(color: theme.colorScheme.onSurfaceVariant));
 
               return isMobile
                   ? Column(
                       children: top3.map((p) => Padding(
                         padding: const EdgeInsets.only(bottom: AppSpacing.m),
-                        child: _stockIndicator(p.name, (p.stockQuantity / 100).clamp(0.0, 1.0), p.stockQuantity < 10 ? Colors.red : Colors.orange),
+                        child: _stockIndicator(context, p.name, (p.stockQuantity / 100).clamp(0.0, 1.0), p.stockQuantity < 10 ? Colors.red : Colors.orange),
                       )).toList(),
                     )
                   : Row(
                       children: top3.map((p) => Expanded(
                         child: Padding(
                           padding: const EdgeInsets.only(right: AppSpacing.l),
-                          child: _stockIndicator(p.name, (p.stockQuantity / 100).clamp(0.0, 1.0), p.stockQuantity < 10 ? Colors.red : Colors.orange),
+                          child: _stockIndicator(context, p.name, (p.stockQuantity / 100).clamp(0.0, 1.0), p.stockQuantity < 10 ? Colors.red : Colors.orange),
                         ),
                       )).toList(),
                     );
             },
             loading: () => const Center(child: CircularProgressIndicator()),
-            error: (_, __) => const Text('Error loading stock levels.'),
+            error: (_, error) => const Text('Error loading stock levels.'),
           ),
         ],
       ),
     );
   }
 
-  Widget _stockIndicator(String label, double value, Color color) {
+  Widget _stockIndicator(BuildContext context, String label, double value, Color color) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

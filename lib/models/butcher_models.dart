@@ -43,6 +43,7 @@ extension AnimalTypeX on AnimalType {
 
 class SlaughterLog {
   final String id;
+  final String? branchCode;
   final String animalId;
   final AnimalType type;
   final double weight;
@@ -51,6 +52,7 @@ class SlaughterLog {
 
   SlaughterLog({
     required this.id,
+    this.branchCode,
     required this.animalId,
     required this.type,
     required this.weight,
@@ -60,9 +62,30 @@ class SlaughterLog {
 
   double get estimatedYield => weight * type.dressingPercentage;
 
+  SlaughterLog copyWith({
+    String? id,
+    String? branchCode,
+    String? animalId,
+    AnimalType? type,
+    double? weight,
+    DateTime? slaughterTime,
+    SlaughterStatus? status,
+  }) {
+    return SlaughterLog(
+      id: id ?? this.id,
+      branchCode: branchCode ?? this.branchCode,
+      animalId: animalId ?? this.animalId,
+      type: type ?? this.type,
+      weight: weight ?? this.weight,
+      slaughterTime: slaughterTime ?? this.slaughterTime,
+      status: status ?? this.status,
+    );
+  }
+
   factory SlaughterLog.fromJson(Map<String, dynamic> json) {
     return SlaughterLog(
       id: json['id'] as String,
+      branchCode: json['branch_code'] as String?,
       animalId: json['animal_id'] as String,
       type: AnimalType.values.firstWhere((e) => e.name == json['type']),
       weight: (json['weight'] as num).toDouble(),
@@ -73,6 +96,7 @@ class SlaughterLog {
 
   Map<String, dynamic> toJson() => {
     'id': id,
+    'branch_code': branchCode,
     'animal_id': animalId,
     'type': type.name,
     'weight': weight,
@@ -93,6 +117,7 @@ class BatchSource {
 
 class MeatBatch {
   final String id;
+  final String? branchCode;
   final String meatType;
   final double weight;
   final DateTime createdAt;
@@ -103,6 +128,7 @@ class MeatBatch {
 
   MeatBatch({
     required this.id,
+    this.branchCode,
     required this.meatType,
     required this.weight,
     required this.createdAt,
@@ -112,9 +138,34 @@ class MeatBatch {
     this.receivedBy,
   });
 
+  MeatBatch copyWith({
+    String? id,
+    String? branchCode,
+    String? meatType,
+    double? weight,
+    DateTime? createdAt,
+    String? status,
+    BatchSource? source,
+    String? inspectedBy,
+    String? receivedBy,
+  }) {
+    return MeatBatch(
+      id: id ?? this.id,
+      branchCode: branchCode ?? this.branchCode,
+      meatType: meatType ?? this.meatType,
+      weight: weight ?? this.weight,
+      createdAt: createdAt ?? this.createdAt,
+      status: status ?? this.status,
+      source: source ?? this.source,
+      inspectedBy: inspectedBy ?? this.inspectedBy,
+      receivedBy: receivedBy ?? this.receivedBy,
+    );
+  }
+
   factory MeatBatch.fromJson(Map<String, dynamic> json) {
     return MeatBatch(
       id: json['id'] as String,
+      branchCode: json['branch_code'] as String?,
       meatType: json['meat_type'] as String,
       weight: (json['weight'] as num).toDouble(),
       createdAt: DateTime.parse(json['created_at'] as String),
@@ -128,10 +179,25 @@ class MeatBatch {
       receivedBy: json['received_by'] as String?,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'branch_code': branchCode,
+    'meat_type': meatType,
+    'weight': weight,
+    'status': status,
+    'source_name': source.name,
+    'source_location': source.location,
+    'owner_name': source.owner,
+    'inspected_by': inspectedBy,
+    'received_by': receivedBy,
+    'created_at': createdAt.toIso8601String(),
+  };
 }
 
 class MeatCut {
   final String id;
+  final String? branchCode;
   final String name;
   final String batchId;
   final double weight;
@@ -139,19 +205,48 @@ class MeatCut {
 
   MeatCut({
     required this.id,
+    this.branchCode,
     required this.name,
     required this.batchId,
     required this.weight,
     required this.processedAt,
   });
 
+  MeatCut copyWith({
+    String? id,
+    String? branchCode,
+    String? name,
+    String? batchId,
+    double? weight,
+    DateTime? processedAt,
+  }) {
+    return MeatCut(
+      id: id ?? this.id,
+      branchCode: branchCode ?? this.branchCode,
+      name: name ?? this.name,
+      batchId: batchId ?? this.batchId,
+      weight: weight ?? this.weight,
+      processedAt: processedAt ?? this.processedAt,
+    );
+  }
+
   factory MeatCut.fromJson(Map<String, dynamic> json) {
     return MeatCut(
       id: json['id'] as String,
+      branchCode: json['branch_code'] as String?,
       name: json['name'] as String,
       batchId: json['batch_id'] as String,
       weight: (json['weight'] as num).toDouble(),
       processedAt: DateTime.parse(json['processed_at'] as String),
     );
   }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'branch_code': branchCode,
+    'name': name,
+    'batch_id': batchId,
+    'weight': weight,
+    'processed_at': processedAt.toIso8601String(),
+  };
 }

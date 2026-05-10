@@ -6,11 +6,12 @@ class CartNotifier extends StateNotifier<List<CartItem>> {
 
   void addItem(Product product, double quantity, bool isWholesale) {
     final price = product.getPrice(isWholesale);
-    state = [...state, CartItem(product: product, quantity: quantity, priceAtSale: price)];
+    final basePrice = isWholesale ? product.wholesalePrice : product.retailPrice;
+    state = [...state, CartItem(product: product, quantity: quantity, priceAtSale: price, originalPrice: basePrice)];
   }
 
-  void addItemWithCustomPrice(Product product, double quantity, double customPrice) {
-    state = [...state, CartItem(product: product, quantity: quantity, priceAtSale: customPrice)];
+  void addItemWithCustomPrice(Product product, double quantity, double customPrice, double originalPrice) {
+    state = [...state, CartItem(product: product, quantity: quantity, priceAtSale: customPrice, originalPrice: originalPrice)];
   }
 
   void removeItem(int index) {

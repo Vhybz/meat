@@ -19,7 +19,7 @@ class ButcherDashboard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final logsAsync = ref.watch(slaughterLogsProvider);
-    final batchesAsync = ref.watch(activeBatchesProvider);
+    final batchesAsync = ref.watch(meatBatchesProvider);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -47,7 +47,7 @@ class ButcherDashboard extends ConsumerWidget {
                       borderRadius: BorderRadius.circular(AppRadius.m),
                       gradient: LinearGradient(
                         begin: Alignment.bottomRight,
-                        colors: [Colors.black.withOpacity(0.8), Colors.transparent],
+                        colors: [Colors.black.withValues(alpha: 0.8), Colors.transparent],
                       ),
                     ),
                     padding: const EdgeInsets.all(AppSpacing.xl),
@@ -182,6 +182,22 @@ class ButcherDashboard extends ConsumerWidget {
   Widget _buildInteractiveWorkflow(WidgetRef ref) {
     final transfers = ref.watch(transferProvider);
     final pendingTransferCount = transfers.where((t) => t.status == TransferStatus.pending).length;
+    
+    final logsAsync = ref.watch(slaughterLogsProvider);
+    final batchesAsync = ref.watch(meatBatchesProvider);
+
+    int intakeCount = 0;
+    int slaughterCount = 0;
+    int processingCount = 0;
+
+    logsAsync.whenData((logs) {
+      intakeCount = logs.where((l) => l.status == SlaughterStatus.pending).length;
+      slaughterCount = logs.where((l) => l.status == SlaughterStatus.processing).length;
+    });
+
+    batchesAsync.whenData((batches) {
+      processingCount = batches.length;
+    });
 
     return Card(
       child: Padding(
@@ -201,11 +217,11 @@ class ButcherDashboard extends ConsumerWidget {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _buildStep(ref, 'Intake', '12', Icons.login, ButcherScreen.animalIntake, true),
+                  _buildStep(ref, 'Intake', intakeCount.toString(), Icons.login, ButcherScreen.animalIntake, true),
                   _buildArrow(),
-                  _buildStep(ref, 'Slaughter', '8', Icons.precision_manufacturing, ButcherScreen.slaughterLog, false),
+                  _buildStep(ref, 'Slaughter', slaughterCount.toString(), Icons.precision_manufacturing, ButcherScreen.slaughterLog, false),
                   _buildArrow(),
-                  _buildStep(ref, 'Processing', '8', Icons.restaurant, ButcherScreen.meatProcessing, false),
+                  _buildStep(ref, 'Processing', processingCount.toString(), Icons.restaurant, ButcherScreen.meatProcessing, false),
                   _buildArrow(),
                   _buildStep(ref, 'Transfer', '$pendingTransferCount', Icons.local_shipping, ButcherScreen.stockTransfer, false),
                 ],

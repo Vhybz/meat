@@ -82,9 +82,9 @@ class _SlaughterLogScreenState extends ConsumerState<SlaughterLogScreen> {
                           style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.accentGreen))),
                         DataCell(StatusChip(
                           label: log.status.name.toUpperCase(),
-                          color: log.status == SlaughterStatus.completed ? Colors.green : Colors.blue,
+                          color: log.status == SlaughterStatus.completed ? Colors.green : (log.status == SlaughterStatus.processing ? Colors.blue : Colors.orange),
                         )),
-                        DataCell(IconButton(icon: const Icon(Icons.more_vert, size: 18), onPressed: () {})),
+                        DataCell(_buildActions(log)),
                       ])).toList(),
                     ),
                   );
@@ -99,6 +99,41 @@ class _SlaughterLogScreenState extends ConsumerState<SlaughterLogScreen> {
     );
   }
 
+  Widget _buildActions(SlaughterLog log) {
+    if (log.status == SlaughterStatus.completed) {
+      return const Icon(Icons.check_circle, color: Colors.green, size: 18);
+    }
+
+    return PopupMenuButton<SlaughterStatus>(
+      onSelected: (status) => ref.read(slaughterLogsProvider.notifier).updateStatus(log.id, status),
+      icon: const Icon(Icons.more_vert, size: 18),
+      itemBuilder: (context) => [
+        if (log.status == SlaughterStatus.pending)
+          const PopupMenuItem(
+            value: SlaughterStatus.processing,
+            child: Row(
+              children: [
+                Icon(Icons.play_arrow, size: 18, color: Colors.blue),
+                SizedBox(width: 8),
+                Text('Start Slaughter'),
+              ],
+            ),
+          ),
+        if (log.status == SlaughterStatus.processing)
+          const PopupMenuItem(
+            value: SlaughterStatus.completed,
+            child: Row(
+              children: [
+                Icon(Icons.done_all, size: 18, color: Colors.green),
+                SizedBox(width: 8),
+                Text('Mark Completed'),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _buildSmartControls() {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.m),
@@ -106,7 +141,7 @@ class _SlaughterLogScreenState extends ConsumerState<SlaughterLogScreen> {
         color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(AppRadius.m),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10)
         ],
       ),
       child: Row(

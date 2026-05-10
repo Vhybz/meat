@@ -13,7 +13,7 @@ class MeatProcessingScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final recentCutsAsync = ref.watch(recentCutsProvider);
-    final activeBatchesAsync = ref.watch(activeBatchesProvider);
+    final activeBatchesAsync = ref.watch(meatBatchesProvider);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -32,7 +32,7 @@ class MeatProcessingScreen extends ConsumerWidget {
             _buildSectionHeader('Active Batches in Processing', Icons.inventory_2),
             const SizedBox(height: AppSpacing.m),
             activeBatchesAsync.when(
-              data: (batches) => _buildActiveBatchesList(batches),
+              data: (batches) => _buildActiveBatchesList(ref, batches),
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (err, _) => Text('Error: $err'),
             ),
@@ -60,7 +60,7 @@ class MeatProcessingScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildActiveBatchesList(List<MeatBatch> batches) {
+  Widget _buildActiveBatchesList(WidgetRef ref, List<MeatBatch> batches) {
     if (batches.isEmpty) return const Text('No active batches.');
 
     return SizedBox(
@@ -92,13 +92,44 @@ class MeatProcessingScreen extends ConsumerWidget {
                     const Spacer(),
                     const LinearProgressIndicator(value: 0.6, backgroundColor: AppColors.surfaceWhite, color: AppColors.primaryMaroon),
                     const SizedBox(height: 8),
-                    const Text('Estimated 60% remaining', style: TextStyle(fontSize: 10, color: AppColors.textLight)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Processing...', style: TextStyle(fontSize: 10, color: AppColors.textLight)),
+                        TextButton(
+                          onPressed: () => _confirmCloseBatch(context, ref, batch),
+                          style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(50, 20)),
+                          child: const Text('Close Batch', style: TextStyle(fontSize: 10, color: Colors.red)),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
             ),
           );
         },
+      ),
+    );
+  }
+
+  void _confirmCloseBatch(BuildContext context, WidgetRef ref, MeatBatch batch) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Complete Processing?'),
+        content: Text('Are you sure you want to close Batch ${batch.id}? This will move it to the archive.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              ref.read(meatBatchesProvider.notifier).closeBatch(batch.id);
+              Navigator.pop(context);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            child: const Text('Close Batch'),
+          ),
+        ],
       ),
     );
   }
@@ -153,7 +184,11 @@ class MeatProcessingScreen extends ConsumerWidget {
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController();
     final weightController = TextEditingController();
+    String? selectedBatchId;
     
+    final batchesAsync = ref.read(meatBatchesProvider);
+    final activeBatches = batchesAsync.value ?? [];
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -189,11 +224,11 @@ class MeatProcessingScreen extends ConsumerWidget {
               const SizedBox(height: 16),
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(labelText: 'Select Batch', border: OutlineInputBorder()),
-                items: const [
-                  DropdownMenuItem(value: 'BF-20240501-0930-102', child: Text('BF-20240501-0930-102 (Beef)')),
-                  DropdownMenuItem(value: 'PK-20240501-1420-105', child: Text('PK-20240501-1420-105 (Pork)')),
-                ],
-                onChanged: (v) {},
+                items: activeBatches.map((b) => DropdownMenuItem(
+                  value: b.id, 
+                  child: Text('${b.id} (${b.meatType})')
+                )).toList(),
+                onChanged: (v) => selectedBatchId = v,
                 validator: (v) => v == null ? 'Required' : null,
               ),
             ],
@@ -202,10 +237,26 @@ class MeatProcessingScreen extends ConsumerWidget {
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               if (formKey.currentState!.validate()) {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Meat cut recorded.')));
+                final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+                final String suffix = timestamp.substring(timestamp.length - 12);
+                final String validUuid = '00000000-0000-0000-0000-$suffix';
+
+                final cut = MeatCut(
+                  id: validUuid,
+                  name: nameController.text,
+                  batchId: selectedBatchId!,
+                  weight: double.tryParse(weightController.text) ?? 0,
+                  processedAt: DateTime.now(),
+                );
+
+                await ref.read(recentCutsProvider.notifier).addCut(cut);
+                
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Meat cut recorded.')));
+                }
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMaroon, foregroundColor: Colors.white),

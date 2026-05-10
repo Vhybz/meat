@@ -13,14 +13,18 @@ class TransferNotifier extends StateNotifier<List<StockTransfer>> {
     try {
       final transfers = await _service.getTransfers();
       state = transfers;
-    } catch (e) {}
+    } catch (e) {
+      // Log error
+    }
   }
 
   Future<void> addTransfer(StockTransfer transfer) async {
     try {
       await _service.addTransfer(transfer);
       state = [transfer, ...state];
-    } catch (e) {}
+    } catch (e) {
+      // Log error
+    }
   }
 
   Future<void> markAsReceived(String id) async {
@@ -33,7 +37,9 @@ class TransferNotifier extends StateNotifier<List<StockTransfer>> {
           else
             t
       ];
-    } catch (e) {}
+    } catch (e) {
+      // Log error
+    }
   }
 }
 

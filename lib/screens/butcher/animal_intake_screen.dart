@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../core/constants.dart';
 import '../../models/butcher_models.dart';
 import '../../services/butcher_service.dart';
+import '../../widgets/responsive_layout.dart';
 
 class AnimalIntakeScreen extends ConsumerStatefulWidget {
   const AnimalIntakeScreen({super.key});
@@ -30,15 +31,15 @@ class _AnimalIntakeScreenState extends ConsumerState<AnimalIntakeScreen> {
   }
 
   void _generateBatchID() {
-    final typeCode = _selectedType?.shortCode ?? 'ANM';
-    final date = DateFormat('yyyyMMdd').format(DateTime.now());
-    final time = DateFormat('HHmm').format(DateTime.now());
-    final random = (100 + (DateTime.now().millisecond % 900)).toString();
-    _batchIdController.text = '$typeCode-$date-$time-$random';
+    final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+    final String suffix = timestamp.substring(timestamp.length - 12);
+    _batchIdController.text = '00000000-0000-0000-0000-$suffix';
   }
 
   @override
   Widget build(BuildContext context) {
+    final bool isDesktop = ResponsiveLayout.isDesktop(context);
+    
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.l),
       child: Column(
@@ -50,16 +51,17 @@ class _AnimalIntakeScreenState extends ConsumerState<AnimalIntakeScreen> {
           
           Form(
             key: _formKey,
-            child: Row(
+            child: Flex(
+              direction: isDesktop ? Axis.horizontal : Axis.vertical,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(
-                  flex: 2,
+                  flex: isDesktop ? 2 : 0,
                   child: _buildIntakeForm(),
                 ),
-                const SizedBox(width: AppSpacing.xl),
+                if (isDesktop) const SizedBox(width: AppSpacing.xl) else const SizedBox(height: AppSpacing.l),
                 Expanded(
-                  flex: 1,
+                  flex: isDesktop ? 1 : 0,
                   child: _buildTraceabilitySummary(),
                 ),
               ],
@@ -80,7 +82,7 @@ class _AnimalIntakeScreenState extends ConsumerState<AnimalIntakeScreen> {
               children: [
                 Expanded(
                   child: DropdownButtonFormField<AnimalType>(
-                    value: _selectedType,
+                    initialValue: _selectedType,
                     decoration: const InputDecoration(labelText: 'Animal Type', border: OutlineInputBorder()),
                     items: AnimalType.values.map((t) => DropdownMenuItem(value: t, child: Text(t.displayName))).toList(),
                     onChanged: (v) {
@@ -191,7 +193,7 @@ class _AnimalIntakeScreenState extends ConsumerState<AnimalIntakeScreen> {
     return Column(
       children: [
         Card(
-          color: AppColors.primaryMaroon.withOpacity(0.05),
+          color: AppColors.primaryMaroon.withValues(alpha: 0.05),
           child: Padding(
             padding: const EdgeInsets.all(AppSpacing.l),
             child: Column(
@@ -215,50 +217,74 @@ class _AnimalIntakeScreenState extends ConsumerState<AnimalIntakeScreen> {
     );
   }
 
-  void _submitIntake() {
+  Future<void> _submitIntake() async {
     if (_formKey.currentState!.validate()) {
+      final batchId = _batchIdController.text;
+      final type = _selectedType!;
+      final weight = double.tryParse(_weightController.text) ?? 0;
+
+      final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+      final String suffix = timestamp.substring(timestamp.length - 12);
+      final String animalUuid = 'aaaaaaaa-aaaa-aaaa-aaaa-$suffix';
+
       final log = SlaughterLog(
-        id: _batchIdController.text,
-        animalId: 'ANM-${DateTime.now().millisecond}',
-        type: _selectedType!,
-        weight: double.tryParse(_weightController.text) ?? 0,
+        id: batchId,
+        animalId: animalUuid,
+        type: type,
+        weight: weight,
         status: SlaughterStatus.pending,
       );
 
-      ref.read(slaughterLogsProvider.notifier).addLog(log);
-      
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
-          title: const Row(
-            children: [
-              Icon(Icons.check_circle, color: Colors.green),
-              SizedBox(width: 12),
-              Text('Intake Successful'),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Batch ID ${_batchIdController.text} has been created.'),
-              const SizedBox(height: 8),
-              const Text('Traceability records have been synchronized with the master database.', style: TextStyle(fontSize: 11, color: AppColors.textLight)),
-            ],
-          ),
-          actions: [
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _resetForm();
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMaroon, foregroundColor: Colors.white),
-              child: const Text('Done'),
-            ),
-          ],
+      final batch = MeatBatch(
+        id: batchId,
+        meatType: type.displayName,
+        weight: weight,
+        createdAt: DateTime.now(),
+        status: 'Processing',
+        source: BatchSource(
+          name: _sourceNameController.text,
+          location: _sourceLocationController.text,
+          owner: _ownerController.text,
         ),
       );
+
+      await ref.read(slaughterLogsProvider.notifier).addLog(log);
+      await ref.read(meatBatchesProvider.notifier).addBatch(batch);
+      
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
+            title: const Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.green),
+                SizedBox(width: 12),
+                Text('Intake Successful'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Batch ID $batchId has been created.'),
+                const SizedBox(height: 8),
+                const Text('Traceability records have been synchronized with the master database.', style: TextStyle(fontSize: 11, color: AppColors.textLight)),
+              ],
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  _resetForm();
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMaroon, foregroundColor: Colors.white),
+                child: const Text('Done'),
+              ),
+            ],
+          ),
+        );
+      }
     }
   }
 

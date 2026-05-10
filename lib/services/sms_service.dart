@@ -58,10 +58,10 @@ class SmsService {
   static Future<bool> sendReceiptSms(SaleRecord sale, {double? discountAmount}) async {
     if (sale.customerPhone == null || sale.customerPhone!.isEmpty) return false;
     
-    String message = 'Hello ${sale.customerName ?? 'Customer'}, your total for order ${sale.id} is ₵${sale.totalAmount.toStringAsFixed(2)}.';
+    String message = 'Hello ${sale.customerName ?? 'Customer'}, your total for order ${sale.id} is GHC${sale.totalAmount.toStringAsFixed(2)}.';
     
     if (discountAmount != null && discountAmount > 0) {
-      message += ' You saved ₵${discountAmount.toStringAsFixed(2)}! Thank you for being a valued customer.';
+      message += ' You saved GHC${discountAmount.toStringAsFixed(2)}! Thank you for being a valued customer.';
     } else {
       message += ' Thank you for shopping with us!';
     }
@@ -97,8 +97,21 @@ class SmsService {
         ? 'Your account has been approved. You can now log in.' 
         : 'Your application is pending administrator approval. You will be notified once approved.';
 
-    final message = 'Hello ${user.firstName}, thank you for registering with Mi Corazon Freshmeat Butchery. $statusMessage';
+    String message = 'Hello ${user.firstName}, thank you for registering with Mi Corazon Freshmeat Butchery. $statusMessage';
     
+    if (user.role == UserRole.admin && user.branchCode != null) {
+      message += ' Your Branch Code is: ${user.branchCode}. Please share this with your staff.';
+    }
+    
+    await _sendSms(user.phone!, message);
+  }
+
+  static Future<void> sendStaffOnboardingSms(UserAccount user) async {
+    if (user.phone == null || user.phone!.isEmpty) return;
+
+    final String roleName = user.role.name.toUpperCase();
+    final String message = 'Welcome to the team, ${user.firstName}! Your account has been linked to your staff profile as a $roleName at Mi Corazon. You can now log in and start working. We are glad to have you!';
+
     await _sendSms(user.phone!, message);
   }
 

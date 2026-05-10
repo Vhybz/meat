@@ -3,6 +3,7 @@ import '../core/constants.dart';
 
 class ProductCard extends StatelessWidget {
   final String name;
+  final String category;
   final String price;
   final String? originalPrice;
   final String imageUrl;
@@ -12,6 +13,7 @@ class ProductCard extends StatelessWidget {
   const ProductCard({
     super.key,
     required this.name,
+    required this.category,
     required this.price,
     this.originalPrice,
     this.promoLabel,
@@ -19,17 +21,25 @@ class ProductCard extends StatelessWidget {
     required this.onTap,
   });
 
-  Widget _buildErrorIcon() {
+  Widget _buildErrorIcon(BuildContext context) {
     return Container(
-      color: AppColors.surfaceWhite,
-      child: const Icon(Icons.image, color: AppColors.borderGray),
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Icon(Icons.image, color: Theme.of(context).dividerColor),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Card(
       clipBehavior: Clip.antiAlias,
+      elevation: isDark ? 4 : 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.m),
+        side: isDark ? BorderSide(color: theme.dividerColor) : BorderSide.none,
+      ),
       child: InkWell(
         onTap: onTap,
         child: Column(
@@ -40,19 +50,19 @@ class ProductCard extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   imageUrl.isEmpty 
-                    ? _buildErrorIcon()
+                    ? _buildErrorIcon(context)
                     : imageUrl.startsWith('assets/') 
                       ? Image.asset(
                           imageUrl,
                           fit: BoxFit.cover,
                           width: double.infinity,
-                          errorBuilder: (context, error, stackTrace) => _buildErrorIcon(),
+                          errorBuilder: (context, error, stackTrace) => _buildErrorIcon(context),
                         )
                       : Image.network(
                           imageUrl,
                           fit: BoxFit.cover,
                           width: double.infinity,
-                          errorBuilder: (context, error, stackTrace) => _buildErrorIcon(),
+                          errorBuilder: (context, error, stackTrace) => _buildErrorIcon(context),
                         ),
                   if (promoLabel != null)
                     Positioned(
@@ -74,33 +84,49 @@ class ProductCard extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.all(8.0),
+              padding: const EdgeInsets.all(AppSpacing.s),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    name,
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    category.toUpperCase(),
+                    style: TextStyle(
+                      color: isDark ? theme.colorScheme.primary : AppColors.primaryMaroon,
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.5,
+                    ),
                   ),
                   const SizedBox(height: 2),
+                  Text(
+                    name,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold, 
+                      fontSize: 13,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
                   Row(
                     children: [
                       Text(
                         price,
                         style: TextStyle(
-                          color: promoLabel != null ? Colors.orange.shade800 : AppColors.textLight, 
+                          color: promoLabel != null 
+                            ? Colors.orange.shade800 
+                            : theme.colorScheme.onSurface.withValues(alpha: 0.8),
                           fontSize: 11,
-                          fontWeight: promoLabel != null ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                       if (originalPrice != null) ...[
                         const SizedBox(width: 4),
                         Text(
                           originalPrice!,
-                          style: const TextStyle(
-                            color: AppColors.textLight, 
+                          style: TextStyle(
+                            color: theme.colorScheme.onSurfaceVariant,
                             fontSize: 9,
                             decoration: TextDecoration.lineThrough,
                           ),

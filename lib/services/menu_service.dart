@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../widgets/app_sidebar.dart';
 import '../models/user_model.dart';
+import 'user_provider.dart';
 
 class MenuService {
   static List<SidebarItem> getMenuItemsForUser(UserAccount user, {bool inButcherShell = false}) {
@@ -34,10 +36,26 @@ class MenuService {
           ));
         }
       }
+    } else {
+      // Check if non-admin has been granted specific admin duties
+      for (final item in adminItems) {
+        if (user.enabledPermissions.contains(item.route)) {
+          items.add(SidebarItem(
+            icon: item.icon,
+            label: item.label,
+            route: item.route,
+            isCatchy: user.newlyAddedPermissions.contains(item.route),
+          ));
+        }
+      }
     }
 
     // 2. Cashier Module
-    if (roles.contains(UserRole.superAdmin) || roles.contains(UserRole.cashier) || (isAdmin && user.enabledPermissions.contains('/cashier'))) {
+    final hasCashierAccess = roles.contains(UserRole.superAdmin) || 
+                             roles.contains(UserRole.cashier) || 
+                             user.enabledPermissions.contains('/cashier');
+    
+    if (hasCashierAccess) {
       items.add(SidebarItem(
         icon: Icons.point_of_sale_rounded, 
         label: 'Cashier POS', 
@@ -47,17 +65,18 @@ class MenuService {
     }
 
     // 3. Butcher Module
-    if (roles.contains(UserRole.superAdmin) || 
-        roles.contains(UserRole.butcher) || 
-        (isAdmin && user.enabledPermissions.contains('/butcher'))) {
-      
-      if (roles.contains(UserRole.butcher) || inButcherShell) {
+    final hasButcherAccess = roles.contains(UserRole.superAdmin) || 
+                             roles.contains(UserRole.butcher) || 
+                             user.enabledPermissions.contains('/butcher');
+
+    if (hasButcherAccess) {
+      if (inButcherShell) {
         // Detailed Butcher Menu
         items.addAll([
           SidebarItem(icon: Icons.dashboard_rounded, label: 'Butcher Home', route: 'butcher:dashboard'),
           SidebarItem(icon: Icons.pets_rounded, label: 'Animal Intake', route: 'butcher:animalIntake'),
           SidebarItem(icon: Icons.history_edu_rounded, label: 'Slaughter Logs', route: 'butcher:slaughterLog'),
-          SidebarItem(icon: Icons.OutdoorGrill_rounded, label: 'Meat Processing', route: 'butcher:meatProcessing'),
+          SidebarItem(icon: Icons.outdoor_grill, label: 'Meat Processing', route: 'butcher:meatProcessing'),
           SidebarItem(icon: Icons.layers_rounded, label: 'Batch Management', route: 'butcher:batchManagement'),
           SidebarItem(icon: Icons.local_shipping_rounded, label: 'Stock Transfer', route: 'butcher:stockTransfer'),
           SidebarItem(icon: Icons.inventory_2_rounded, label: 'Internal Inventory', route: 'butcher:inventory'),
@@ -113,3 +132,10 @@ class MenuService {
     Navigator.pushReplacementNamed(context, route);
   }
 }
+
+/// A reactive provider for menu items based on the current user
+final menuItemsProvider = Provider<List<SidebarItem>>((ref) {
+  final user = ref.watch(currentUserProvider);
+  if (user == null) return [];
+  return MenuService.getMenuItemsForUser(user);
+});

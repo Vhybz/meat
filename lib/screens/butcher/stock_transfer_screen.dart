@@ -228,8 +228,12 @@ class _NewTransferDialogState extends ConsumerState<NewTransferDialog> {
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         ElevatedButton(
           onPressed: (_selectedBatch == null || _destination == null) ? null : () {
+            final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+            final String suffix = timestamp.substring(timestamp.length - 12);
+            final String validUuid = '00000000-0000-0000-0000-$suffix';
+
             final transfer = StockTransfer(
-              id: 'TRF-${DateTime.now().millisecond}',
+              id: validUuid,
               batchId: _selectedBatch!.id,
               meatType: _selectedBatch!.meatType,
               weight: _selectedBatch!.weight,

@@ -19,12 +19,13 @@ class ExpenseManagementScreen extends ConsumerWidget {
     final user = ref.watch(currentUserProvider);
     if (user == null) return const Center(child: CircularProgressIndicator());
 
+    final theme = Theme.of(context);
     final expenseState = ref.watch(expenseProvider);
     final isDesktop = ResponsiveLayout.isDesktop(context);
     const currentRoute = '/admin/expenses';
 
     return Scaffold(
-      backgroundColor: AppColors.surfaceWhite,
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: const MainAppBar(title: 'Business Expenses'),
       drawer: isDesktop ? null : Drawer(
         child: AppSidebar(
@@ -55,7 +56,7 @@ class ExpenseManagementScreen extends ConsumerWidget {
                 children: [
                   _buildHeader(context, ref),
                   const SizedBox(height: AppSpacing.xl),
-                  _buildMonthlySummary(expenseState.records),
+                  _buildMonthlySummary(context, expenseState.records),
                   const SizedBox(height: AppSpacing.xl),
                   _buildExpenseList(context, ref, expenseState.records),
                 ],
@@ -68,14 +69,15 @@ class ExpenseManagementScreen extends ConsumerWidget {
   }
 
   Widget _buildHeader(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        const Column(
+        Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Expense Tracking', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            Text('Manage operational costs and taxes', style: TextStyle(color: AppColors.textLight)),
+            Text('Expense Tracking', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+            Text('Manage operational costs and taxes', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
           ],
         ),
         Row(
@@ -91,7 +93,7 @@ class ExpenseManagementScreen extends ConsumerWidget {
               icon: const Icon(Icons.add),
               label: const Text('Add Expense'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryMaroon,
+                backgroundColor: theme.colorScheme.primary,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               ),
@@ -102,7 +104,8 @@ class ExpenseManagementScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildMonthlySummary(List<ExpenseRecord> expenses) {
+  Widget _buildMonthlySummary(BuildContext context, List<ExpenseRecord> expenses) {
+    final theme = Theme.of(context);
     final now = DateTime.now();
     final thisMonthExpenses = expenses
         .where((e) => e.date.month == now.month && e.date.year == now.year)
@@ -111,8 +114,11 @@ class ExpenseManagementScreen extends ConsumerWidget {
     return Container(
       padding: const EdgeInsets.all(AppSpacing.xl),
       decoration: BoxDecoration(
-        color: AppColors.primaryMaroon,
+        color: theme.colorScheme.primary,
         borderRadius: BorderRadius.circular(AppRadius.l),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
       ),
       child: Row(
         children: [
@@ -133,13 +139,14 @@ class ExpenseManagementScreen extends ConsumerWidget {
   }
 
   Widget _buildExpenseList(BuildContext context, WidgetRef ref, List<ExpenseRecord> expenses) {
+    final theme = Theme.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Recent Records', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+        Text('Recent Records', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
         const SizedBox(height: AppSpacing.m),
         if (expenses.isEmpty)
-          const Center(child: Padding(padding: EdgeInsets.all(40), child: Text('No expenses recorded yet.')))
+          Center(child: Padding(padding: const EdgeInsets.all(40), child: Text('No expenses recorded yet.', style: TextStyle(color: theme.colorScheme.onSurfaceVariant))))
         else
           ListView.builder(
             shrinkWrap: true,
@@ -150,12 +157,12 @@ class ExpenseManagementScreen extends ConsumerWidget {
               return Card(
                 margin: const EdgeInsets.only(bottom: 12),
                 child: ListTile(
-                  leading: const CircleAvatar(
-                    backgroundColor: AppColors.surfaceWhite,
-                    child: Icon(Icons.receipt_long, color: AppColors.primaryMaroon),
+                  leading: CircleAvatar(
+                    backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                    child: Icon(Icons.receipt_long, color: theme.colorScheme.primary),
                   ),
-                  title: Text(exp.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: Text('${exp.category} • ${DateFormat('MMM dd, yyyy').format(exp.date)}'),
+                  title: Text(exp.title, style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+                  subtitle: Text('${exp.category} • ${DateFormat('MMM dd, yyyy').format(exp.date)}', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -178,6 +185,7 @@ class ExpenseManagementScreen extends ConsumerWidget {
   void _showAddCategoryDialog(BuildContext context, WidgetRef ref) {
     final formKey = GlobalKey<FormState>();
     final controller = TextEditingController();
+    final theme = Theme.of(context);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -187,7 +195,7 @@ class ExpenseManagementScreen extends ConsumerWidget {
           key: formKey,
           child: TextFormField(
             controller: controller,
-            decoration: const InputDecoration(labelText: 'Category Name', hintText: 'e.g. Licensing', border: OutlineInputBorder()),
+            decoration: const InputDecoration(labelText: 'Category Name', hintText: 'e.g. Licensing'),
             inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s]'))],
             validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
           ),
@@ -201,7 +209,7 @@ class ExpenseManagementScreen extends ConsumerWidget {
                 Navigator.pop(context);
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMaroon, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: theme.colorScheme.primary, foregroundColor: Colors.white),
             child: const Text('Add'),
           ),
         ],
@@ -214,6 +222,7 @@ class ExpenseManagementScreen extends ConsumerWidget {
     final titleController = TextEditingController();
     final amountController = TextEditingController();
     final expenseState = ref.read(expenseProvider);
+    final theme = Theme.of(context);
     String selectedCategory = expenseState.categories.first;
 
     showDialog(
@@ -229,21 +238,21 @@ class ExpenseManagementScreen extends ConsumerWidget {
               children: [
                 TextFormField(
                   controller: titleController,
-                  decoration: const InputDecoration(labelText: 'Expense Title', hintText: 'e.g. ECG Bill - May', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(labelText: 'Expense Title', hintText: 'e.g. ECG Bill - May'),
                   inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s\-]'))],
                   validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: selectedCategory,
-                  decoration: const InputDecoration(labelText: 'Category', border: OutlineInputBorder()),
+                  initialValue: selectedCategory,
+                  decoration: const InputDecoration(labelText: 'Category'),
                   items: expenseState.categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                   onChanged: (v) => setState(() => selectedCategory = v!),
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: amountController,
-                  decoration: const InputDecoration(labelText: 'Amount', prefixText: 'GHS ', border: OutlineInputBorder()),
+                  decoration: const InputDecoration(labelText: 'Amount', prefixText: 'GHS '),
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
                   validator: (v) {
@@ -260,8 +269,12 @@ class ExpenseManagementScreen extends ConsumerWidget {
             ElevatedButton(
               onPressed: () {
                 if (formKey.currentState!.validate()) {
+                  final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+                  final String suffix = timestamp.substring(timestamp.length - 12);
+                  final String validUuid = '00000000-0000-0000-0000-$suffix';
+
                   final newExp = ExpenseRecord(
-                    id: DateTime.now().millisecondsSinceEpoch.toString(),
+                    id: validUuid,
                     title: titleController.text,
                     category: selectedCategory,
                     amount: double.tryParse(amountController.text) ?? 0,
@@ -271,7 +284,7 @@ class ExpenseManagementScreen extends ConsumerWidget {
                   Navigator.pop(context);
                 }
               },
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMaroon, foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(backgroundColor: theme.colorScheme.primary, foregroundColor: Colors.white),
               child: const Text('Save Expense'),
             ),
           ],
