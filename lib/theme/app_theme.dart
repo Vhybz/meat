@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../core/constants.dart';
 
 class AppTheme {
@@ -6,6 +7,10 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
+      fontFamily: GoogleFonts.montserrat().fontFamily,
+      textTheme: GoogleFonts.montserratTextTheme(
+        ThemeData.light().textTheme,
+      ),
       colorScheme: ColorScheme.fromSeed(
         seedColor: AppColors.primaryMaroon,
         primary: AppColors.primaryMaroon,
@@ -23,16 +28,16 @@ class AppTheme {
           side: const BorderSide(color: AppColors.borderGray),
         ),
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: Colors.white,
         elevation: 0,
         centerTitle: false,
-        titleTextStyle: TextStyle(
+        titleTextStyle: GoogleFonts.montserrat(
           color: AppColors.textDark,
           fontSize: 18,
           fontWeight: FontWeight.bold,
         ),
-        iconTheme: IconThemeData(color: AppColors.textDark),
+        iconTheme: const IconThemeData(color: AppColors.textDark),
       ),
       dividerTheme: const DividerThemeData(color: AppColors.borderGray),
     );
@@ -48,6 +53,17 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
+      fontFamily: GoogleFonts.montserrat().fontFamily,
+      textTheme: GoogleFonts.montserratTextTheme(
+        const TextTheme(
+          headlineLarge: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          headlineMedium: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          titleLarge: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          bodyLarge: TextStyle(color: Color(0xFFE0E0E0)),
+          bodyMedium: TextStyle(color: Color(0xFFE0E0E0)),
+          bodySmall: TextStyle(color: Color(0xFFB0B0B0)),
+        ),
+      ),
       colorScheme: ColorScheme.fromSeed(
         seedColor: AppColors.primaryMaroon,
         primary: primaryMaroonLight,
@@ -68,29 +84,21 @@ class AppTheme {
           side: const BorderSide(color: darkBorder),
         ),
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: darkSurface,
         elevation: 0,
         centerTitle: false,
-        titleTextStyle: TextStyle(
+        titleTextStyle: GoogleFonts.montserrat(
           color: Colors.white,
           fontSize: 18,
           fontWeight: FontWeight.bold,
         ),
-        iconTheme: IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       dividerTheme: const DividerThemeData(color: darkBorder),
       listTileTheme: const ListTileThemeData(
         iconColor: Colors.white70,
         textColor: Colors.white,
-      ),
-      textTheme: const TextTheme(
-        headlineLarge: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        headlineMedium: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        titleLarge: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        bodyLarge: TextStyle(color: Color(0xFFE0E0E0)),
-        bodyMedium: TextStyle(color: Color(0xFFE0E0E0)),
-        bodySmall: TextStyle(color: Color(0xFFB0B0B0)),
       ),
       iconTheme: const IconThemeData(color: Color(0xFFB0B0B0)),
       inputDecorationTheme: InputDecorationTheme(
@@ -104,8 +112,8 @@ class AppTheme {
           borderRadius: BorderRadius.circular(AppRadius.s),
           borderSide: const BorderSide(color: darkBorder),
         ),
-        labelStyle: const TextStyle(color: Color(0xFFB0B0B0)),
-        hintStyle: const TextStyle(color: Color(0xFF757575)),
+        labelStyle: GoogleFonts.montserrat(color: const Color(0xFFB0B0B0)),
+        hintStyle: GoogleFonts.montserrat(color: const Color(0xFF757575)),
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
         backgroundColor: primaryMaroonLight,

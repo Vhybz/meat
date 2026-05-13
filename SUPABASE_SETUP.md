@@ -194,6 +194,8 @@ CREATE TABLE expenses (
 CREATE TABLE customers (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 
+  branch_code TEXT REFERENCES branches(code),
+
   name TEXT NOT NULL,
 
   phone TEXT UNIQUE NOT NULL,

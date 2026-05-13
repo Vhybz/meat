@@ -9,6 +9,7 @@ import '../../services/notification_service.dart';
 import '../../services/menu_service.dart';
 import '../../services/user_provider.dart';
 import '../../models/user_model.dart';
+import '../../widgets/role_pop_scope.dart';
 import 'butcher_dashboard.dart';
 import 'animal_intake_screen.dart';
 import 'slaughter_log_screen.dart';
@@ -21,7 +22,7 @@ import 'waste_management_screen.dart';
 import 'documents_screen.dart';
 import 'reports_screen.dart';
 import 'settings_screen.dart';
-import 'profile_screen.dart';
+import '../profile_screen.dart';
 import 'how_to_use_screen.dart';
 import 'butcher_expense_screen.dart';
 
@@ -47,32 +48,57 @@ class ButcherShell extends ConsumerWidget {
     final theme = Theme.of(context);
     final currentScreen = ref.watch(butcherNavProvider);
     final isDesktop = ResponsiveLayout.isDesktop(context);
+    final menuItems = ref.watch(butcherMenuItemsProvider);
 
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      appBar: MainAppBar(
-        title: _getScreenTitle(currentScreen),
-        onProfileTap: () => ref.read(butcherNavProvider.notifier).setScreen(ButcherScreen.profile),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.report_gmailerrorred_rounded, color: Colors.orange),
-            tooltip: 'Report Issue to Admin',
-            onPressed: () => _showButcherReportDialog(context, ref),
+    return RolePopScope(
+      currentRoute: '/butcher',
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) return;
+          if (currentScreen != ButcherScreen.dashboard) {
+            ref.read(butcherNavProvider.notifier).setScreen(ButcherScreen.dashboard);
+          } else {
+            // Already on dashboard, stay here instead of showing exit dialog
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Use the menu to logout or switch accounts'),
+                duration: Duration(seconds: 2),
+              ),
+            );
+          }
+        },
+        child: Scaffold(
+          backgroundColor: theme.scaffoldBackgroundColor,
+          appBar: MainAppBar(
+            title: _getScreenTitle(currentScreen),
+            onProfileTap: () => ref.read(butcherNavProvider.notifier).setScreen(ButcherScreen.profile),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.report_gmailerrorred_rounded, color: Colors.orange),
+                tooltip: 'Report Issue to Admin',
+                onPressed: () => _showButcherReportDialog(context, ref),
+              ),
+            ],
           ),
-        ],
-      ),
-      drawer: isDesktop ? null : Drawer(child: _buildSidebar(ref, currentScreen, user, context)),
-      body: Row(
-        children: [
-          if (isDesktop) _buildSidebar(ref, currentScreen, user, context),
-          Expanded(
-            child: Container(
-              color: theme.scaffoldBackgroundColor,
-              child: _buildContent(currentScreen),
+        drawer: isDesktop ? null : Drawer(child: _buildSidebar(ref, currentScreen, user, context, menuItems)),
+        body: Row(
+          children: [
+            if (isDesktop) _buildSidebar(ref, currentScreen, user, context, menuItems),
+            Expanded(
+              child: Container(
+                color: theme.scaffoldBackgroundColor,
+                child: SafeArea(
+                  top: false,
+                  bottom: true,
+                  child: _buildContent(currentScreen),
+                ),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
+    ),
     );
   }
 
@@ -96,14 +122,14 @@ class ButcherShell extends ConsumerWidget {
     }
   }
 
-  Widget _buildSidebar(WidgetRef ref, ButcherScreen current, UserAccount user, BuildContext context) {
+  Widget _buildSidebar(WidgetRef ref, ButcherScreen current, UserAccount user, BuildContext context, List<SidebarItem> menuItems) {
     final currentRoute = '/butcher';
     return AppSidebar(
       userId: user.id,
       userName: user.name,
       userRole: user.activePrimaryRole.name.toUpperCase(),
       currentRoute: _getCurrentInternalRoute(current),
-      items: MenuService.getMenuItemsForUser(user, inButcherShell: true),
+      items: menuItems,
       onTap: (route) {
         if (route.startsWith('butcher:')) {
           final screenStr = route.split(':')[1];
@@ -135,7 +161,7 @@ class ButcherShell extends ConsumerWidget {
       case ButcherScreen.documents: return const DocumentsScreen();
       case ButcherScreen.reports: return const ReportsScreen();
       case ButcherScreen.settings: return const SettingsScreen();
-      case ButcherScreen.profile: return const ProfileScreen();
+      case ButcherScreen.profile: return const ProfileView();
       case ButcherScreen.howToUse: return const HowToUseScreen();
     }
   }
@@ -164,18 +190,21 @@ class ButcherShell extends ConsumerWidget {
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: TextStyle(color: theme.colorScheme.onSurfaceVariant))),
-          ElevatedButton(
+            ElevatedButton(
             onPressed: () async {
               if (controller.text.isNotEmpty) {
+                final user = ref.read(currentUserProvider);
+                final userName = user?.name ?? 'Butcher';
+                
                 // Simulate SMS and Notification
                 await SmsService.notifyAdmin(
                   title: 'BUTCHER UNIT ALERT',
-                  message: 'Butcher Ramon reported an issue: ${controller.text}',
+                  message: '$userName reported an issue: ${controller.text}',
                 );
 
                 ref.read(notificationProvider.notifier).addNotification(
                   'BUTCHER UNIT ALERT',
-                  'Butcher Ramon reported an issue: ${controller.text}',
+                  '$userName reported an issue: ${controller.text}',
                 );
                 
                 if (context.mounted) {

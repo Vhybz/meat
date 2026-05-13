@@ -38,10 +38,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final bool isSmall = size.height < 700;
+
     return Scaffold(
       body: Stack(
         children: [
-          // Dynamic Background Image with Blur/Opacity
+          // Dynamic Background Image
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 800),
             child: Container(
@@ -59,104 +62,56 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
           ),
           
-          // Gradient Overlay
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 800),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  _pages[_currentPage].color.withValues(alpha: 0.2),
-                  Colors.black.withValues(alpha: 0.9),
-                ],
-              ),
-            ),
-          ),
-
           PageView.builder(
             controller: _pageController,
-            onPageChanged: (int page) {
-              setState(() {
-                _currentPage = page;
-              });
-            },
+            onPageChanged: (int page) => setState(() => _currentPage = page),
             itemCount: _pages.length,
-            itemBuilder: (context, index) {
-              return _buildPage(_pages[index], index == _currentPage);
-            },
+            itemBuilder: (context, index) => _buildPage(_pages[index], index == _currentPage, isSmall),
           ),
 
           // Top Skip Button
           Positioned(
-            top: 60,
+            top: MediaQuery.of(context).padding.top + 10,
             right: 20,
             child: TextButton(
               onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
-              child: const Text(
-                'SKIP',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 2,
-                ),
-              ),
+              child: const Text('SKIP', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, letterSpacing: 2)),
             ),
           ),
 
           // Bottom Navigation Section
           Positioned(
-            bottom: 60,
+            bottom: MediaQuery.of(context).padding.bottom + 40,
             left: 30,
             right: 30,
             child: Column(
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(
-                    _pages.length,
-                    (index) => _buildDot(index),
-                  ),
+                  children: List.generate(_pages.length, (index) => _buildDot(index)),
                 ),
-                const SizedBox(height: 50),
-                SizedBox(
-                  width: double.infinity,
-                  height: 65,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      if (_currentPage == _pages.length - 1) {
-                        Navigator.pushReplacementNamed(context, '/login');
-                      } else {
-                        _pageController.nextPage(
-                          duration: const Duration(milliseconds: 600),
-                          curve: Curves.easeInOutCubic,
-                        );
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _pages[_currentPage].color,
-                      foregroundColor: Colors.white,
-                      elevation: 10,
-                      shadowColor: _pages[_currentPage].color.withValues(alpha: 0.5),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.l),
+                SizedBox(height: isSmall ? 24 : 50),
+                Center(
+                  child: SizedBox(
+                    width: size.width > 460 ? 400 : double.infinity,
+                    height: 60,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        if (_currentPage == _pages.length - 1) {
+                          Navigator.pushReplacementNamed(context, '/login');
+                        } else {
+                          _pageController.nextPage(duration: const Duration(milliseconds: 600), curve: Curves.easeInOutCubic);
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _pages[_currentPage].color,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
                       ),
-                    ),
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 300),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        key: ValueKey(_currentPage),
                         children: [
-                          Text(
-                            _currentPage == _pages.length - 1 ? 'GET STARTED' : 'CONTINUE',
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 2,
-                            ),
-                          ),
+                          Text(_currentPage == _pages.length - 1 ? 'GET STARTED' : 'CONTINUE', style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5)),
                           const SizedBox(width: 12),
                           const Icon(Icons.arrow_forward_rounded),
                         ],
@@ -172,7 +127,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     );
   }
 
-  Widget _buildPage(OnboardingData data, bool isActive) {
+  Widget _buildPage(OnboardingData data, bool isActive, bool isSmall) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 40.0),
       child: Column(
@@ -183,27 +138,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             scale: isActive ? 1.0 : 0.6,
             curve: Curves.elasticOut,
             child: Container(
-              padding: const EdgeInsets.all(45),
+              padding: EdgeInsets.all(isSmall ? 30 : 45),
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white24, width: 2),
-                boxShadow: [
-                  BoxShadow(
-                    color: data.color.withValues(alpha: 0.3),
-                    blurRadius: 30,
-                    spreadRadius: 5,
-                  ),
-                ],
               ),
-              child: Icon(
-                data.icon,
-                size: 110,
-                color: Colors.white,
-              ),
+              child: Icon(data.icon, size: isSmall ? 70 : 110, color: Colors.white),
             ),
           ),
-          const SizedBox(height: 70),
+          SizedBox(height: isSmall ? 30 : 70),
           AnimatedOpacity(
             duration: const Duration(milliseconds: 600),
             opacity: isActive ? 1.0 : 0.0,
@@ -212,20 +156,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 Text(
                   data.title,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 36,
+                  style: TextStyle(
+                    fontSize: isSmall ? 28 : 36,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
-                    letterSpacing: -1,
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
                 Text(
                   data.description,
                   textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    height: 1.6,
+                  style: TextStyle(
+                    fontSize: isSmall ? 15 : 18,
                     color: Colors.white70,
                     fontWeight: FontWeight.w300,
                   ),
@@ -233,7 +175,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 120),
+          const SizedBox(height: 100),
         ],
       ),
     );

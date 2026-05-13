@@ -8,7 +8,7 @@ import '../models/user_model.dart';
 import '../models/branch_model.dart';
 import '../services/user_provider.dart';
 import '../services/branch_provider.dart';
-import '../services/auth_service.dart';
+import '../services/auth_provider.dart';
 import '../services/sms_service.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
@@ -39,7 +39,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   bool _obscureConfirmPassword = true;
   bool _phoneExists = false;
   Timer? _debounce;
-  final _authService = AuthService();
 
   double _strength = 0;
   String _strengthLabel = 'None';
@@ -475,14 +474,12 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   Future<void> _handleSignup() async {
     if (_formKey.currentState!.validate()) {
       if (_selectedDob == null) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select your Date of Birth.')));
+        _showMessage('Selection Required', 'Please select your Date of Birth to continue with the registration.', isWarning: true);
         return;
       }
 
       if (_phoneExists) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Phone number already in use. Please contact Admin.'), backgroundColor: Colors.red),
-        );
+        _showMessage('Duplicate Phone', 'This phone number is already registered to another account. Please use a different number or contact Admin.', isError: true);
         return;
       }
 
@@ -513,7 +510,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           await ref.read(branchesProvider.notifier).addBranch(newBranch);
         }
 
-        final authResponse = await _authService.signUp(_emailController.text, _passwordController.text);
+        final authResponse = await ref.read(authServiceProvider).signUp(_emailController.text, _passwordController.text);
         
         if (authResponse.user != null) {
           final adminExists = userNotifier.isAdminExists;
@@ -572,7 +569,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                     ? 'Your account has been created and approved as the primary administrator. You can now sign in.' 
                     : (existingProfile != null 
                         ? 'Your account has been linked to your staff profile. You can now sign in.' 
-                        : 'Your registration is pending administrator approval. You will be notified once approved.')),
+                        : 'Your registration is pending administrator approval. You will be notified via SMS once approved.')),
                   actions: [
                     ElevatedButton(
                       onPressed: () {
@@ -586,27 +583,45 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
               );
             }
           } catch (dbError) {
-            await _authService.signOut();
+            await GlobalLogout.perform(ref);
             if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Profile creation failed: $dbError'),
-                  backgroundColor: Colors.red,
-                  duration: const Duration(seconds: 5),
-                ),
-              );
+               _showMessage('Database Error', 'Your account was created in Auth but your profile could not be saved: $dbError', isError: true);
             }
           }
         }
       } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Registration failed: ${e.toString()}'), backgroundColor: Colors.red),
-          );
+           _showMessage('Registration Failed', 'We encountered an error during registration: ${e.toString()}', isError: true);
         }
       } finally {
         if (mounted) setState(() => _isLoading = false);
       }
     }
+  }
+
+  void _showMessage(String title, String message, {bool isError = false, bool isWarning = false}) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
+        title: Row(
+          children: [
+            Icon(
+              isError ? Icons.error_outline : (isWarning ? Icons.warning_amber_rounded : Icons.info_outline),
+              color: isError ? Colors.red : (isWarning ? Colors.orange : AppColors.primaryMaroon),
+            ),
+            const SizedBox(width: 12),
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Text(message, style: const TextStyle(fontSize: 14)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
   }
 }

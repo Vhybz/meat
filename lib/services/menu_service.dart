@@ -129,7 +129,23 @@ class MenuService {
 
   static void navigate(BuildContext context, String route, String currentRoute) {
     if (route == currentRoute) return;
-    Navigator.pushReplacementNamed(context, route);
+    
+    // Ensure we are using the correct Navigator context
+    final navigator = Navigator.of(context);
+    navigator.pushReplacementNamed(route);
+  }
+
+  static String getHomeRoute(UserAccount user) {
+    switch (user.activePrimaryRole) {
+      case UserRole.admin:
+        return '/admin';
+      case UserRole.butcher:
+        return '/butcher';
+      case UserRole.cashier:
+        return '/cashier';
+      case UserRole.superAdmin:
+        return '/admin/super';
+    }
   }
 }
 
@@ -138,4 +154,11 @@ final menuItemsProvider = Provider<List<SidebarItem>>((ref) {
   final user = ref.watch(currentUserProvider);
   if (user == null) return [];
   return MenuService.getMenuItemsForUser(user);
+});
+
+/// A reactive provider for butcher unit menu items
+final butcherMenuItemsProvider = Provider<List<SidebarItem>>((ref) {
+  final user = ref.watch(currentUserProvider);
+  if (user == null) return [];
+  return MenuService.getMenuItemsForUser(user, inButcherShell: true);
 });

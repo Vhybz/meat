@@ -33,6 +33,7 @@ class Product {
   final PromoTarget promoTarget;
   final PromoCustomerTarget promoCustomerTarget;
   final bool isDeleted; // Soft delete
+  final double lowStockThreshold;
 
   Product({
     required this.id,
@@ -52,6 +53,7 @@ class Product {
     this.promoTarget = PromoTarget.both,
     this.promoCustomerTarget = PromoCustomerTarget.all,
     this.isDeleted = false,
+    this.lowStockThreshold = 5.0, // Default threshold
   });
 
   /// Logic to check if promotion is currently scheduled correctly by date
@@ -119,6 +121,7 @@ class Product {
     String? unit,
     String? imageUrl,
     bool? isDeleted,
+    double? lowStockThreshold,
   }) {
     return Product(
       id: id,
@@ -138,6 +141,7 @@ class Product {
       promoTarget: promoTarget ?? this.promoTarget,
       promoCustomerTarget: promoCustomerTarget ?? this.promoCustomerTarget,
       isDeleted: isDeleted ?? this.isDeleted,
+      lowStockThreshold: lowStockThreshold ?? this.lowStockThreshold,
     );
   }
 
@@ -158,6 +162,7 @@ class Product {
       promoTarget: PromoTarget.values.byName(json['promo_target'] ?? 'both'),
       promoCustomerTarget: PromoCustomerTarget.values.byName(json['promo_customer_target'] ?? 'all'),
       isDeleted: json['is_deleted'] ?? false,
+      lowStockThreshold: (json['low_stock_threshold'] as num? ?? 5.0).toDouble(),
     );
   }
 
@@ -177,6 +182,7 @@ class Product {
         'promo_target': promoTarget.name,
         'promo_customer_target': promoCustomerTarget.name,
         'is_deleted': isDeleted,
+        'low_stock_threshold': lowStockThreshold,
       };
 }
 

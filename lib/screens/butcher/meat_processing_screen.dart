@@ -6,6 +6,7 @@ import '../../core/utils.dart';
 import '../../widgets/status_chip.dart';
 import '../../models/butcher_models.dart';
 import '../../services/butcher_service.dart';
+import '../../services/label_service.dart';
 
 class MeatProcessingScreen extends ConsumerWidget {
   const MeatProcessingScreen({super.key});
@@ -25,26 +26,28 @@ class MeatProcessingScreen extends ConsumerWidget {
         foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.l),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildSectionHeader('Active Batches in Processing', Icons.inventory_2),
-            const SizedBox(height: AppSpacing.m),
-            activeBatchesAsync.when(
-              data: (batches) => _buildActiveBatchesList(ref, batches),
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, _) => Text('Error: $err'),
-            ),
-            const SizedBox(height: AppSpacing.xl),
-            _buildSectionHeader('Recent Cut Production', Icons.history),
-            const SizedBox(height: AppSpacing.m),
-            recentCutsAsync.when(
-              data: (cuts) => _buildCutProductionList(cuts),
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, _) => Text('Error: $err'),
-            ),
-          ],
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.l),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSectionHeader('Active Batches in Processing', Icons.inventory_2),
+              const SizedBox(height: AppSpacing.m),
+              activeBatchesAsync.when(
+                data: (batches) => _buildActiveBatchesList(ref, batches),
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (err, _) => Text('Error: $err'),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+              _buildSectionHeader('Recent Cut Production', Icons.history),
+              const SizedBox(height: AppSpacing.m),
+              recentCutsAsync.when(
+                data: (cuts) => _buildCutProductionList(cuts),
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (err, _) => Text('Error: $err'),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -55,61 +58,102 @@ class MeatProcessingScreen extends ConsumerWidget {
       children: [
         Icon(icon, size: 20, color: AppColors.primaryMaroon),
         const SizedBox(width: AppSpacing.s),
-        Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18), overflow: TextOverflow.ellipsis)),
       ],
     );
   }
 
   Widget _buildActiveBatchesList(WidgetRef ref, List<MeatBatch> batches) {
-    if (batches.isEmpty) return const Text('No active batches.');
+    if (batches.isEmpty) return const Text('No active batches ready for processing.');
+    final recentCuts = ref.watch(recentCutsProvider).value ?? [];
+    final wasteRecords = ref.watch(butcherWasteProvider).value ?? [];
 
-    return SizedBox(
-      height: 180,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: batches.length,
-        itemBuilder: (context, index) {
-          final batch = batches[index];
-          return Container(
-            width: 300,
-            margin: const EdgeInsets.only(right: AppSpacing.m),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.all(AppSpacing.m),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 600;
+        return SizedBox(
+          height: isMobile ? 220 : 240,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: batches.length,
+            itemBuilder: (context, index) {
+              final batch = batches[index];
+              
+              // Calculate yield progress: (Cuts + Waste) / Intake Weight
+              final batchCuts = recentCuts.where((c) => c.batchId == batch.id);
+              final batchWaste = wasteRecords.where((w) => w['batch_id'] == batch.id);
+              
+              final processedWeight = batchCuts.fold(0.0, (sum, c) => sum + c.weight);
+              final wastedWeight = batchWaste.fold(0.0, (sum, w) => sum + (double.tryParse(w['weight']?.toString() ?? '0') ?? 0));
+              
+              final totalAccounted = processedWeight + wastedWeight;
+              final progress = (totalAccounted / batch.weight).clamp(0.0, 1.0);
+
+              return Container(
+                width: isMobile ? 260 : 320,
+                margin: const EdgeInsets.only(right: AppSpacing.m),
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.m),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('ID: ${batch.id}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                        StatusChip(label: batch.status.toUpperCase(), color: Colors.blue),
-                      ],
-                    ),
-                    const Divider(),
-                    Text('Type: ${batch.meatType}', style: const TextStyle(fontSize: 12)),
-                    Text('Batch Weight: ${WeightConverter.formatShort(batch.weight)}', style: const TextStyle(fontSize: 12)),
-                    const Spacer(),
-                    const LinearProgressIndicator(value: 0.6, backgroundColor: AppColors.surfaceWhite, color: AppColors.primaryMaroon),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Processing...', style: TextStyle(fontSize: 10, color: AppColors.textLight)),
-                        TextButton(
-                          onPressed: () => _confirmCloseBatch(context, ref, batch),
-                          style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(50, 20)),
-                          child: const Text('Close Batch', style: TextStyle(fontSize: 10, color: Colors.red)),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Flexible(child: Text('Batch: ${batch.id.substring(0,8)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12), overflow: TextOverflow.ellipsis)),
+                            StatusChip(label: 'READY', color: Colors.green),
+                          ],
+                        ),
+                        const Divider(),
+                        Text('Type: ${batch.meatType}', style: const TextStyle(fontSize: 11)),
+                        Text('Intake Weight: ${WeightConverter.formatShort(batch.weight)}', style: const TextStyle(fontSize: 11)),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Cuts: ${WeightConverter.formatShort(processedWeight)}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue)),
+                            Text('Waste: ${WeightConverter.formatShort(wastedWeight)}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange)),
+                          ],
+                        ),
+                        const Spacer(),
+                        LinearProgressIndicator(
+                          value: progress, 
+                          backgroundColor: AppColors.surfaceWhite, 
+                          color: progress > 0.95 ? Colors.green : AppColors.primaryMaroon,
+                          minHeight: 8,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('${(progress * 100).toStringAsFixed(0)}% Accounted', style: const TextStyle(fontSize: 10, color: AppColors.textLight)),
+                            Row(
+                              children: [
+                                TextButton(
+                                  onPressed: () => _showRecordWasteDialog(context, ref, batch),
+                                  style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(50, 20), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                                  child: const Text('Add Waste', style: TextStyle(fontSize: 10, color: Colors.orange)),
+                                ),
+                                const SizedBox(width: 8),
+                                TextButton(
+                                  onPressed: () => _confirmCloseBatch(context, ref, batch),
+                                  style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(50, 20), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
+                                  child: const Text('Close Batch', style: TextStyle(fontSize: 10, color: Colors.red)),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-          );
-        },
-      ),
+              );
+            },
+          ),
+        );
+      }
     );
   }
 
@@ -159,7 +203,8 @@ class MeatProcessingScreen extends ConsumerWidget {
                         Padding(padding: EdgeInsets.all(12), child: Text('Cut Name', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                         Padding(padding: EdgeInsets.all(12), child: Text('Batch ID', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                         Padding(padding: EdgeInsets.all(12), child: Text('Weight', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
-                        Padding(padding: EdgeInsets.all(12), child: Text('Time Processed', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                        Padding(padding: EdgeInsets.all(12), child: Text('Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
+                        Padding(padding: EdgeInsets.all(12), child: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                       ],
                     ),
                     ...cuts.map((cut) => TableRow(
@@ -167,7 +212,22 @@ class MeatProcessingScreen extends ConsumerWidget {
                         Padding(padding: const EdgeInsets.all(12), child: Text(cut.name, style: const TextStyle(fontSize: 12))),
                         Padding(padding: const EdgeInsets.all(12), child: Text(cut.batchId, style: const TextStyle(fontSize: 12))),
                         Padding(padding: const EdgeInsets.all(12), child: Text(WeightConverter.formatShort(cut.weight), style: const TextStyle(fontSize: 11))),
-                        Padding(padding: const EdgeInsets.all(12), child: Text(DateFormat('hh:mm a').format(cut.processedAt), style: const TextStyle(fontSize: 12))),
+                        Padding(padding: const EdgeInsets.all(12), child: Text(DateFormat('hh:mm').format(cut.processedAt), style: const TextStyle(fontSize: 12))),
+                        Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: ElevatedButton.icon(
+                            onPressed: () => LabelService.printCutLabel(cut),
+                            icon: const Icon(Icons.print, size: 12),
+                            label: const Text('REPRINT', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primaryMaroon,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                          ),
+                        ),
                       ],
                     )),
                   ],
@@ -182,22 +242,138 @@ class MeatProcessingScreen extends ConsumerWidget {
 
   void _showRecordCutDialog(BuildContext context, WidgetRef ref) {
     final formKey = GlobalKey<FormState>();
-    final nameController = TextEditingController();
     final weightController = TextEditingController();
-    String? selectedBatchId;
+    MeatBatch? selectedBatch;
+    String? selectedCutName;
     
     final batchesAsync = ref.read(meatBatchesProvider);
     final activeBatches = batchesAsync.value ?? [];
 
     showDialog(
       context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          AnimalType? animalType;
+          if (selectedBatch != null) {
+            for (var type in AnimalType.values) {
+              if (type.name[0].toUpperCase() + type.name.substring(1) == selectedBatch!.meatType || 
+                  (type == AnimalType.hardChicken && selectedBatch!.meatType == 'Hard Chicken (Layers)') ||
+                  (type == AnimalType.softChicken && selectedBatch!.meatType == 'Soft Chicken (Broilers)')) {
+                animalType = type;
+                break;
+              }
+            }
+          }
+          final availableCuts = animalType?.standardCuts ?? [];
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
+            title: const Row(
+              children: [
+                Icon(Icons.restaurant_rounded, color: AppColors.primaryMaroon),
+                SizedBox(width: 12),
+                Expanded(child: Text('Dissect Animal Part', overflow: TextOverflow.ellipsis)),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<MeatBatch>(
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Select Source Batch', border: OutlineInputBorder()),
+                      items: activeBatches.map((b) => DropdownMenuItem(
+                        value: b, 
+                        child: Text('${b.id.substring(0,8)} (${b.meatType})', overflow: TextOverflow.ellipsis)
+                      )).toList(),
+                      onChanged: (v) => setState(() {
+                        selectedBatch = v;
+                        selectedCutName = null; // Reset cut name when batch changes
+                      }),
+                      validator: (v) => v == null ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      value: selectedCutName,
+                      decoration: const InputDecoration(labelText: 'Select Part/Cut', border: OutlineInputBorder()),
+                      items: availableCuts.map((cut) => DropdownMenuItem(
+                        value: cut, 
+                        child: Text(cut, overflow: TextOverflow.ellipsis)
+                      )).toList(),
+                      onChanged: (v) => setState(() => selectedCutName = v),
+                      validator: (v) => v == null ? 'Required' : null,
+                      disabledHint: const Text('Select a batch first'),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: weightController,
+                      decoration: const InputDecoration(labelText: 'Weight of Part (kg)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.scale)), 
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Required';
+                        final weight = double.tryParse(v);
+                        if (weight == null || weight <= 0) return 'Invalid weight';
+                        return null;
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+              ElevatedButton(
+                onPressed: () async {
+                  if (formKey.currentState!.validate()) {
+                    final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+                    final String suffix = timestamp.substring(timestamp.length - 12);
+                    final String validUuid = '00000000-0000-0000-0000-$suffix';
+
+                    final cut = MeatCut(
+                      id: validUuid,
+                      name: selectedCutName!,
+                      batchId: selectedBatch!.id,
+                      weight: double.tryParse(weightController.text) ?? 0,
+                      processedAt: DateTime.now(),
+                    );
+
+                    await ref.read(recentCutsProvider.notifier).addCut(cut);
+                    
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('${cut.name} (${cut.weight}kg) recorded for batch ${selectedBatch!.id.substring(0,8)}'))
+                      );
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMaroon, foregroundColor: Colors.white),
+                child: const Text('Save Cut'),
+              ),
+            ],
+          );
+        }
+      ),
+    );
+  }
+
+  void _showRecordWasteDialog(BuildContext context, WidgetRef ref, MeatBatch batch) {
+    final formKey = GlobalKey<FormState>();
+    final reasonController = TextEditingController();
+    final weightController = TextEditingController();
+
+    showDialog(
+      context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.restaurant_rounded, color: AppColors.primaryMaroon),
-            SizedBox(width: 12),
-            Text('Record Meat Cut'),
+            const Icon(Icons.delete_sweep_rounded, color: Colors.orange),
+            const SizedBox(width: 12),
+            Expanded(child: Text('Record Waste: ${batch.id.substring(0, 8)}', overflow: TextOverflow.ellipsis)),
           ],
         ),
         content: Form(
@@ -206,30 +382,28 @@ class MeatProcessingScreen extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               TextFormField(
-                controller: nameController,
-                decoration: const InputDecoration(labelText: 'Cut Name (e.g. Ribeye)', border: OutlineInputBorder()),
+                controller: reasonController,
+                decoration: const InputDecoration(
+                  labelText: 'Waste Type / Reason', 
+                  hintText: 'e.g. Bone Trimmings, Fat', 
+                  border: OutlineInputBorder()
+                ),
                 validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: weightController,
-                decoration: const InputDecoration(labelText: 'Weight (kg)', border: OutlineInputBorder()), 
-                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Weight (kg)', 
+                  border: OutlineInputBorder(), 
+                  prefixIcon: Icon(Icons.scale)
+                ),
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 validator: (v) {
                   if (v == null || v.isEmpty) return 'Required';
                   if (double.tryParse(v) == null) return 'Invalid weight';
                   return null;
                 },
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                decoration: const InputDecoration(labelText: 'Select Batch', border: OutlineInputBorder()),
-                items: activeBatches.map((b) => DropdownMenuItem(
-                  value: b.id, 
-                  child: Text('${b.id} (${b.meatType})')
-                )).toList(),
-                onChanged: (v) => selectedBatchId = v,
-                validator: (v) => v == null ? 'Required' : null,
               ),
             ],
           ),
@@ -239,28 +413,21 @@ class MeatProcessingScreen extends ConsumerWidget {
           ElevatedButton(
             onPressed: () async {
               if (formKey.currentState!.validate()) {
-                final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
-                final String suffix = timestamp.substring(timestamp.length - 12);
-                final String validUuid = '00000000-0000-0000-0000-$suffix';
-
-                final cut = MeatCut(
-                  id: validUuid,
-                  name: nameController.text,
-                  batchId: selectedBatchId!,
-                  weight: double.tryParse(weightController.text) ?? 0,
-                  processedAt: DateTime.now(),
+                await ref.read(butcherWasteProvider.notifier).addWaste(
+                  batch.id, 
+                  reasonController.text, 
+                  double.tryParse(weightController.text) ?? 0
                 );
-
-                await ref.read(recentCutsProvider.notifier).addCut(cut);
-                
                 if (context.mounted) {
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Meat cut recorded.')));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Logged ${weightController.text}kg waste for Batch ${batch.id.substring(0, 8)}'))
+                  );
                 }
               }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMaroon, foregroundColor: Colors.white),
-            child: const Text('Save Cut'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.white),
+            child: const Text('Save Waste'),
           ),
         ],
       ),

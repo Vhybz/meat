@@ -12,6 +12,7 @@ import 'package:intl/intl.dart';
 
 import '../../widgets/responsive_layout.dart';
 import '../../widgets/app_sidebar.dart';
+import '../../widgets/role_pop_scope.dart';
 import '../../services/menu_service.dart';
 import '../../services/user_provider.dart';
 
@@ -49,13 +50,27 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
     final isDesktop = ResponsiveLayout.isDesktop(context);
     const currentRoute = '/admin/sales';
 
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      appBar: const MainAppBar(title: 'Sales & Analytics', showMenuButton: true),
-      drawer: isDesktop
-          ? null
-          : Drawer(
-              child: AppSidebar(
+    return RolePopScope(
+      currentRoute: currentRoute,
+      child: Scaffold(
+        backgroundColor: theme.scaffoldBackgroundColor,
+        appBar: const MainAppBar(title: 'Sales & Analytics', showMenuButton: true),
+        drawer: isDesktop
+            ? null
+            : Drawer(
+                child: AppSidebar(
+                  userId: user.id,
+                  userName: user.name,
+                  userRole: user.activePrimaryRole.name.toUpperCase(),
+                  currentRoute: currentRoute,
+                  items: MenuService.getMenuItemsForUser(user),
+                  onTap: (route) => MenuService.navigate(context, route, currentRoute),
+                ),
+              ),
+        body: Row(
+          children: [
+            if (isDesktop)
+              AppSidebar(
                 userId: user.id,
                 userName: user.name,
                 userRole: user.activePrimaryRole.name.toUpperCase(),
@@ -63,36 +78,25 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
                 items: MenuService.getMenuItemsForUser(user),
                 onTap: (route) => MenuService.navigate(context, route, currentRoute),
               ),
-            ),
-      body: Row(
-        children: [
-          if (isDesktop)
-            AppSidebar(
-              userId: user.id,
-              userName: user.name,
-              userRole: user.activePrimaryRole.name.toUpperCase(),
-              currentRoute: currentRoute,
-              items: MenuService.getMenuItemsForUser(user),
-              onTap: (route) => MenuService.navigate(context, route, currentRoute),
-            ),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSpacing.l),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(context, filteredSales),
-                  const SizedBox(height: AppSpacing.xl),
-                  _buildFilters(),
-                  const SizedBox(height: AppSpacing.l),
-                  _buildSummaryCards(context, filteredSales),
-                  const SizedBox(height: AppSpacing.xl),
-                  _buildSalesTable(filteredSales),
-                ],
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(AppSpacing.l),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(context, filteredSales),
+                    const SizedBox(height: AppSpacing.xl),
+                    _buildFilters(),
+                    const SizedBox(height: AppSpacing.l),
+                    _buildSummaryCards(context, filteredSales),
+                    const SizedBox(height: AppSpacing.xl),
+                    _buildSalesTable(filteredSales),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -235,7 +239,10 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
   }
 
   Widget _buildSummaryCards(BuildContext context, List<SaleRecord> sales) {
-    final totalRevenue = sales.fold(0.0, (sum, sale) => sum + sale.totalAmount);
+    // Only include non-cancelled sales in financial totals
+    final activeSales = sales.where((s) => s.status != SaleStatus.cancelled).toList();
+    
+    final totalRevenue = activeSales.fold(0.0, (sum, sale) => sum + sale.totalAmount);
     final expensesState = ref.watch(expenseProvider);
     final totalExpenses = expensesState.records.fold(0.0, (sum, e) => sum + e.amount);
     final netProfit = totalRevenue - totalExpenses;
@@ -527,8 +534,10 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
                     decoration: BoxDecoration(
                       border: Border(top: BorderSide(color: theme.dividerColor)),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
+                    child: OverflowBar(
+                      alignment: MainAxisAlignment.end,
+                      spacing: 8,
+                      overflowSpacing: 8,
                       children: [
                         if (sale.status != SaleStatus.cancelled)
                           TextButton.icon(
@@ -536,12 +545,13 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
                               Navigator.pop(context); // Close details
                               _showEditSaleDialog(context, sale);
                             },
-                            icon: const Icon(Icons.edit_note, color: Colors.blue),
-                            label: const Text('Edit Receipt', style: TextStyle(color: Colors.blue)),
+                            icon: const Icon(Icons.edit_note, color: Colors.blue, size: 16),
+                            label: const Text('Edit Receipt', style: TextStyle(color: Colors.blue, fontSize: 11)),
                           ),
-                        const Spacer(),
-                        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
-                        const SizedBox(width: 8),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context), 
+                          child: const Text('Close', style: TextStyle(fontSize: 12))
+                        ),
                         ElevatedButton.icon(
                           onPressed: isPrinting ? null : () async {
                             setState(() => isPrinting = true);
@@ -549,10 +559,16 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
                             setState(() => isPrinting = false);
                           },
                           icon: isPrinting 
-                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                            : const Icon(Icons.print, size: 18),
-                          label: const Text('Print Receipt'),
-                          style: ElevatedButton.styleFrom(backgroundColor: theme.colorScheme.primary, foregroundColor: Colors.white),
+                            ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.print, size: 14),
+                          label: const Text('REPRINT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.colorScheme.primary, 
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
                         ),
                       ],
                     ),

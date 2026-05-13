@@ -60,10 +60,16 @@ class SmsService {
     
     String message = 'Hello ${sale.customerName ?? 'Customer'}, your total for order ${sale.id} is GHC${sale.totalAmount.toStringAsFixed(2)}.';
     
+    if (sale.balance > 0.01) {
+      message += ' Amount Paid: GHC${sale.amountPaid.toStringAsFixed(2)}. Outstanding Balance: GHC${sale.balance.toStringAsFixed(2)}. Please settle at your earliest convenience.';
+    }
+
     if (discountAmount != null && discountAmount > 0) {
       message += ' You saved GHC${discountAmount.toStringAsFixed(2)}! Thank you for being a valued customer.';
     } else {
-      message += ' Thank you for shopping with us!';
+      if (sale.balance <= 0.01) {
+        message += ' Thank you for shopping with us!';
+      }
     }
 
     return await _sendSms(sale.customerPhone!, message);
@@ -113,6 +119,31 @@ class SmsService {
     final String message = 'Welcome to the team, ${user.firstName}! Your account has been linked to your staff profile as a $roleName at Mi Corazon. You can now log in and start working. We are glad to have you!';
 
     await _sendSms(user.phone!, message);
+  }
+
+  static Future<void> sendApprovalSms(UserAccount user) async {
+    if (user.phone == null || user.phone!.isEmpty) return;
+
+    final String message = 'Congratulations ${user.firstName}! Your Mi Corazon account has been approved by the administrator. You can now log in instantly and start using the system.';
+
+    await _sendSms(user.phone!, message);
+  }
+
+  static Future<void> sendCustomerWelcomeSms(String name, String phone, String? branchName) async {
+    if (phone.isEmpty) return;
+
+    final String branchText = branchName != null ? '($branchName Branch)' : '';
+    final String message = 'Hello $name, thank you for being part of our favorite customers at Mi Corazon Freshmeat Butchery $branchText. We value your patronage!';
+
+    await _sendSms(phone, message);
+  }
+
+  static Future<void> sendDebtReminderSms(SaleRecord sale) async {
+    if (sale.customerPhone == null || sale.customerPhone!.isEmpty) return;
+
+    final String message = 'DEBT REMINDER: Hello ${sale.customerName}, this is a reminder regarding your outstanding balance of GHC${sale.balance.toStringAsFixed(2)} for invoice ${sale.id} at Mi Corazon Butchery. Please settle as soon as possible. Thank you.';
+
+    await _sendSms(sale.customerPhone!, message);
   }
 
   static Future<void> notifyAdmin({required String title, required String message}) async {

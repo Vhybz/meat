@@ -27,23 +27,37 @@ class ButcherExpenseScreen extends ConsumerWidget {
           if (butcherExpenses.isEmpty)
             _buildEmptyState()
           else
-            ListView.builder(
+            ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               itemCount: butcherExpenses.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
                 final exp = butcherExpenses[index];
                 return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
+                  margin: EdgeInsets.zero,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.m),
+                    side: BorderSide(color: Theme.of(context).dividerColor.withValues(alpha: 0.1)),
+                  ),
                   child: ListTile(
-                    leading: const CircleAvatar(
-                      backgroundColor: AppColors.surfaceWhite,
-                      child: Icon(Icons.medication_liquid, color: AppColors.primaryMaroon),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: 4),
+                    leading: CircleAvatar(
+                      backgroundColor: AppColors.primaryMaroon.withValues(alpha: 0.1),
+                      child: const Icon(Icons.receipt_long, color: AppColors.primaryMaroon, size: 18),
                     ),
-                    title: Text(exp.title, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    subtitle: Text('${exp.category} • ${DateFormat('MMM dd').format(exp.date)}'),
-                    trailing: Text('GHS ${exp.amount.toStringAsFixed(2)}', 
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red)),
+                    title: Text(exp.title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    subtitle: Text('${exp.category} • ${DateFormat('MMM dd').format(exp.date)}', style: const TextStyle(fontSize: 11)),
+                    trailing: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text('₵${exp.amount.toStringAsFixed(2)}', 
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.red, fontSize: 13)),
+                        const Text('Outflow', style: TextStyle(fontSize: 9, color: AppColors.textLight)),
+                      ],
+                    ),
                   ),
                 );
               },
@@ -54,27 +68,35 @@ class ButcherExpenseScreen extends ConsumerWidget {
   }
 
   Widget _buildHeader(BuildContext context, WidgetRef ref) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        const Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bool isMobile = constraints.maxWidth < 600;
+        return Flex(
+          direction: isMobile ? Axis.vertical : Axis.horizontal,
+          crossAxisAlignment: isMobile ? CrossAxisAlignment.start : CrossAxisAlignment.center,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Operational Expenses', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            Text('Record vet checks, transport and local costs', style: TextStyle(color: AppColors.textLight)),
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Operational Expenses', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                Text('Record vet checks, transport and local costs', style: TextStyle(color: AppColors.textLight)),
+              ],
+            ),
+            if (isMobile) const SizedBox(height: AppSpacing.m),
+            ElevatedButton.icon(
+              onPressed: () => _showAddExpenseDialog(context, ref),
+              icon: const Icon(Icons.add_shopping_cart),
+              label: const Text('Record New Expense'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryMaroon,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              ),
+            ),
           ],
-        ),
-        ElevatedButton.icon(
-          onPressed: () => _showAddExpenseDialog(context, ref),
-          icon: const Icon(Icons.add_shopping_cart),
-          label: const Text('Record New Expense'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primaryMaroon,
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-          ),
-        ),
-      ],
+        );
+      }
     );
   }
 
@@ -148,8 +170,12 @@ class ButcherExpenseScreen extends ConsumerWidget {
             ElevatedButton(
               onPressed: () {
                 if (formKey.currentState!.validate()) {
+                  final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+                  final String suffix = timestamp.substring(timestamp.length - 12);
+                  final String validUuid = '00000000-0000-0000-0000-$suffix';
+
                   final newExp = ExpenseRecord(
-                    id: DateTime.now().millisecondsSinceEpoch.toString(),
+                    id: validUuid,
                     title: titleController.text,
                     category: selectedCategory,
                     amount: double.tryParse(amountController.text) ?? 0,

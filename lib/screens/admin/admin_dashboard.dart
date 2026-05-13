@@ -11,10 +11,12 @@ import '../../services/expense_provider.dart';
 import '../../models/sale_model.dart';
 import '../../services/notification_service.dart';
 import '../../services/product_service.dart';
+import '../../services/customer_provider.dart';
 
 import '../../services/menu_service.dart';
 import '../../services/user_provider.dart';
 import '../../models/user_model.dart';
+import '../../widgets/role_pop_scope.dart';
 
 class AdminDashboard extends ConsumerStatefulWidget {
   const AdminDashboard({super.key});
@@ -87,55 +89,78 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
     final now = DateTime.now();
     final dateStr = DateFormat('EEEE, d MMMM yyyy').format(now);
     const currentRoute = '/admin';
+    final menuItems = ref.watch(menuItemsProvider);
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      appBar: const MainAppBar(title: 'Admin Command Center'),
-      drawer: isDesktop
-          ? null
-          : Drawer(
-              child: AppSidebar(
-                userId: user.id,
-                userName: user.name,
-                userRole: user.activePrimaryRole.name.toUpperCase(),
-                currentRoute: currentRoute,
-                items: MenuService.getMenuItemsForUser(user),
-                onTap: (route) => MenuService.navigate(context, route, currentRoute),
+    return RolePopScope(
+      currentRoute: currentRoute,
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) return;
+          // Since Admin pages are separate routes, standard back button 
+          // already goes back to this dashboard. 
+          // If we are already here, we stay here.
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Use the menu to logout or switch accounts'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        },
+        child: Scaffold(
+          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          appBar: const MainAppBar(title: 'Admin Command Center'),
+          drawer: isDesktop
+              ? null
+              : Drawer(
+                  child: AppSidebar(
+                    userId: user.id,
+                    userName: user.name,
+                    userRole: user.activePrimaryRole.name.toUpperCase(),
+                    currentRoute: currentRoute,
+                    items: menuItems,
+                    onTap: (route) => MenuService.navigate(context, route, currentRoute),
+                  ),
+                ),
+          body: Row(
+            children: [
+              if (isDesktop)
+                AppSidebar(
+                  userId: user.id,
+                  userName: user.name,
+                  userRole: user.activePrimaryRole.name.toUpperCase(),
+                  currentRoute: currentRoute,
+                  items: menuItems,
+                  onTap: (route) => MenuService.navigate(context, route, currentRoute),
+                ),
+              Expanded(
+                child: SafeArea(
+                  top: false,
+                  bottom: true,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(AppSpacing.l),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildHeader(context, dateStr, user),
+                        const SizedBox(height: AppSpacing.l),
+                        _buildBanner(context),
+                        const SizedBox(height: AppSpacing.xl),
+                        _buildKPIGrid(context, ref),
+                        const SizedBox(height: AppSpacing.xl),
+                        _buildPendingActions(context, ref),
+                        const SizedBox(height: AppSpacing.xl),
+                        _buildResponsiveMainContent(context, ref),
+                        const SizedBox(height: AppSpacing.xl),
+                        _buildInventoryMonitor(context, ref),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-            ),
-      body: Row(
-        children: [
-          if (isDesktop)
-            AppSidebar(
-              userId: user.id,
-              userName: user.name,
-              userRole: user.activePrimaryRole.name.toUpperCase(),
-              currentRoute: currentRoute,
-              items: MenuService.getMenuItemsForUser(user),
-              onTap: (route) => MenuService.navigate(context, route, currentRoute),
-            ),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSpacing.l),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(context, dateStr, user),
-                  const SizedBox(height: AppSpacing.l),
-                  _buildBanner(context),
-                  const SizedBox(height: AppSpacing.xl),
-                  _buildKPIGrid(context, ref),
-                  const SizedBox(height: AppSpacing.xl),
-                  _buildPendingActions(context, ref),
-                  const SizedBox(height: AppSpacing.xl),
-                  _buildResponsiveMainContent(context, ref),
-                  const SizedBox(height: AppSpacing.xl),
-                  _buildInventoryMonitor(context, ref),
-                ],
-              ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -451,10 +476,11 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
 
   Widget _buildBanner(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isMobile = ResponsiveLayout.isMobile(context);
 
     return Container(
       width: double.infinity,
-      height: 200, // Slightly taller for carousel
+      height: isMobile ? 160 : 200, 
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(AppRadius.l),
         boxShadow: [
@@ -500,7 +526,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
             
             // Text Content
             Padding(
-              padding: const EdgeInsets.all(AppSpacing.xl),
+              padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.xl),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -511,26 +537,31 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
                       color: AppColors.primaryMaroon,
                       borderRadius: BorderRadius.circular(4),
                     ),
-                    child: const Text(
+                    child: Text(
                       'PREMIUM SELECTION',
-                      style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                      style: TextStyle(color: Colors.white, fontSize: isMobile ? 8 : 10, fontWeight: FontWeight.bold),
                     ),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Uncompromising Quality',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      shadows: [Shadow(color: Colors.black45, blurRadius: 10, offset: Offset(0, 2))],
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'Uncompromising Quality',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: isMobile ? 22 : 28,
+                          fontWeight: FontWeight.bold,
+                          shadows: const [Shadow(color: Colors.black45, blurRadius: 10, offset: Offset(0, 2))],
+                        ),
+                      ),
                     ),
                   ),
-                  const Text(
+                  Text(
                     'Unforgettable Taste from Mi Corazon',
                     style: TextStyle(
                       color: Colors.white70,
-                      fontSize: 16,
+                      fontSize: isMobile ? 12 : 16,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -573,6 +604,8 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
           Text(
             'Welcome, ${user.firstName}',
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           if (user.branchCode != null)
              Text('Branch Code: ${user.branchCode}', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 12)),
@@ -587,25 +620,36 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Welcome back, ${user.firstName}',
-              style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
-            ),
-            if (user.branchCode != null)
-               Text('Branch Code: ${user.branchCode}', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 14)),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Icon(Icons.calendar_today, size: 14, color: theme.colorScheme.onSurfaceVariant),
-                const SizedBox(width: 8),
-                Text(dateStr, style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 14)),
-              ],
-            ),
-          ],
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Welcome back, ${user.firstName}',
+                style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (user.branchCode != null)
+                 Text('Branch Code: ${user.branchCode}', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 14)),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.calendar_today, size: 14, color: theme.colorScheme.onSurfaceVariant),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(dateStr, 
+                      style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 14),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
+        const SizedBox(width: 16),
         _buildActionButtons(context, false),
       ],
     );
@@ -654,8 +698,11 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
     final bool isMobile = ResponsiveLayout.isMobile(context);
     final bool isTablet = ResponsiveLayout.isTablet(context);
     
-    final sales = ref.watch(saleHistoryProvider);
+    final allSales = ref.watch(saleHistoryProvider);
+    final sales = allSales.where((s) => s.status != SaleStatus.cancelled).toList();
+    
     final totalRevenue = sales.fold(0.0, (sum, sale) => sum + sale.totalAmount);
+    final totalDebt = sales.fold(0.0, (sum, sale) => sum + (sale.balance > 0 ? sale.balance : 0));
     final totalDiscounts = sales.fold(0.0, (sum, sale) => sum + sale.totalDiscount);
     final totalWeightSold = sales.fold(0.0, (sum, sale) => sum + sale.totalQty);
     
@@ -663,22 +710,42 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
     final totalExpenses = expensesState.records.fold(0.0, (sum, e) => sum + e.amount);
     final netProfit = totalRevenue - totalExpenses;
 
-    int crossAxisCount = isMobile ? 2 : (isTablet ? 3 : 5);
-    double aspectRatio = isMobile ? 1.8 : 2.0;
+    final customers = ref.watch(customerProvider);
+    final totalCustomers = customers.length;
 
-    return GridView.count(
-      crossAxisCount: crossAxisCount,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: AppSpacing.m,
-      mainAxisSpacing: AppSpacing.m,
-      childAspectRatio: aspectRatio,
+    int crossAxisCount = isMobile ? 2 : (isTablet ? 4 : 4);
+    double aspectRatio = isMobile ? 1.4 : 1.8;
+
+    return Column(
       children: [
-        _kpiWithTrend(context, "Gross Sales", '₵${totalRevenue.toStringAsFixed(0)}', Icons.payments, Colors.blue, '+12.5%'),
-        _kpiWithTrend(context, "Expenses", '₵${totalExpenses.toStringAsFixed(0)}', Icons.trending_down, Colors.red, '+5.2%'),
-        _kpiWithTrend(context, 'Net Profit', '₵${netProfit.toStringAsFixed(0)}', Icons.account_balance_wallet, Colors.green, '+8.1%'),
-        _kpiWithTrend(context, 'Promo Impact', '₵${totalDiscounts.toStringAsFixed(0)}', Icons.auto_awesome, Colors.orange, 'SAVED'),
-        _kpiWithTrend(context, 'Stock Sold', '${totalWeightSold.toStringAsFixed(1)} kg', Icons.scale, AppColors.primaryMaroon, 'LIVE'),
+        GridView.count(
+          crossAxisCount: crossAxisCount,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: AppSpacing.m,
+          mainAxisSpacing: AppSpacing.m,
+          childAspectRatio: aspectRatio,
+          children: [
+            _kpiWithTrend(context, "Gross Sales", '₵${totalRevenue.toStringAsFixed(0)}', Icons.payments, Colors.blue, '+12.5%'),
+            _kpiWithTrend(context, "Total Debt", '₵${totalDebt.toStringAsFixed(2)}', Icons.account_balance_wallet, Colors.red, 'OWED'),
+            _kpiWithTrend(context, "Expenses", '₵${totalExpenses.toStringAsFixed(0)}', Icons.trending_down, Colors.red, '+5.2%'),
+            _kpiWithTrend(context, 'Net Profit', '₵${netProfit.toStringAsFixed(0)}', Icons.account_balance_wallet, Colors.green, '+8.1%'),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.m),
+        GridView.count(
+          crossAxisCount: isMobile ? 2 : 4,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: AppSpacing.m,
+          mainAxisSpacing: AppSpacing.m,
+          childAspectRatio: isMobile ? 1.4 : 2.5,
+          children: [
+            _kpiWithTrend(context, 'Customers', '$totalCustomers', Icons.people, Colors.purple, 'ACTIVE'),
+            _kpiWithTrend(context, 'Promo Impact', '₵${totalDiscounts.toStringAsFixed(0)}', Icons.auto_awesome, Colors.orange, 'SAVED'),
+            _kpiWithTrend(context, 'Stock Sold', '${totalWeightSold.toStringAsFixed(1)} kg', Icons.scale, AppColors.primaryMaroon, 'LIVE'),
+          ],
+        ),
       ],
     );
   }
@@ -686,10 +753,11 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
   Widget _kpiWithTrend(BuildContext context, String title, String value, IconData icon, Color color, String trend) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final isMobile = ResponsiveLayout.isMobile(context);
     final bool isPositive = trend.startsWith('+') || trend == 'SAVED' || trend == 'LIVE';
 
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.m),
+      padding: EdgeInsets.all(isMobile ? AppSpacing.s : AppSpacing.m),
       decoration: BoxDecoration(
         color: theme.cardTheme.color,
         borderRadius: BorderRadius.circular(AppRadius.m),
@@ -701,12 +769,12 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: EdgeInsets.all(isMobile ? 6 : 10),
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.1), 
               borderRadius: BorderRadius.circular(AppRadius.s)
             ),
-            child: Icon(icon, color: color, size: 22),
+            child: Icon(icon, color: color, size: isMobile ? 18 : 22),
           ),
           const SizedBox(width: AppSpacing.s),
           Expanded(
@@ -714,12 +782,12 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 10, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
+                Text(title, style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: isMobile ? 9 : 10, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 2),
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
-                  child: Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+                  child: Text(value, style: TextStyle(fontSize: isMobile ? 14 : 16, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
                 ),
                 const SizedBox(height: 2),
                 Container(
@@ -732,7 +800,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
                     trend,
                     style: TextStyle(
                       color: isPositive ? Colors.green : Colors.red,
-                      fontSize: 8,
+                      fontSize: isMobile ? 7 : 8,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -803,16 +871,26 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
             children: [
               const Icon(Icons.auto_awesome, color: Colors.orange, size: 20),
               const SizedBox(width: 8),
-              Text('Promotion Analytics', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: theme.colorScheme.onSurface)),
-              const Spacer(),
+              Expanded(
+                child: Text('Promotion Analytics', 
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: theme.colorScheme.onSurface),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
               Text('${promoSales.length} Active', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant)),
             ],
           ),
           Divider(height: 24, color: theme.dividerColor),
-          Text('Total Revenue Impact (Money Saved for Customers)', style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant)),
+          Text('Total Revenue Impact (Money Saved for Customers)', style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant), softWrap: true),
           const SizedBox(height: 4),
-          Text('₵ ${totalImpact.toStringAsFixed(2)}', 
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.orange)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text('₵ ${totalImpact.toStringAsFixed(2)}', 
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.orange)),
+          ),
           const SizedBox(height: 16),
           Text('Recent Promo Transactions:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: theme.colorScheme.onSurface)),
           const SizedBox(height: 8),
@@ -883,19 +961,41 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('System Analytics', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: theme.colorScheme.onSurface)),
-                  Text('Real-time revenue & category performance', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant)),
-                ],
+              Expanded(
+                flex: 2,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('System Analytics', 
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: theme.colorScheme.onSurface),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text('Real-time revenue & category performance', 
+                      style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text('TOP CATEGORY', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurfaceVariant)),
-                  Text(topCategory.toUpperCase(), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
-                ],
+              const SizedBox(width: 8),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('TOP CATEGORY', 
+                      style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurfaceVariant),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(topCategory.toUpperCase(), 
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -913,12 +1013,15 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-                      Text(
-                        amount > 0 ? '₵${amount.toStringAsFixed(0)}' : '',
-                        style: TextStyle(
-                          fontSize: 10, 
-                          fontWeight: FontWeight.bold, 
-                          color: isToday ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          amount > 0 ? '₵${amount.toStringAsFixed(0)}' : '',
+                          style: TextStyle(
+                            fontSize: 10, 
+                            fontWeight: FontWeight.bold, 
+                            color: isToday ? theme.colorScheme.primary : theme.colorScheme.onSurfaceVariant
+                          ),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -1139,7 +1242,8 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500)),
+            Expanded(child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500), maxLines: 1, overflow: TextOverflow.ellipsis)),
+            const SizedBox(width: 8),
             Text('${(value * 100).toInt()}%', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color)),
           ],
         ),

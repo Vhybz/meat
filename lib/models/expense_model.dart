@@ -21,7 +21,7 @@ class ExpenseRecord {
     return ExpenseRecord(
       id: json['id'],
       branchCode: json['branch_code'],
-      title: json['title'],
+      title: json['description'] ?? '',
       category: json['category'],
       amount: (json['amount'] as num).toDouble(),
       date: DateTime.parse(json['date']),
@@ -32,11 +32,10 @@ class ExpenseRecord {
   Map<String, dynamic> toJson() => {
     'id': id,
     'branch_code': branchCode,
-    'title': title,
+    'description': title,
     'category': category,
     'amount': amount,
     'date': date.toIso8601String(),
-    'notes': notes,
   };
 
   ExpenseRecord copyWith({

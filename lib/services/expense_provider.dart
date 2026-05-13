@@ -34,7 +34,9 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
       if (user == null || user.branchCode == null) return;
 
       final expenses = await _service.getExpenses(user.branchCode!);
-      state = state.copyWith(records: expenses);
+      if (state.records.length != expenses.length || state.records.toString() != expenses.toString()) {
+        state = state.copyWith(records: expenses);
+      }
     } catch (e) {}
   }
 

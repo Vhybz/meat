@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/branch_model.dart';
 import 'supabase_branch_service.dart';
+import 'user_provider.dart';
 
 final branchServiceProvider = Provider<SupabaseBranchService>((ref) {
   return SupabaseBranchService();
@@ -46,4 +47,15 @@ class BranchNotifier extends StateNotifier<AsyncValue<List<Branch>>> {
 
 final branchesProvider = StateNotifierProvider<BranchNotifier, AsyncValue<List<Branch>>>((ref) {
   return BranchNotifier(ref.watch(branchServiceProvider));
+});
+
+final currentBranchProvider = Provider<Branch?>((ref) {
+  final user = ref.watch(currentUserProvider);
+  final branchesAsync = ref.watch(branchesProvider);
+  
+  return branchesAsync.when(
+    data: (branches) => branches.where((b) => b.code == user?.branchCode).firstOrNull,
+    loading: () => null,
+    error: (_, __) => null,
+  );
 });

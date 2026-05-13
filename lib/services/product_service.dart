@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import '../models/product.dart';
 import 'supabase_product_service.dart';
 import 'user_provider.dart';
+import 'notification_service.dart';
+import 'sms_service.dart';
 
 abstract class ProductService {
   Future<List<Product>> getProducts(String branchCode);
@@ -31,10 +33,20 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
   }
 
   void _init() {
-    // Watch current user and restart subscription if branch changes
+    // 1. Watch current user and restart subscription if branch changes
     ref.listen(currentUserProvider, (previous, next) {
       if (next?.branchCode != previous?.branchCode) {
         _startSubscription();
+      }
+    });
+
+    // 2. Background Heartbeat: Silent refresh logic every 3 seconds
+    ref.listen(liveHeartbeatProvider, (_, __) {
+      final products = state.value;
+      if (products != null) {
+        _checkStockAlerts(products);
+        // We removed the forced rebuild [...products] to prevent UI flickering.
+        // Rebuilds will now only happen when Supabase stream sends real updates.
       }
     });
     
@@ -48,11 +60,30 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
       _subscription = _service.watchProducts(user.branchCode!).listen(
         (products) {
           state = AsyncValue.data(products);
+          _checkStockAlerts(products);
         },
         onError: (e, st) => state = AsyncValue.error(e, st),
       );
     } else {
       state = const AsyncValue.data([]);
+    }
+  }
+
+  void _checkStockAlerts(List<Product> products) {
+    for (final product in products) {
+      if (!product.isDeleted && product.stockQuantity <= product.lowStockThreshold) {
+        final title = 'LOW STOCK ALERT: ${product.name}';
+        final message = '${product.name} is below safety threshold (${product.stockQuantity}${product.unit} remaining).';
+        
+        // Avoid duplicate notifications for the same state
+        final existing = ref.read(notificationProvider).any((n) => n.title == title && !n.isRead);
+        if (!existing) {
+          ref.read(notificationProvider.notifier).addNotification(title, message);
+          
+          // Optionally notify admin via SMS
+          SmsService.notifyAdmin(title: title, message: message);
+        }
+      }
     }
   }
 
@@ -107,21 +138,22 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
   }
 
   Future<void> updateStock(String id, double quantityChange) async {
-    state.whenData((products) async {
-      try {
-        final product = products.firstWhere((p) => p.id == id);
-        final newQuantity = product.stockQuantity + quantityChange;
-        await _service.updateStock(id, newQuantity);
-        state = AsyncValue.data(products.map((p) {
-          if (p.id == id) {
-            return p.copyWith(stockQuantity: newQuantity);
-          }
-          return p;
-        }).toList());
-      } catch (e) {
-        debugPrint('Stock Update Error: $e');
-      }
-    });
+    final products = state.value;
+    if (products == null) return;
+
+    try {
+      final product = products.firstWhere((p) => p.id == id);
+      final newQuantity = product.stockQuantity + quantityChange;
+      await _service.updateStock(id, newQuantity);
+      state = AsyncValue.data(products.map((p) {
+        if (p.id == id) {
+          return p.copyWith(stockQuantity: newQuantity);
+        }
+        return p;
+      }).toList());
+    } catch (e) {
+      debugPrint('Stock Update Error: $e');
+    }
   }
 
   Future<void> applyPromotion(double percentage, DateTime start, DateTime end, PromoTarget target, PromoCustomerTarget customerTarget, {List<String>? selectedIds}) async {
@@ -168,6 +200,26 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
         )).toList());
       } catch (e) {
         debugPrint('Clear Promotions Error: $e');
+      }
+    });
+  }
+
+  Future<void> removePromotion(String productId) async {
+    state.whenData((products) async {
+      try {
+        await _service.applyPromotion(productId, 0, null, null, PromoTarget.both, PromoCustomerTarget.all);
+        state = AsyncValue.data(products.map((p) {
+          if (p.id == productId) {
+            return p.copyWith(
+              discountPercentage: 0,
+              promoStartDate: null,
+              promoEndDate: null,
+            );
+          }
+          return p;
+        }).toList());
+      } catch (e) {
+        debugPrint('Remove Promotion Error: $e');
       }
     });
   }

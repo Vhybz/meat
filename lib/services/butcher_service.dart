@@ -13,31 +13,33 @@ class SlaughterLogNotifier extends StateNotifier<AsyncValue<List<SlaughterLog>>>
     loadLogs();
   }
 
-  Future<void> loadLogs() async {
+  Future<void> loadLogs({bool silent = false}) async {
+    final branchCode = ref.read(currentUserProvider)?.branchCode;
+    if (branchCode == null) {
+      if (!silent) state = const AsyncValue.data([]);
+      return;
+    }
     try {
-      state = const AsyncValue.loading();
-      final user = ref.read(currentUserProvider);
-      if (user == null || user.branchCode == null) {
-        state = const AsyncValue.data([]);
-        return;
-      }
-      final logs = await _service.getSlaughterLogs(user.branchCode!);
+      if (!silent) state = const AsyncValue.loading();
+      final logs = await _service.getSlaughterLogs(branchCode);
       state = AsyncValue.data(logs);
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      if (!silent) state = AsyncValue.error(e, st);
     }
   }
 
   Future<void> addLog(SlaughterLog log) async {
     try {
-      final user = ref.read(currentUserProvider);
-      final logWithBranch = log.copyWith(branchCode: user?.branchCode);
+      final branchCode = ref.read(currentUserProvider)?.branchCode;
+      if (branchCode == null) throw Exception('No branch code assigned to user');
+      final logWithBranch = log.copyWith(branchCode: branchCode);
       await _service.addSlaughterLog(logWithBranch);
       state.whenData((logs) {
         state = AsyncValue.data([logWithBranch, ...logs]);
       });
     } catch (e) {
       debugPrint('Error adding slaughter log: $e');
+      rethrow;
     }
   }
 
@@ -46,6 +48,13 @@ class SlaughterLogNotifier extends StateNotifier<AsyncValue<List<SlaughterLog>>>
       final time = status == SlaughterStatus.completed ? DateTime.now() : null;
       await _service.updateSlaughterStatus(id, status, time: time);
       
+      // Real Workflow Logic: If slaughter is completed, make the batch available for processing
+      if (status == SlaughterStatus.completed) {
+        await _service.updateBatchStatus(id, 'processing');
+        // Refresh meat batches list so it appears in the processing screen
+        ref.read(meatBatchesProvider.notifier).loadBatches(silent: true);
+      }
+
       state.whenData((logs) {
         state = AsyncValue.data([
           for (final log in logs)
@@ -75,31 +84,33 @@ class MeatBatchNotifier extends StateNotifier<AsyncValue<List<MeatBatch>>> {
     loadBatches();
   }
 
-  Future<void> loadBatches() async {
+  Future<void> loadBatches({bool silent = false}) async {
+    final branchCode = ref.read(currentUserProvider)?.branchCode;
+    if (branchCode == null) {
+      if (!silent) state = const AsyncValue.data([]);
+      return;
+    }
     try {
-      state = const AsyncValue.loading();
-      final user = ref.read(currentUserProvider);
-      if (user == null || user.branchCode == null) {
-        state = const AsyncValue.data([]);
-        return;
-      }
-      final batches = await _service.getActiveBatches(user.branchCode!);
+      if (!silent) state = const AsyncValue.loading();
+      final batches = await _service.getActiveBatches(branchCode);
       state = AsyncValue.data(batches);
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      if (!silent) state = AsyncValue.error(e, st);
     }
   }
 
   Future<void> addBatch(MeatBatch batch) async {
     try {
-      final user = ref.read(currentUserProvider);
-      final batchWithBranch = batch.copyWith(branchCode: user?.branchCode);
+      final branchCode = ref.read(currentUserProvider)?.branchCode;
+      if (branchCode == null) throw Exception('No branch code assigned to user');
+      final batchWithBranch = batch.copyWith(branchCode: branchCode);
       await _service.addMeatBatch(batchWithBranch);
       state.whenData((batches) {
         state = AsyncValue.data([batchWithBranch, ...batches]);
       });
     } catch (e) {
       debugPrint('Error adding meat batch: $e');
+      rethrow;
     }
   }
 
@@ -129,31 +140,33 @@ class MeatCutNotifier extends StateNotifier<AsyncValue<List<MeatCut>>> {
     loadCuts();
   }
 
-  Future<void> loadCuts() async {
+  Future<void> loadCuts({bool silent = false}) async {
+    final branchCode = ref.read(currentUserProvider)?.branchCode;
+    if (branchCode == null) {
+      if (!silent) state = const AsyncValue.data([]);
+      return;
+    }
     try {
-      state = const AsyncValue.loading();
-      final user = ref.read(currentUserProvider);
-      if (user == null || user.branchCode == null) {
-        state = const AsyncValue.data([]);
-        return;
-      }
-      final cuts = await _service.getRecentCuts(user.branchCode!);
+      if (!silent) state = const AsyncValue.loading();
+      final cuts = await _service.getRecentCuts(branchCode);
       state = AsyncValue.data(cuts);
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      if (!silent) state = AsyncValue.error(e, st);
     }
   }
 
   Future<void> addCut(MeatCut cut) async {
     try {
-      final user = ref.read(currentUserProvider);
-      final cutWithBranch = cut.copyWith(branchCode: user?.branchCode);
+      final branchCode = ref.read(currentUserProvider)?.branchCode;
+      if (branchCode == null) throw Exception('No branch code assigned to user');
+      final cutWithBranch = cut.copyWith(branchCode: branchCode);
       await _service.addMeatCut(cutWithBranch);
       state.whenData((cuts) {
         state = AsyncValue.data([cutWithBranch, ...cuts]);
       });
     } catch (e) {
       debugPrint('Error adding meat cut: $e');
+      rethrow;
     }
   }
 }
@@ -170,26 +183,27 @@ class ButcherWasteNotifier extends StateNotifier<AsyncValue<List<Map<String, dyn
     loadWaste();
   }
 
-  Future<void> loadWaste() async {
+  Future<void> loadWaste({bool silent = false}) async {
+    final branchCode = ref.read(currentUserProvider)?.branchCode;
+    if (branchCode == null) {
+      if (!silent) state = const AsyncValue.data([]);
+      return;
+    }
     try {
-      state = const AsyncValue.loading();
-      final user = ref.read(currentUserProvider);
-      if (user == null || user.branchCode == null) {
-        state = const AsyncValue.data([]);
-        return;
-      }
-      final waste = await _service.getWaste(user.branchCode!);
+      if (!silent) state = const AsyncValue.loading();
+      final waste = await _service.getWaste(branchCode);
       state = AsyncValue.data(waste);
     } catch (e, st) {
-      state = AsyncValue.error(e, st);
+      if (!silent) state = AsyncValue.error(e, st);
     }
   }
 
   Future<void> addWaste(String batchId, String reason, double weight) async {
     try {
-      final user = ref.read(currentUserProvider);
-      await _service.addWaste(user?.branchCode ?? 'GLOBAL', batchId, reason, weight);
-      loadWaste(); // Refresh
+      final branchCode = ref.read(currentUserProvider)?.branchCode;
+      final code = branchCode ?? 'GLOBAL';
+      await _service.addWaste(code, batchId, reason, weight);
+      loadWaste(silent: true); // Refresh silently
     } catch (e) {
       debugPrint('Error adding waste: $e');
     }
@@ -198,4 +212,68 @@ class ButcherWasteNotifier extends StateNotifier<AsyncValue<List<Map<String, dyn
 
 final butcherWasteProvider = StateNotifierProvider<ButcherWasteNotifier, AsyncValue<List<Map<String, dynamic>>>>((ref) {
   return ButcherWasteNotifier(ref.watch(butcherServiceProvider), ref);
+});
+
+class ButcherOrderNotifier extends StateNotifier<AsyncValue<List<ButcherOrder>>> {
+  final SupabaseButcherService _service;
+  final Ref ref;
+
+  ButcherOrderNotifier(this._service, this.ref) : super(const AsyncValue.loading()) {
+    loadOrders();
+  }
+
+  Future<void> loadOrders({bool silent = false}) async {
+    final branchCode = ref.read(currentUserProvider)?.branchCode;
+    if (branchCode == null) {
+      if (!silent) state = const AsyncValue.data([]);
+      return;
+    }
+    try {
+      if (!silent) state = const AsyncValue.loading();
+      final orders = await _service.getButcherOrders(branchCode);
+      state = AsyncValue.data(orders);
+    } catch (e, st) {
+      // For demo/offline, let's provide some mock data if it fails
+      if (!silent) state = AsyncValue.data(_getMockOrders());
+    }
+  }
+
+  List<ButcherOrder> _getMockOrders() {
+    return [
+      ButcherOrder(
+        id: 'MS-ORD-101',
+        customerName: 'Prime Steakhouse Inc.',
+        items: ['Beef Sirloin (10kg)', 'Pork Ribs (5kg)'],
+        totalWeight: 15.0,
+        dueDate: DateTime.now().add(const Duration(days: 1)),
+        status: ButcherOrderStatus.preparing,
+      ),
+      ButcherOrder(
+        id: 'MS-ORD-102',
+        customerName: 'City Grill',
+        items: ['Chicken Wings (20kg)', 'Whole Chicken (10)'],
+        totalWeight: 32.5,
+        dueDate: DateTime.now().add(const Duration(days: 2)),
+        status: ButcherOrderStatus.pending,
+      ),
+    ];
+  }
+
+  Future<void> updateStatus(String id, ButcherOrderStatus status) async {
+    try {
+      await _service.updateButcherOrderStatus(id, status);
+      state.whenData((orders) {
+        state = AsyncValue.data([
+          for (final order in orders)
+            if (order.id == id) order.copyWith(status: status) else order
+        ]);
+      });
+    } catch (e) {
+      debugPrint('Error updating order status: $e');
+    }
+  }
+}
+
+final butcherOrdersProvider = StateNotifierProvider<ButcherOrderNotifier, AsyncValue<List<ButcherOrder>>>((ref) {
+  return ButcherOrderNotifier(ref.watch(butcherServiceProvider), ref);
 });

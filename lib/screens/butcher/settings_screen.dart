@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants.dart';
 import '../../services/butcher_navigation_provider.dart';
+import '../../services/user_provider.dart';
+import '../../models/user_model.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -63,14 +65,23 @@ class SettingsScreen extends ConsumerWidget {
             context,
             'Personal Profile',
             [
-              ListTile(
-                leading: const CircleAvatar(backgroundColor: AppColors.primaryMaroon, child: Icon(Icons.person, color: Colors.white)),
-                title: const Text('Ramon Dela Cruz'),
-                subtitle: const Text('ID: BTC-0042 • Butcher Level 3'),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 14),
-                onTap: () {
-                  ref.read(butcherNavProvider.notifier).setScreen(ButcherScreen.profile);
-                },
+              Builder(
+                builder: (context) {
+                  final user = ref.watch(currentUserProvider);
+                  return ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: AppColors.primaryMaroon,
+                      backgroundImage: user?.photoUrl != null ? NetworkImage(user!.photoUrl!) : null,
+                      child: user?.photoUrl == null ? const Icon(Icons.person, color: Colors.white) : null,
+                    ),
+                    title: Text(user?.name ?? 'Butcher Profile'),
+                    subtitle: Text('ID: ${user?.id.substring(0, 8).toUpperCase() ?? '---'} • ${user?.role.name.toUpperCase() ?? 'STAFF'}'),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                    onTap: () {
+                      ref.read(butcherNavProvider.notifier).setScreen(ButcherScreen.profile);
+                    },
+                  );
+                }
               ),
               ListTile(
                 leading: const Icon(Icons.lock_outline),

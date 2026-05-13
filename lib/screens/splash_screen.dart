@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/constants.dart';
-import '../services/auth_service.dart';
+import '../services/auth_provider.dart';
 import '../services/user_provider.dart';
 import '../models/user_model.dart';
 import '../widgets/butcher_loading.dart';
@@ -18,7 +18,6 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
   late Animation<double> _progressAnimation;
-  final _authService = AuthService();
 
   @override
   void initState() {
@@ -55,7 +54,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
     
     if (!mounted) return;
 
-    final currentUser = _authService.currentUser;
+    final currentUser = ref.read(authServiceProvider).currentUser;
     
     if (currentUser != null) {
       ref.read(currentUserIdProvider.notifier).state = currentUser.id;

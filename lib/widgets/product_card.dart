@@ -109,30 +109,34 @@ class ProductCard extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Text(
-                        price,
-                        style: TextStyle(
-                          color: promoLabel != null 
-                            ? Colors.orange.shade800 
-                            : theme.colorScheme.onSurface.withValues(alpha: 0.8),
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      if (originalPrice != null) ...[
-                        const SizedBox(width: 4),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      children: [
                         Text(
-                          originalPrice!,
+                          price,
                           style: TextStyle(
-                            color: theme.colorScheme.onSurfaceVariant,
-                            fontSize: 9,
-                            decoration: TextDecoration.lineThrough,
+                            color: promoLabel != null 
+                              ? Colors.orange.shade800 
+                              : theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
+                        if (originalPrice != null) ...[
+                          const SizedBox(width: 4),
+                          Text(
+                            originalPrice!,
+                            style: TextStyle(
+                              color: theme.colorScheme.onSurfaceVariant,
+                              fontSize: 9,
+                              decoration: TextDecoration.lineThrough,
+                            ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ],
               ),

@@ -59,7 +59,11 @@ class ButcherDashboard extends ConsumerWidget {
                   ),
                 ),
               logsAsync.when(
-                data: (logs) => _buildKPIGrid(constraints.maxWidth, logs, batchesAsync.value ?? []),
+                data: (logs) {
+                  final batches = batchesAsync.value ?? [];
+                  final wasteRecords = ref.watch(butcherWasteProvider).value ?? [];
+                  return _buildKPIGrid(constraints.maxWidth, logs, batches, wasteRecords);
+                },
                 loading: () => const LinearProgressIndicator(),
                 error: (err, stack) => const Text('Error loading stats'),
               ),
@@ -74,7 +78,7 @@ class ButcherDashboard extends ConsumerWidget {
                         children: [
                           _buildInteractiveWorkflow(ref),
                           const SizedBox(height: AppSpacing.l),
-                          _buildSlaughterLogs(logsAsync),
+                          _buildSlaughterLogs(ref, logsAsync),
                         ],
                       ),
                     ),
@@ -102,7 +106,7 @@ class ButcherDashboard extends ConsumerWidget {
                     const SizedBox(height: AppSpacing.l),
                     _buildMeatSummary(logsAsync),
                     const SizedBox(height: AppSpacing.l),
-                    _buildSlaughterLogs(logsAsync),
+                    _buildSlaughterLogs(ref, logsAsync),
                     const SizedBox(height: AppSpacing.l),
                     _buildQuickActions(ref),
                   ],
@@ -207,8 +211,7 @@ class ButcherDashboard extends ConsumerWidget {
           children: [
             const Row(
               children: [
-                Text("Active Operations Pipeline", style: TextStyle(fontWeight: FontWeight.bold)),
-                Spacer(),
+                Expanded(child: Text("Active Operations Pipeline", style: TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
                 Icon(Icons.info_outline, size: 14, color: AppColors.textLight),
               ],
             ),
@@ -244,27 +247,32 @@ class ButcherDashboard extends ConsumerWidget {
     );
   }
 
-  Widget _buildKPIGrid(double maxWidth, List<SlaughterLog> logs, List<MeatBatch> batches) {
+  Widget _buildKPIGrid(double maxWidth, List<SlaughterLog> logs, List<MeatBatch> batches, List<Map<String, dynamic>> wasteRecords) {
     final completedCount = logs.where((l) => l.status == SlaughterStatus.completed).length;
     final pendingCount = logs.where((l) => l.status == SlaughterStatus.pending).length;
     final totalYield = logs.where((l) => l.status == SlaughterStatus.completed).fold(0.0, (sum, l) => sum + l.estimatedYield);
+    final totalWaste = wasteRecords.fold(0.0, (sum, w) => sum + (double.tryParse(w['weight']?.toString() ?? '0') ?? 0));
 
-    int crossAxisCount = maxWidth < 600 ? 2 : (maxWidth < 1200 ? 3 : 5);
+    final bool isMobile = maxWidth < 700;
+    final double itemWidth = isMobile ? (maxWidth - 48) / 2 : (maxWidth - 80) / 5;
 
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: crossAxisCount,
-      crossAxisSpacing: AppSpacing.m,
-      mainAxisSpacing: AppSpacing.m,
-      childAspectRatio: 2.2,
+    return Wrap(
+      spacing: AppSpacing.m,
+      runSpacing: AppSpacing.m,
       children: [
-        KPICard(title: 'Animals Today', value: '${logs.length}', subValue: '$pendingCount Pending', icon: Icons.pets, iconColor: Colors.blue, iconBgColor: const Color(0xFFE3F2FD)),
-        KPICard(title: 'Slaughtered', value: '$completedCount', icon: Icons.done_all, iconColor: Colors.green, iconBgColor: const Color(0xFFE8F5E9)),
-        KPICard(title: 'Yield (Est. kg)', value: totalYield.toStringAsFixed(1), icon: Icons.layers, iconColor: Colors.purple, iconBgColor: const Color(0xFFF3E5F5)),
-        KPICard(title: 'Active Batches', value: '${batches.length}', icon: Icons.inventory_2, iconColor: Colors.orange, iconBgColor: const Color(0xFFFFF3E0)),
-        const KPICard(title: 'Waste Recorded', value: '25.0 kg', icon: Icons.delete_outline, iconColor: Colors.red, iconBgColor: Color(0xFFFFEBEE)),
+        _kpiWrapper(KPICard(title: 'Animals Today', value: '${logs.length}', subValue: '$pendingCount Pending', icon: Icons.pets, iconColor: Colors.blue, iconBgColor: const Color(0xFFE3F2FD)), itemWidth),
+        _kpiWrapper(KPICard(title: 'Slaughtered', value: '$completedCount', icon: Icons.done_all, iconColor: Colors.green, iconBgColor: const Color(0xFFE8F5E9)), itemWidth),
+        _kpiWrapper(KPICard(title: 'Yield (Est. kg)', value: totalYield.toStringAsFixed(1), icon: Icons.layers, iconColor: Colors.purple, iconBgColor: const Color(0xFFF3E5F5)), itemWidth),
+        _kpiWrapper(KPICard(title: 'Active Batches', value: '${batches.length}', icon: Icons.inventory_2, iconColor: Colors.orange, iconBgColor: const Color(0xFFFFF3E0)), itemWidth),
+        _kpiWrapper(KPICard(title: 'Waste Recorded', value: '${totalWaste.toStringAsFixed(1)} kg', icon: Icons.delete_outline, iconColor: Colors.red, iconBgColor: const Color(0xFFFFEBEE)), itemWidth),
       ],
+    );
+  }
+
+  Widget _kpiWrapper(Widget child, double width) {
+    return SizedBox(
+      width: width,
+      child: child,
     );
   }
 
@@ -273,7 +281,7 @@ class ButcherDashboard extends ConsumerWidget {
         child: Icon(Icons.arrow_forward_ios, color: AppColors.borderGray, size: 12),
       );
 
-  Widget _buildSlaughterLogs(AsyncValue<List<SlaughterLog>> logsAsync) {
+  Widget _buildSlaughterLogs(WidgetRef ref, AsyncValue<List<SlaughterLog>> logsAsync) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.l),
@@ -283,7 +291,10 @@ class ButcherDashboard extends ConsumerWidget {
             Row(
               children: [
                 const Expanded(child: Text('Recent Activity Logs', style: TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-                TextButton(onPressed: () {}, child: const Text('View Detailed Logs', style: TextStyle(fontSize: 12))),
+                TextButton(
+                  onPressed: () => ref.read(butcherNavProvider.notifier).setScreen(ButcherScreen.slaughterLog), 
+                  child: const Text('View Detailed Logs', style: TextStyle(fontSize: 12))
+                ),
               ],
             ),
             const SizedBox(height: AppSpacing.m),
@@ -303,8 +314,8 @@ class ButcherDashboard extends ConsumerWidget {
                       DataColumn(label: Text('Status', style: TextStyle(fontSize: 11))),
                     ],
                     rows: logs.take(5).map((log) => DataRow(cells: [
-                      DataCell(Text(log.id, style: const TextStyle(fontSize: 11))),
-                      DataCell(Text(log.animalId, style: const TextStyle(fontSize: 11))),
+                      DataCell(SizedBox(width: 80, child: Text(log.id, style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis))),
+                      DataCell(SizedBox(width: 80, child: Text(log.animalId, style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis))),
                       DataCell(Text(log.type.displayName, style: const TextStyle(fontSize: 11))),
                       DataCell(Text(
                         log.slaughterTime != null 
@@ -378,7 +389,9 @@ class ButcherDashboard extends ConsumerWidget {
               ref.read(butcherNavProvider.notifier).setScreen(ButcherScreen.animalIntake);
             }),
             const SizedBox(height: AppSpacing.s),
-            _buildActionBtn('Print Batch Labels', Icons.print, false, () {}),
+            _buildActionBtn('Print Batch Labels', Icons.print, false, () {
+              ref.read(butcherNavProvider.notifier).setScreen(ButcherScreen.batchManagement);
+            }),
             const SizedBox(height: AppSpacing.s),
             _buildActionBtn('Record Waste', Icons.delete_sweep, false, () {
               ref.read(butcherNavProvider.notifier).setScreen(ButcherScreen.wasteManagement);

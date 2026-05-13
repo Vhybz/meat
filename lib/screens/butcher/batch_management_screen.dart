@@ -26,45 +26,58 @@ class BatchManagementScreen extends ConsumerWidget {
                 if (batches.isEmpty) {
                   return const Center(child: Text('No batches found. Create one in Animal Intake.'));
                 }
-                return GridView.builder(
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    crossAxisSpacing: AppSpacing.m,
-                    mainAxisSpacing: AppSpacing.m,
-                    childAspectRatio: 1.5,
-                  ),
-                  itemCount: batches.length,
-                  itemBuilder: (context, index) {
-                    final batch = batches[index];
-                    return Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(AppSpacing.m),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(batch.id, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                const Icon(Icons.qr_code, size: 20),
-                              ],
-                            ),
-                            const Divider(),
-                            Text('Type: ${batch.meatType}', style: const TextStyle(fontSize: 12)),
-                            Text('Weight: ${WeightConverter.formatShort(batch.weight)}', style: const TextStyle(fontSize: 12)),
-                            const Spacer(),
-                            Row(
-                              children: [
-                                StatusChip(label: batch.status.toUpperCase(), color: Colors.blue),
-                                const Spacer(),
-                                IconButton(onPressed: () {}, icon: const Icon(Icons.print, size: 16), tooltip: 'Print Labels'),
-                              ],
-                            ),
-                          ],
-                        ),
+                return LayoutBuilder(
+                  builder: (context, constraints) {
+                    final int crossAxisCount = constraints.maxWidth < 600 ? 1 : (constraints.maxWidth < 1000 ? 2 : 3);
+                    return GridView.builder(
+                      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                        crossAxisCount: crossAxisCount,
+                        crossAxisSpacing: AppSpacing.m,
+                        mainAxisSpacing: AppSpacing.m,
+                        childAspectRatio: 1.8,
                       ),
+                      itemCount: batches.length,
+                      itemBuilder: (context, index) {
+                        final batch = batches[index];
+                        return Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(AppSpacing.m),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Expanded(child: Text(batch.id, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis)),
+                                    const Icon(Icons.qr_code, size: 20),
+                                  ],
+                                ),
+                                const Divider(),
+                                Text('Type: ${batch.meatType}', style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis),
+                                Text('Weight: ${WeightConverter.formatShort(batch.weight)}', style: const TextStyle(fontSize: 12)),
+                                const Spacer(),
+                                Row(
+                                  children: [
+                                    StatusChip(label: batch.status.toUpperCase(), color: Colors.blue),
+                                    const Spacer(),
+                                    IconButton(
+                                      onPressed: () {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Sending batch ${batch.id} to label printer...')),
+                                        );
+                                      }, 
+                                      icon: const Icon(Icons.print, size: 16), 
+                                      tooltip: 'Print Labels'
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
                     );
-                  },
+                  }
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),

@@ -12,6 +12,7 @@ import '../../widgets/responsive_layout.dart';
 import '../../widgets/app_sidebar.dart';
 import '../../services/menu_service.dart';
 import '../../services/branch_provider.dart';
+import '../../widgets/role_pop_scope.dart';
 
 class UserManagementScreen extends ConsumerStatefulWidget {
   const UserManagementScreen({super.key});
@@ -41,13 +42,27 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
     final isDesktop = ResponsiveLayout.isDesktop(context);
     const currentRoute = '/admin/users';
 
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      appBar: const MainAppBar(title: 'Staff Management', showMenuButton: true),
-      drawer: isDesktop
-          ? null
-          : Drawer(
-              child: AppSidebar(
+    return RolePopScope(
+      currentRoute: currentRoute,
+      child: Scaffold(
+        backgroundColor: theme.scaffoldBackgroundColor,
+        appBar: const MainAppBar(title: 'Staff Management', showMenuButton: true),
+        drawer: isDesktop
+            ? null
+            : Drawer(
+                child: AppSidebar(
+                  userId: user.id,
+                  userName: user.name,
+                  userRole: user.activePrimaryRole.name.toUpperCase(),
+                  currentRoute: currentRoute,
+                  items: MenuService.getMenuItemsForUser(user),
+                  onTap: (route) => MenuService.navigate(context, route, currentRoute),
+                ),
+              ),
+        body: Row(
+          children: [
+            if (isDesktop)
+              AppSidebar(
                 userId: user.id,
                 userName: user.name,
                 userRole: user.activePrimaryRole.name.toUpperCase(),
@@ -55,42 +70,31 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                 items: MenuService.getMenuItemsForUser(user),
                 onTap: (route) => MenuService.navigate(context, route, currentRoute),
               ),
-            ),
-      body: Row(
-        children: [
-          if (isDesktop)
-            AppSidebar(
-              userId: user.id,
-              userName: user.name,
-              userRole: user.activePrimaryRole.name.toUpperCase(),
-              currentRoute: currentRoute,
-              items: MenuService.getMenuItemsForUser(user),
-              onTap: (route) => MenuService.navigate(context, route, currentRoute),
-            ),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSpacing.l),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(context, ref),
-                  const SizedBox(height: AppSpacing.m),
-                  _buildSummaryInfo(context, activeUsers, pendingUsers),
-                  if (pendingUsers.isNotEmpty) ...[
-                    const SizedBox(height: AppSpacing.xl),
-                    Text('Pending Approvals', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.colorScheme.secondary)),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(AppSpacing.l),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(context, ref),
                     const SizedBox(height: AppSpacing.m),
-                    _buildPendingList(context, ref, pendingUsers),
+                    _buildSummaryInfo(context, activeUsers, pendingUsers),
+                    if (pendingUsers.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.xl),
+                      Text('Pending Approvals', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.colorScheme.secondary)),
+                      const SizedBox(height: AppSpacing.m),
+                      _buildPendingList(context, ref, pendingUsers),
+                    ],
+                    const SizedBox(height: AppSpacing.xl),
+                    Text('Team Members', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+                    const SizedBox(height: AppSpacing.m),
+                    _buildUserList(context, ref, approvedUsers),
                   ],
-                  const SizedBox(height: AppSpacing.xl),
-                  Text('Team Members', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
-                  const SizedBox(height: AppSpacing.m),
-                  _buildUserList(context, ref, approvedUsers),
-                ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -129,16 +133,11 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
               children: [
                 IconButton(
                   icon: const Icon(Icons.check_circle, color: Colors.green),
-                  onPressed: () {
-                    ref.read(userProvider.notifier).approveUser(user.id);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Approved ${user.name} as ${user.role.name}')),
-                    );
-                  },
+                  onPressed: () => _confirmApproval(context, ref, user),
                 ),
                 IconButton(
                   icon: const Icon(Icons.cancel, color: Colors.red),
-                  onPressed: () => ref.read(userProvider.notifier).deleteUser(user.id),
+                  onPressed: () => _confirmDelete(context, ref, user),
                 ),
               ],
             ),
@@ -149,18 +148,64 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
     );
   }
 
+  void _confirmApproval(BuildContext context, WidgetRef ref, UserAccount user) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
+        title: const Text('Approve Staff Access?'),
+        content: Text('Are you sure you want to approve ${user.name} as a ${user.role.name}? They will be notified via SMS and can log in immediately.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () {
+              ref.read(userProvider.notifier).approveUser(user.id);
+              Navigator.pop(context);
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Success'),
+                  content: Text('${user.name} has been approved and notified.'),
+                  actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK'))],
+                ),
+              );
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+            child: const Text('Confirm Approval'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildHeader(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    return Row(
+    final isMobile = ResponsiveLayout.isMobile(context);
+    
+    return Flex(
+      direction: isMobile ? Axis.vertical : Axis.horizontal,
+      crossAxisAlignment: isMobile ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Staff & Access Control', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
-            Text('Manage system roles, permissions, and team approvals', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
-          ],
+        Expanded(
+          flex: isMobile ? 0 : 1,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Staff & Access Control', 
+                style: TextStyle(fontSize: isMobile ? 20 : 24, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text('Manage system roles, permissions, and team approvals', 
+                style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
         ),
+        if (isMobile) const SizedBox(height: AppSpacing.m) else const SizedBox(width: 16),
         Row(
           children: [
             IconButton(
@@ -172,11 +217,11 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
             ElevatedButton.icon(
               onPressed: () => _showAddUserDialog(context, ref),
               icon: const Icon(Icons.person_add_rounded),
-              label: const Text('Add New Staff'),
+              label: const Text('Add Staff'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: theme.colorScheme.primary,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24, vertical: 12),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.s)),
               ),
             ),
@@ -187,12 +232,12 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
   }
 
   Widget _buildSummaryInfo(BuildContext context, List<UserAccount> active, List<UserAccount> pending) {
-    return Row(
+    return Wrap(
+      spacing: AppSpacing.m,
+      runSpacing: AppSpacing.m,
       children: [
         _miniStatCard(context, 'Total Staff', active.length.toString(), Icons.people, Colors.blue),
-        const SizedBox(width: AppSpacing.m),
         _miniStatCard(context, 'Awaiting Approval', pending.length.toString(), Icons.hourglass_top, Colors.orange),
-        const SizedBox(width: AppSpacing.m),
         _miniStatCard(context, 'Active Today', active.where((u) => u.status == AccountStatus.approved).length.toString(), Icons.check_circle_outline, Colors.green),
       ],
     );
@@ -224,6 +269,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
   Widget _buildUserList(BuildContext context, WidgetRef ref, List<UserAccount> users) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final isMobile = ResponsiveLayout.isMobile(context);
 
     if (users.isEmpty) {
       return Container(
@@ -271,16 +317,16 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                 leading: Stack(
                   children: [
                     CircleAvatar(
-                      radius: 26,
+                      radius: isMobile ? 22 : 26,
                       backgroundColor: _getRoleColor(effectiveRole).withValues(alpha: isSuspended ? 0.05 : 0.1),
-                      child: Icon(_getRoleIcon(effectiveRole), color: _getRoleColor(effectiveRole).withValues(alpha: isSuspended ? 0.3 : 1.0), size: 24),
+                      child: Icon(_getRoleIcon(effectiveRole), color: _getRoleColor(effectiveRole).withValues(alpha: isSuspended ? 0.3 : 1.0), size: isMobile ? 20 : 24),
                     ),
                     Positioned(
                       right: 0,
                       bottom: 0,
                       child: Container(
-                        width: 12,
-                        height: 12,
+                        width: 10,
+                        height: 10,
                         decoration: BoxDecoration(
                           color: isSuspended ? Colors.red : Colors.green,
                           shape: BoxShape.circle,
@@ -292,17 +338,20 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                 ),
                 title: Row(
                   children: [
-                    Text(user.name, 
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold, 
-                        fontSize: 16,
-                        color: isSuspended ? theme.colorScheme.onSurfaceVariant : theme.colorScheme.onSurface,
-                        decoration: isSuspended ? TextDecoration.lineThrough : null,
-                      )
+                    Flexible(
+                      child: Text(user.name, 
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold, 
+                          fontSize: isMobile ? 14 : 16,
+                          color: isSuspended ? theme.colorScheme.onSurfaceVariant : theme.colorScheme.onSurface,
+                          decoration: isSuspended ? TextDecoration.lineThrough : null,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     if (isPromoted) ...[
-                      StatusChip(label: 'PROMOTED', color: Colors.purple),
+                      const StatusChip(label: 'PROMO', color: Colors.purple),
                       const SizedBox(width: 4),
                     ],
                   ],
@@ -311,36 +360,45 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 4),
-                    Text('${user.email} • ID: ${user.id.substring(0, 8).toUpperCase()}', style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 11)),
-                    Row(
-                      children: [
-                        Icon(Icons.map_outlined, size: 12, color: theme.colorScheme.onSurfaceVariant),
-                        const SizedBox(width: 4),
-                        Text(user.branchCode ?? "Global HQ", style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 11)),
-                        const SizedBox(width: 12),
-                        Icon(Icons.phone_outlined, size: 12, color: theme.colorScheme.onSurfaceVariant),
-                        const SizedBox(width: 4),
-                        Text(user.phone ?? "No Phone", style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 11)),
-                      ],
+                    Text(user.email, 
+                      style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 10),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        children: [
+                          Icon(Icons.map_outlined, size: 10, color: theme.colorScheme.onSurfaceVariant),
+                          const SizedBox(width: 4),
+                          Text(user.branchCode ?? "Global HQ", style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 10)),
+                          const SizedBox(width: 12),
+                          Icon(Icons.phone_outlined, size: 10, color: theme.colorScheme.onSurfaceVariant),
+                          const SizedBox(width: 4),
+                          Text(user.phone ?? "No Phone", style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 10)),
+                        ],
+                      ),
                     ),
                   ],
                 ),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: _getRoleColor(effectiveRole).withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: _getRoleColor(effectiveRole).withValues(alpha: 0.3)),
+                    if (!isMobile)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: _getRoleColor(effectiveRole).withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: _getRoleColor(effectiveRole).withValues(alpha: 0.3)),
+                        ),
+                        child: Text(
+                          effectiveRole.name.toUpperCase(),
+                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: _getRoleColor(effectiveRole), letterSpacing: 0.5),
+                        ),
                       ),
-                      child: Text(
-                        effectiveRole.name.toUpperCase(),
-                        style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: _getRoleColor(effectiveRole), letterSpacing: 0.5),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 4),
                     _buildUserActionMenu(context, ref, user, isSuspended, isPromoted),
                   ],
                 ),
@@ -714,7 +772,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
-          title: Text('Temporarily Promote ${user.name}'),
+          title: Text('Temporarily Promote ${user.name}', overflow: TextOverflow.ellipsis),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -752,6 +810,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
               ),
             ],
           ),
+          actionsOverflowButtonSpacing: 8,
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: TextStyle(color: theme.colorScheme.onSurfaceVariant))),
             ElevatedButton(

@@ -23,6 +23,7 @@ import '../../models/customer_model.dart';
 import '../../models/user_model.dart';
 import '../../services/receipt_service.dart';
 import '../../services/sms_service.dart';
+import '../../widgets/role_pop_scope.dart';
 
 enum POSView { sales, history }
 
@@ -67,55 +68,79 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
     final transfers = ref.watch(transferProvider);
     final pendingTransfers = transfers.where((t) => t.status == TransferStatus.pending).toList();
     final isWholesale = ref.watch(isWholesaleProvider);
+    final menuItems = ref.watch(menuItemsProvider);
 
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      appBar: MainAppBar(
-        title: _currentView == POSView.sales 
-            ? 'POS System (${isWholesale ? "Wholesale" : "Retail"})' 
-            : 'Sales History',
-        actions: [
-          _buildNotificationBadge(pendingTransfers),
-        ],
-      ),
-      drawer: isDesktop ? null : Drawer(child: _buildSidebar(context, user)),
-      body: Row(
-        children: [
-          if (isDesktop) _buildSidebar(context, user),
-          Expanded(
-            child: _currentView == POSView.sales 
-              ? _buildPOSLayout(isMobile, isDesktop)
-              : _buildHistoryLayout(),
-          ),
-        ],
-      ),
-      bottomNavigationBar: _buildFooter(),
-      floatingActionButton: (isMobile && _currentView == POSView.sales)
-          ? FloatingActionButton.extended(
-              onPressed: () => _showMobileCart(),
-              label: const Text('View Cart'),
-              icon: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  const Icon(Icons.shopping_cart),
-                  if (ref.watch(cartProvider).isNotEmpty)
-                    Positioned(
-                      right: -8,
-                      top: -8,
-                      child: CircleAvatar(
-                        radius: 8,
-                        backgroundColor: Colors.red,
-                        child: Text(
-                          '${ref.watch(cartProvider).length}',
-                          style: const TextStyle(color: Colors.white, fontSize: 8),
-                        ),
-                      ),
-                    ),
-                ],
+    return RolePopScope(
+      currentRoute: '/cashier',
+      child: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) return;
+          if (_currentView != POSView.sales) {
+            setState(() => _currentView = POSView.sales);
+          } else {
+            // Already on Sales (Home), stay here instead of showing exit dialog
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Use the menu to logout or switch accounts'),
+                duration: Duration(seconds: 2),
               ),
-              backgroundColor: AppColors.primaryMaroon,
-            )
-          : null,
+            );
+          }
+        },
+        child: Scaffold(
+          backgroundColor: theme.scaffoldBackgroundColor,
+          appBar: MainAppBar(
+            title: _currentView == POSView.sales 
+                ? 'POS System (${isWholesale ? "Wholesale" : "Retail"})' 
+                : 'Sales History',
+            actions: [
+              _buildNotificationBadge(pendingTransfers),
+            ],
+          ),
+        drawer: isDesktop ? null : Drawer(child: _buildSidebar(context, user, menuItems)),
+        body: Row(
+          children: [
+            if (isDesktop) _buildSidebar(context, user, menuItems),
+            Expanded(
+              child: _currentView == POSView.sales 
+                ? _buildPOSLayout(isMobile, isDesktop)
+                : _buildHistoryLayout(),
+            ),
+          ],
+        ),
+        bottomNavigationBar: SafeArea(child: _buildFooter()),
+        floatingActionButton: (isMobile && _currentView == POSView.sales)
+            ? SafeArea(
+                child: FloatingActionButton.extended(
+                  onPressed: () => _showMobileCart(),
+                  label: const Text('View Cart'),
+                  icon: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      const Icon(Icons.shopping_cart),
+                      if (ref.watch(cartProvider).isNotEmpty)
+                        Positioned(
+                          right: -8,
+                          top: -8,
+                          child: CircleAvatar(
+                            radius: 8,
+                            backgroundColor: Colors.red,
+                            child: Text(
+                              '${ref.watch(cartProvider).length}',
+                              style: const TextStyle(color: Colors.white, fontSize: 8),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  backgroundColor: AppColors.primaryMaroon,
+                  foregroundColor: Colors.white,
+                ),
+              )
+            : null,
+      ),
+    ),
     );
   }
 
@@ -204,14 +229,14 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
     );
   }
 
-  Widget _buildSidebar(BuildContext context, UserAccount user) {
+  Widget _buildSidebar(BuildContext context, UserAccount user, List<SidebarItem> menuItems) {
     const currentRoute = '/cashier';
     return AppSidebar(
       userId: user.id,
       userName: user.name,
       userRole: user.activePrimaryRole.name.toUpperCase(),
       currentRoute: currentRoute,
-      items: MenuService.getMenuItemsForUser(user),
+      items: menuItems,
       onTap: (route) => MenuService.navigate(context, route, currentRoute),
     );
   }
@@ -565,7 +590,14 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(fontSize: fontSize, fontWeight: isBold ? FontWeight.bold : FontWeight.normal, color: theme.colorScheme.onSurfaceVariant)),
+          Expanded(
+            child: Text(label, 
+              style: TextStyle(fontSize: fontSize, fontWeight: isBold ? FontWeight.bold : FontWeight.normal, color: theme.colorScheme.onSurfaceVariant),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
           Text(value, style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold, color: color ?? theme.colorScheme.onSurface)),
         ],
       ),
@@ -583,9 +615,21 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
     );
   }
 
-  void _completeSale(WidgetRef ref, List<PaymentDetail> payments, double finalTotal, double discount, String promo) {
+  void _completeSale(WidgetRef ref, List<PaymentDetail> payments, double finalTotal, double discount, String promo) async {
     final cartItems = ref.read(cartProvider);
     final currentUser = ref.read(currentUserProvider);
+    
+    final double amountPaid = payments.fold(0.0, (sum, p) => sum + p.amount);
+    final double balance = finalTotal - amountPaid;
+
+    // Debt Enforcement: If there's a balance, a customer MUST be selected
+    if (balance > 0.01 && _selectedCustomer == null) {
+      final proceed = await _showDebtCustomerRequiredDialog();
+      if (!proceed) return;
+      
+      // If they registered/selected a customer, _selectedCustomer will be non-null now
+      if (_selectedCustomer == null) return; 
+    }
 
     final sale = SaleRecord(
       id: 'INV-${DateTime.now().millisecondsSinceEpoch}',
@@ -606,7 +650,7 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
       customerPhone: _selectedCustomer?.phone,
     );
 
-    ref.read(saleHistoryProvider.notifier).addSale(sale);
+    await ref.read(saleHistoryProvider.notifier).addSale(sale);
     ref.read(cartProvider.notifier).clear();
     
     // Send SMS 
@@ -617,6 +661,40 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
     });
 
     _showPrintConfirmation(sale);
+  }
+
+  Future<bool> _showDebtCustomerRequiredDialog() async {
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Customer Required'),
+          ],
+        ),
+        content: const Text(
+          'This transaction has an outstanding balance (Debt). \n\n'
+          'To track this debt, you must select or register a customer before completing the sale.'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel Sale'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context, true);
+              _showCustomerDialog();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMaroon, foregroundColor: Colors.white),
+            child: const Text('Register / Select Customer'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
   }
 
   void _showPrintConfirmation(SaleRecord sale) {
@@ -633,7 +711,7 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
   Widget _buildFooter() {
     final theme = Theme.of(context);
     return Container(
-      height: 60,
+      height: 65,
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         border: Border(top: BorderSide(color: theme.dividerColor)),
@@ -684,12 +762,25 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Recent Transactions', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
-              ElevatedButton.icon(
-                onPressed: () => ReceiptService.printSalesReport(filteredHistory, title: 'Cashier Daily Sales Report'),
-                icon: const Icon(Icons.print),
-                label: const Text('Print Filtered Report'),
-                style: ElevatedButton.styleFrom(backgroundColor: theme.colorScheme.primary, foregroundColor: Colors.white),
+              Expanded(
+                child: Text('Recent Transactions', 
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: ElevatedButton.icon(
+                  onPressed: () => ReceiptService.printSalesReport(filteredHistory, title: 'Cashier Daily Sales Report'),
+                  icon: const Icon(Icons.print, size: 18),
+                  label: const Text('Print Report', style: TextStyle(fontSize: 12)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary, 
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                ),
               ),
             ],
           ),
@@ -698,32 +789,53 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
             children: [
               Expanded(
                 flex: 2,
-                child: TextField(
-                  onChanged: (v) => setState(() => _historySearchQuery = v),
-                  decoration: InputDecoration(
-                    hintText: 'Search Receipt #...',
-                    prefixIcon: const Icon(Icons.search),
+                child: SizedBox(
+                  height: 45,
+                  child: TextField(
+                    onChanged: (v) => setState(() => _historySearchQuery = v),
+                    decoration: InputDecoration(
+                      hintText: 'Search Receipt #...',
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                    style: const TextStyle(fontSize: 13),
                   ),
                 ),
               ),
-              const SizedBox(width: AppSpacing.m),
+              const SizedBox(width: AppSpacing.s),
               Expanded(
-                child: TextButton.icon(
-                  onPressed: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: DateTime.now(),
-                      firstDate: DateTime(2023),
-                      lastDate: DateTime.now(),
-                    );
-                    if (picked != null) setState(() => _historyFilterDate = picked);
-                  },
-                  icon: const Icon(Icons.calendar_today),
-                  label: Text(_historyFilterDate == null ? 'Filter Date' : DateFormat('MMM dd, yyyy').format(_historyFilterDate!)),
+                child: SizedBox(
+                  height: 45,
+                  child: TextButton.icon(
+                    onPressed: () async {
+                      final picked = await showDatePicker(
+                        context: context,
+                        initialDate: DateTime.now(),
+                        firstDate: DateTime(2023),
+                        lastDate: DateTime.now(),
+                      );
+                      if (picked != null) setState(() => _historyFilterDate = picked);
+                    },
+                    icon: const Icon(Icons.calendar_today, size: 16),
+                    label: Text(
+                      _historyFilterDate == null ? 'Date' : DateFormat('MMM dd').format(_historyFilterDate!),
+                      style: const TextStyle(fontSize: 12),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 4),
+                    ),
+                  ),
                 ),
               ),
               if (_historyFilterDate != null || _historySearchQuery.isNotEmpty)
-                IconButton(icon: const Icon(Icons.clear), onPressed: () => setState(() { _historyFilterDate = null; _historySearchQuery = ''; })),
+                IconButton(
+                  icon: const Icon(Icons.clear, size: 20), 
+                  onPressed: () => setState(() { _historyFilterDate = null; _historySearchQuery = ''; }),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
             ],
           ),
           const SizedBox(height: AppSpacing.l),
@@ -739,18 +851,30 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
                       child: ListTile(
                         leading: CircleAvatar(
                           backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
-                          child: Icon(Icons.receipt_long, color: theme.colorScheme.primary),
+                          child: Icon(Icons.receipt_long, color: theme.colorScheme.primary, size: 20),
                         ),
-                        title: Text(sale.id, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('${DateFormat('HH:mm').format(sale.timestamp)} • ${sale.items.length} items • ${sale.customerName ?? "Walk-in"}'),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
+                        title: Row(
                           children: [
-                            Text('₵${sale.totalAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                            Expanded(
+                              child: Text(sale.id, 
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), 
+                                overflow: TextOverflow.ellipsis
+                              ),
+                            ),
                             const SizedBox(width: 8),
-                            const Icon(Icons.chevron_right),
+                            Text('₵${sale.totalAmount.toStringAsFixed(2)}', 
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)
+                            ),
                           ],
                         ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('${DateFormat('HH:mm').format(sale.timestamp)} • ${sale.items.length} items', style: const TextStyle(fontSize: 10)),
+                            Text('Cust: ${sale.customerName ?? "Walk-in"}', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant), overflow: TextOverflow.ellipsis),
+                          ],
+                        ),
+                        trailing: const Icon(Icons.chevron_right, size: 20),
                         onTap: () => _showSaleDetails(sale),
                       ),
                     );
@@ -773,32 +897,40 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
           return Dialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
             backgroundColor: theme.colorScheme.surface,
-            child: SizedBox(
-              width: 450,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 450, maxHeight: 650),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(AppSpacing.m),
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m, vertical: 8),
                     decoration: BoxDecoration(
                       color: theme.colorScheme.primary,
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.l)),
                     ),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Row(
-                          children: [
-                            const Icon(Icons.receipt_long, color: Colors.white),
-                            const SizedBox(width: AppSpacing.m),
-                            Text(
-                              'Transaction ${sale.id}',
-                              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                            ),
-                          ],
+                        const Icon(Icons.receipt_long, color: Colors.white, size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Transaction Details',
+                                style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.bold),
+                              ),
+                              Text(
+                                sale.id,
+                                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
                         ),
                         IconButton(
-                          icon: const Icon(Icons.close, color: Colors.white70),
+                          icon: const Icon(Icons.close, color: Colors.white70, size: 20),
                           onPressed: () => Navigator.pop(context),
                         ),
                       ],
@@ -811,76 +943,123 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text('CASHIER', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.bold)),
-                                    Text('${sale.cashierName} (${sale.cashierId})', 
-                                      style: const TextStyle(fontSize: 14),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('STATUS', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.bold)),
+                                  const SizedBox(height: 4),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: _getStatusColor(sale.status).withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(4),
                                     ),
-                                  ],
-                                ),
+                                    child: Text(
+                                      sale.status.name.toUpperCase(),
+                                      style: TextStyle(color: _getStatusColor(sale.status), fontSize: 10, fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 16),
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text('DATE', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.bold)),
-                                  Text(DateFormat('MMM dd, yyyy HH:mm').format(sale.timestamp), style: const TextStyle(fontSize: 14)),
+                                  const SizedBox(height: 4),
+                                  Text(DateFormat('MMM dd, yyyy HH:mm').format(sale.timestamp), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                                 ],
                               ),
                             ],
                           ),
                           const Divider(height: 32),
+                          Row(
+                            children: [
+                              const Icon(Icons.person_outline, size: 16, color: AppColors.textLight),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('CUSTOMER', style: TextStyle(fontSize: 9, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.bold)),
+                                    Text(sale.customerName ?? 'Walk-in Customer', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text('CASHIER', style: TextStyle(fontSize: 9, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.bold)),
+                                    Text(sale.cashierName.split(' ')[0], style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Divider(height: 32),
                           Text('ITEMS', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 12),
                           ...sale.items.map((item) => Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            padding: const EdgeInsets.symmetric(vertical: 6),
                             child: Row(
                               children: [
                                 Expanded(
-                                  flex: 3,
-                                  child: Text(item.product.name, 
-                                    style: TextStyle(color: theme.colorScheme.onSurface),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(item.product.name, 
+                                        style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.w600, fontSize: 13),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      Text('${WeightConverter.formatShort(item.quantity)} x ₵${item.priceAtSale.toStringAsFixed(2)}', 
+                                        style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  flex: 2,
-                                  child: Text('${WeightConverter.formatShort(item.quantity)} x ₵${item.priceAtSale.toStringAsFixed(2)}', 
-                                    textAlign: TextAlign.right,
-                                    style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
+                                const SizedBox(width: 16),
                                 Text('₵${item.total.toStringAsFixed(2)}', 
-                                  style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)
+                                  style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface, fontSize: 13)
                                 ),
                               ],
                             ),
                           )),
                           const Divider(height: 32),
+                          if (sale.totalDiscount > 0) ...[
+                            _detailRow('Gross Amount', '₵${sale.baseTotal.toStringAsFixed(2)}'),
+                            _detailRow('Total Discount', '-₵${sale.totalDiscount.toStringAsFixed(2)}', color: Colors.green),
+                            const SizedBox(height: 4),
+                          ],
                           _detailRow('NET INVOICE VALUE', '₵${sale.netInvoiceValue.toStringAsFixed(2)}', isBold: true, color: theme.colorScheme.primary),
                           const Divider(height: 32),
-                          Text('PAYMENTS', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 8),
+                          Text('PAYMENT HISTORY', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 12),
                           ...sale.payments.map((p) => Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            padding: const EdgeInsets.symmetric(vertical: 4),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(p.method.name.toUpperCase(), style: const TextStyle(fontSize: 12)),
-                                Text('₵${p.amount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12)),
+                                Row(
+                                  children: [
+                                    Icon(p.method == PaymentMethod.cash ? Icons.money : Icons.smartphone, size: 14, color: theme.colorScheme.onSurfaceVariant),
+                                    const SizedBox(width: 8),
+                                    Text(p.method.name.toUpperCase(), style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurface)),
+                                    if (p.reference != null)
+                                      Text(' (${p.reference})', style: TextStyle(fontSize: 9, color: theme.colorScheme.onSurfaceVariant)),
+                                  ],
+                                ),
+                                Text('₵${p.amount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                               ],
                             ),
                           )),
+                          if (sale.balance > 0.01) ...[
+                             const SizedBox(height: 8),
+                             _detailRow('BALANCE DUE', '₵${sale.balance.toStringAsFixed(2)}', color: Colors.red, isBold: true),
+                          ],
                         ],
                       ),
                     ),
@@ -888,31 +1067,45 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
                   Container(
                     padding: const EdgeInsets.all(AppSpacing.m),
                     decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
                       border: Border(top: BorderSide(color: theme.dividerColor)),
+                      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(AppRadius.l)),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
+                    child: OverflowBar(
+                      alignment: MainAxisAlignment.end,
+                      spacing: 8,
+                      overflowSpacing: 8,
                       children: [
                         if (sale.status == SaleStatus.completed)
                           TextButton.icon(
                             onPressed: () => _showReportErrorDialog(sale),
-                            icon: const Icon(Icons.report_problem_outlined, color: Colors.orange, size: 18),
-                            label: const Text('Report Error', style: TextStyle(color: Colors.orange)),
+                            icon: const Icon(Icons.report_problem_outlined, color: Colors.orange, size: 16),
+                            label: const Text('Report Error', style: TextStyle(color: Colors.orange, fontSize: 11)),
                           ),
-                        const Spacer(),
-                        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
-                        const SizedBox(width: 8),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context), 
+                          child: Text('Close', style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12))
+                        ),
                         ElevatedButton.icon(
                           onPressed: isPrinting ? null : () async {
                             setState(() => isPrinting = true);
-                            await ReceiptService.printReceipt(sale);
-                            setState(() => isPrinting = false);
+                            try {
+                              await ReceiptService.printReceipt(sale);
+                            } finally {
+                              if (mounted) setState(() => isPrinting = false);
+                            }
                           },
                           icon: isPrinting 
-                            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                            : const Icon(Icons.print, size: 18),
-                          label: const Text('Print Receipt'),
-                          style: ElevatedButton.styleFrom(backgroundColor: theme.colorScheme.primary, foregroundColor: Colors.white),
+                            ? const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.print, size: 14),
+                          label: const Text('REPRINT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.accentOrange, 
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            minimumSize: Size.zero,
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
                         ),
                       ],
                     ),
@@ -932,20 +1125,33 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Report Sale Error'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
+        title: const Row(
           children: [
-            Text('Please describe the error (e.g., wrong weight, incorrect item). This will notify the Admin for rectification.', style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12)),
-            const SizedBox(height: 16),
-            TextField(
-              controller: reasonController,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                hintText: 'Enter reason here...',
-              ),
-            ),
+            Icon(Icons.report_problem_outlined, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Report Sale Error'),
           ],
+        ),
+        content: SizedBox(
+          width: 400,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Please describe the error (e.g., wrong weight). This will notify the Admin for rectification.', 
+                style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: reasonController,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  hintText: 'Enter reason here...',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
@@ -972,6 +1178,15 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
     );
   }
 
+  Color _getStatusColor(SaleStatus status) {
+    switch (status) {
+      case SaleStatus.completed: return Colors.green;
+      case SaleStatus.rectified: return Colors.blue;
+      case SaleStatus.pendingCorrection: return Colors.orange;
+      case SaleStatus.cancelled: return Colors.red;
+    }
+  }
+
   void _showIncomingStockDialog(BuildContext context, WidgetRef ref, List<StockTransfer> transfers) {
     final theme = Theme.of(context);
     showDialog(
@@ -988,7 +1203,7 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
         content: SizedBox(
           width: 400,
           child: transfers.isEmpty
-              ? const Padding(padding: EdgeInsets.all(20), child: Text('No pending stock transfers.'))
+              ? const Padding(padding: EdgeInsets.all(20), child: Text('No pending stock transfers.', textAlign: TextAlign.center))
               : ListView.builder(
                   shrinkWrap: true,
                   itemCount: transfers.length,
@@ -996,9 +1211,14 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
                     final t = transfers[index];
                     return Card(
                       margin: const EdgeInsets.only(bottom: 8),
+                      elevation: 0,
+                      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.m), side: BorderSide(color: theme.dividerColor)),
                       child: ListTile(
-                        title: Text(t.meatType, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('Weight: ${WeightConverter.formatShort(t.weight)} • Batch: ${t.batchId.substring(0, 8).toUpperCase()}'),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        title: Text(t.meatType, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        subtitle: Text('Weight: ${WeightConverter.formatShort(t.weight)} • Batch: ${t.batchId.substring(0, 8).toUpperCase()}', 
+                          style: const TextStyle(fontSize: 10)),
                         trailing: ElevatedButton(
                           onPressed: () {
                             ref.read(transferProvider.notifier).markAsReceived(t.id);
@@ -1007,8 +1227,13 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
                               SnackBar(content: Text('Received ${t.weight}kg of ${t.meatType}')),
                             );
                           },
-                          style: ElevatedButton.styleFrom(backgroundColor: theme.colorScheme.primary, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 12)),
-                          child: const Text('RECEIVE', style: TextStyle(fontSize: 10)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: theme.colorScheme.primary, 
+                            foregroundColor: Colors.white, 
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.s)),
+                          ),
+                          child: const Text('RECEIVE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
                         ),
                       ),
                     );
@@ -1067,14 +1292,26 @@ class _ProductWeightDialogState extends State<ProductWeightDialog> {
   void _toggleUnit(WeightUnit unit) {
     if (_unit == unit) return;
     setState(() {
-      if (unit == WeightUnit.kg) {
-        _weight = WeightConverter.toKg(_weight);
-      } else {
-        _weight = WeightConverter.toLb(_weight);
+      if (_unit != WeightUnit.unit && unit != WeightUnit.unit) {
+        if (unit == WeightUnit.kg) {
+          _weight = WeightConverter.toKg(_weight);
+        } else {
+          _weight = WeightConverter.toLb(_weight);
+        }
       }
       _unit = unit;
       _weightController.text = _weight.toStringAsFixed(2);
     });
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _unit = WeightUnit.values.firstWhere(
+      (u) => u.name == widget.product.unit, 
+      orElse: () => WeightUnit.kg
+    );
+    // If product is defined as units, disable the KG/LB toggle UI or similar
   }
 
   @override
@@ -1083,12 +1320,13 @@ class _ProductWeightDialogState extends State<ProductWeightDialog> {
     return Consumer(
       builder: (context, ref, _) {
         final isWholesale = ref.watch(isWholesaleProvider);
-        final kgWeight = _unit == WeightUnit.kg ? _weight : WeightConverter.toKg(_weight);
+        final isPcs = _unit == WeightUnit.unit;
+        
+        final kgWeight = isPcs ? _weight : (_unit == WeightUnit.kg ? _weight : WeightConverter.toKg(_weight));
         final currentPrice = widget.product.getPrice(isWholesale, weight: kgWeight, customer: widget.customer);
         final hasPromo = widget.product.isPromoActiveFor(isWholesale, widget.customer);
         final basePrice = isWholesale ? (widget.product.wholesalePrice) : (widget.product.retailPrice);
         
-        // Handle brackets for base price comparison if weight is provided
         double comparisonPrice = basePrice;
         final brackets = isWholesale ? widget.product.wholesaleBrackets : widget.product.retailBrackets;
         if (kgWeight > 0 && brackets != null && brackets.isNotEmpty) {
@@ -1100,117 +1338,140 @@ class _ProductWeightDialogState extends State<ProductWeightDialog> {
           }
         }
 
-        final total = kgWeight * currentPrice * _quantity;
+        final total = isPcs ? (_weight * currentPrice * _quantity) : (kgWeight * currentPrice * _quantity);
 
-        return AlertDialog(
+        return Dialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                widget.product.category.toUpperCase(),
-                style: TextStyle(color: theme.colorScheme.primary, fontSize: 10, fontWeight: FontWeight.bold),
-              ),
-              Text(widget.product.name),
-            ],
-          ),
-          content: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    ChoiceChip(label: const Text('KG'), selected: _unit == WeightUnit.kg, onSelected: (_) => _toggleUnit(WeightUnit.kg)),
-                    const SizedBox(width: 8),
-                    ChoiceChip(label: const Text('LB'), selected: _unit == WeightUnit.lb, onSelected: (_) => _toggleUnit(WeightUnit.lb)),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _weightController,
-                        decoration: InputDecoration(labelText: 'Weight (${_unit.name})'),
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                        onChanged: (v) => setState(() => _weight = double.tryParse(v) ?? _weight),
-                        validator: (v) {
-                          if (v == null || v.isEmpty) return 'Req';
-                          if (double.tryParse(v) == null || double.tryParse(v)! <= 0) return 'Invalid';
-                          return null;
-                        },
+          child: Container(
+            width: 360,
+            height: 380, // Slightly taller to fit info
+            padding: const EdgeInsets.all(AppSpacing.l),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                children: [
+                  Text(
+                    widget.product.category.toUpperCase(),
+                    style: TextStyle(color: theme.colorScheme.primary, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                  ),
+                  Text(
+                    widget.product.name,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    textAlign: TextAlign.center,
+                  ),
+                  const Spacer(),
+                  if (!isPcs)
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('KG', style: TextStyle(fontSize: 11)), 
+                          selected: _unit == WeightUnit.kg, 
+                          onSelected: (_) => _toggleUnit(WeightUnit.kg)
+                        ),
+                        const SizedBox(width: 8),
+                        ChoiceChip(
+                          label: const Text('LB', style: TextStyle(fontSize: 11)), 
+                          selected: _unit == WeightUnit.lb, 
+                          onSelected: (_) => _toggleUnit(WeightUnit.lb)
+                        ),
+                      ],
+                    )
+                  else
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20),
                       ),
+                      child: Text('PRICED PER UNIT/PCS', style: TextStyle(color: theme.colorScheme.primary, fontSize: 10, fontWeight: FontWeight.bold)),
                     ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: TextFormField(
-                        controller: _qtyController,
-                        decoration: const InputDecoration(labelText: 'Quantity (pcs)'),
-                        keyboardType: TextInputType.number,
-                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                        onChanged: (v) => setState(() => _quantity = int.tryParse(v) ?? _quantity),
-                        validator: (v) {
-                          if (v == null || v.isEmpty) return 'Req';
-                          if (int.tryParse(v) == null || int.tryParse(v)! <= 0) return 'Invalid';
-                          return null;
-                        },
+                  const SizedBox(height: AppSpacing.m),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: _weightController,
+                          textAlign: TextAlign.center,
+                          decoration: InputDecoration(
+                            labelText: isPcs ? 'Quantity' : 'Weight',
+                            suffixText: isPcs ? 'pcs' : _unit.name,
+                            contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                          onChanged: (v) => setState(() => _weight = double.tryParse(v) ?? 0),
+                          validator: (v) => (v == null || (double.tryParse(v) ?? 0) <= 0) ? '!' : null,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (hasPromo) ...[
-                      Text('₵${comparisonPrice.toStringAsFixed(2)}', 
-                        style: TextStyle(color: theme.colorScheme.onSurfaceVariant, decoration: TextDecoration.lineThrough, fontSize: 14)),
-                      const SizedBox(width: 8),
+                      if (!isPcs) ...[
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _qtyController,
+                            textAlign: TextAlign.center,
+                            decoration: const InputDecoration(
+                              labelText: 'Packs',
+                              suffixText: 'qty',
+                              contentPadding: EdgeInsets.symmetric(vertical: 8),
+                            ),
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            onChanged: (v) => setState(() => _quantity = int.tryParse(v) ?? 1),
+                            validator: (v) => (v == null || (int.tryParse(v) ?? 0) <= 0) ? '!' : null,
+                          ),
+                        ),
+                      ],
                     ],
-                    Text('Rate: ₵${currentPrice.toStringAsFixed(2)}/kg', 
-                      style: TextStyle(color: hasPromo ? Colors.orange.shade800 : theme.colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 16)),
-                  ],
-                ),
-                if (hasPromo)
-                  Text('${widget.product.discountPercentage.toInt()}% Promotion Applied (${widget.product.promoCustomerTarget == PromoCustomerTarget.regularsOnly ? "Regulars Only" : "Public"})',
-                    style: const TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                Text('Total: ₵${total.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: theme.colorScheme.onSurface)),
-              ],
+                  ),
+                  const Spacer(),
+                  Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (hasPromo) ...[
+                            Text('₵${comparisonPrice.toStringAsFixed(2)}', 
+                              style: TextStyle(color: theme.colorScheme.onSurfaceVariant, decoration: TextDecoration.lineThrough, fontSize: 12)),
+                            const SizedBox(width: 6),
+                          ],
+                          Text('₵${currentPrice.toStringAsFixed(2)}/${isPcs ? "unit" : "kg"}', 
+                            style: TextStyle(color: hasPromo ? Colors.orange.shade800 : theme.colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 14)),
+                        ],
+                      ),
+                      Text(
+                        'Total: ₵${total.toStringAsFixed(2)}',
+                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 24, color: theme.colorScheme.primary),
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        if (_formKey.currentState!.validate()) {
+                          final isWholesale = ref.read(isWholesaleProvider);
+                          final effectiveWeight = isPcs ? _weight : (_unit == WeightUnit.kg ? _weight : WeightConverter.toKg(_weight));
+                          final currentPrice = widget.product.getPrice(isWholesale, weight: effectiveWeight, customer: widget.customer);
+                          double comparisonPrice = isWholesale ? (widget.product.wholesalePrice) : (widget.product.retailPrice);
+                          widget.onAdd(effectiveWeight * (isPcs ? 1 : _quantity), currentPrice, comparisonPrice);
+                          Navigator.pop(context);
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: theme.colorScheme.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.s)),
+                      ),
+                      child: const Text('Add to Cart', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: TextStyle(color: theme.colorScheme.onSurfaceVariant))),
-            ElevatedButton(
-              onPressed: () {
-                if (_formKey.currentState!.validate()) {
-                  final isWholesale = ref.read(isWholesaleProvider);
-                  final kgWeight = _unit == WeightUnit.kg ? _weight : WeightConverter.toKg(_weight);
-                  
-                  final currentPrice = widget.product.getPrice(isWholesale, weight: kgWeight, customer: widget.customer);
-                  double comparisonPrice = isWholesale ? (widget.product.wholesalePrice) : (widget.product.retailPrice);
-                  final brackets = isWholesale ? widget.product.wholesaleBrackets : widget.product.retailBrackets;
-                  if (kgWeight > 0 && brackets != null && brackets.isNotEmpty) {
-                    for (var bracket in brackets) {
-                      if (kgWeight >= bracket.minWeight && kgWeight <= bracket.maxWeight) {
-                        comparisonPrice = bracket.price;
-                        break;
-                      }
-                    }
-                  }
-
-                  widget.onAdd(kgWeight * _quantity, currentPrice, comparisonPrice);
-                  Navigator.pop(context);
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: theme.colorScheme.primary, foregroundColor: Colors.white),
-              child: const Text('Add to Cart'),
-            ),
-          ],
         );
       }
     );
@@ -1229,6 +1490,7 @@ class _CustomerSelectionDialogState extends ConsumerState<CustomerSelectionDialo
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _locationController = TextEditingController();
   final _searchController = TextEditingController();
   String _searchQuery = '';
   bool _isNewCustomer = false;
@@ -1242,103 +1504,145 @@ class _CustomerSelectionDialogState extends ConsumerState<CustomerSelectionDialo
       c.phone.contains(_searchQuery)
     ).toList();
 
-    return AlertDialog(
+    return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
-      title: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Text('Select Customer'),
-          IconButton(
-            icon: Icon(_isNewCustomer ? Icons.list : Icons.person_add, color: theme.colorScheme.primary),
-            onPressed: () => setState(() => _isNewCustomer = !_isNewCustomer),
-          ),
-        ],
-      ),
-      content: SizedBox(
-        width: 400,
+      child: Container(
+        width: 380,
+        height: 480, // Keeping it slightly taller but constrained
+        padding: const EdgeInsets.all(AppSpacing.l),
         child: Column(
-          mainAxisSize: MainAxisSize.min,
           children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _isNewCustomer ? 'REGISTER CUSTOMER' : 'SELECT CUSTOMER',
+                  style: TextStyle(color: theme.colorScheme.primary, fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1.5),
+                ),
+                IconButton(
+                  icon: Icon(_isNewCustomer ? Icons.group_rounded : Icons.person_add_alt_1_rounded, color: theme.colorScheme.primary),
+                  onPressed: () => setState(() => _isNewCustomer = !_isNewCustomer),
+                ),
+              ],
+            ),
+            const Divider(),
+            const SizedBox(height: 8),
             if (!_isNewCustomer) ...[
               TextField(
                 controller: _searchController,
-                decoration: const InputDecoration(
-                  hintText: 'Search by name or phone...',
-                  prefixIcon: Icon(Icons.search),
+                decoration: InputDecoration(
+                  hintText: 'Search name or phone...',
+                  prefixIcon: const Icon(Icons.search, size: 20),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.s)),
+                  isDense: true,
                 ),
                 onChanged: (v) => setState(() => _searchQuery = v),
               ),
-              const SizedBox(height: 16),
-              if (filtered.isEmpty)
-                const Padding(padding: EdgeInsets.all(20), child: Text('No customers found.'))
-              else
-                Flexible(
-                  child: ListView.builder(
-                    shrinkWrap: true,
-                    itemCount: filtered.length,
-                    itemBuilder: (context, index) {
-                      final c = filtered[index];
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
-                          child: Icon(c.isFavorite ? Icons.star : Icons.person, color: c.isFavorite ? Colors.orange : theme.colorScheme.primary),
-                        ),
-                        title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text(c.phone),
-                        onTap: () {
-                          widget.onSelected(c);
-                          Navigator.pop(context);
-                        },
-                      );
-                    },
-                  ),
-                ),
-            ] else ...[
-              Form(
-                key: _formKey,
-                child: Column(
-                  children: [
-                    TextFormField(
-                      controller: _nameController, 
-                      decoration: const InputDecoration(labelText: 'Full Name'),
-                      validator: (v) => v!.isEmpty ? 'Required' : null,
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _phoneController, 
-                      decoration: const InputDecoration(labelText: 'Phone Number', hintText: '10 digits'),
-                      keyboardType: TextInputType.phone,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)],
-                      validator: (v) => v!.length != 10 ? 'Invalid' : null,
-                    ),
-                    const SizedBox(height: 20),
-                    ElevatedButton(
-                      onPressed: () {
-                        if (_formKey.currentState!.validate()) {
-                          final newCustomer = Customer(
-                            id: DateTime.now().millisecondsSinceEpoch.toString(),
-                            name: _nameController.text,
-                            phone: _phoneController.text,
-                          );
-                          ref.read(customerProvider.notifier).addCustomer(newCustomer);
-                          widget.onSelected(newCustomer);
-                          Navigator.pop(context);
-                        }
+              const SizedBox(height: 12),
+              Expanded(
+                child: filtered.isEmpty
+                  ? const Center(child: Text('No matches found.', style: TextStyle(color: AppColors.textLight, fontSize: 12)))
+                  : ListView.builder(
+                      itemCount: filtered.length,
+                      itemBuilder: (context, index) {
+                        final c = filtered[index];
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: CircleAvatar(
+                            backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
+                            child: Icon(c.isFavorite ? Icons.star : Icons.person,
+                                color: c.isFavorite ? Colors.orange : theme.colorScheme.primary, size: 20),
+                          ),
+                          title: Text(c.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          subtitle: Text('${c.phone}${c.location != null ? " • ${c.location}" : ""}', style: const TextStyle(fontSize: 11)),
+                          onTap: () {
+                            widget.onSelected(c);
+                            Navigator.pop(context);
+                          },
+                        );
                       },
-                      style: ElevatedButton.styleFrom(backgroundColor: theme.colorScheme.primary, foregroundColor: Colors.white),
-                      child: const Text('Add & Select'),
                     ),
-                  ],
+              ),
+            ] else ...[
+              Expanded(
+                child: Form(
+                  key: _formKey,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        TextFormField(
+                          controller: _nameController,
+                          decoration: const InputDecoration(labelText: 'Full Name', prefixIcon: Icon(Icons.badge_outlined)),
+                          validator: (v) => v!.isEmpty ? 'Required' : null,
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _phoneController,
+                          decoration: const InputDecoration(labelText: 'Phone Number', prefixIcon: Icon(Icons.phone_outlined)),
+                          keyboardType: TextInputType.phone,
+                          inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)],
+                          validator: (v) => v!.length != 10 ? 'Invalid' : null,
+                        ),
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _locationController,
+                          decoration: const InputDecoration(labelText: 'Location / Area', prefixIcon: Icon(Icons.location_on_outlined)),
+                          validator: (v) => v!.isEmpty ? 'Required' : null,
+                        ),
+                        const SizedBox(height: 32),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () async {
+                              if (_formKey.currentState!.validate()) {
+                                final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+                                final String suffix = timestamp.substring(timestamp.length - 12);
+                                final String validUuid = '00000000-0000-0000-0000-$suffix';
+
+                                final newCustomer = Customer(
+                                  id: validUuid,
+                                  name: _nameController.text,
+                                  phone: _phoneController.text,
+                                  location: _locationController.text,
+                                );
+                                
+                                try {
+                                  final saved = await ref.read(customerProvider.notifier).addCustomer(newCustomer);
+                                  if (saved != null) {
+                                    widget.onSelected(saved);
+                                  }
+                                  if (context.mounted) Navigator.pop(context);
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('Failed to save customer: $e'), backgroundColor: Colors.red),
+                                    );
+                                  }
+                                }
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: theme.colorScheme.primary, 
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                            child: const Text('Register & Select', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ],
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => Navigator.pop(context), 
+              child: const Text('DISMISS', style: TextStyle(color: AppColors.textLight, fontWeight: FontWeight.bold, fontSize: 11)),
+            ),
           ],
         ),
       ),
-      actions: [
-        if (!_isNewCustomer)
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('Close', style: TextStyle(color: theme.colorScheme.onSurfaceVariant))),
-      ],
     );
   }
 }
@@ -1378,7 +1682,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
           reference: _refController.text.isEmpty ? null : _refController.text,
         ));
         final paid = _payments.fold(0.0, (sum, p) => sum + p.amount);
-        final remaining = widget.totalAmount - paid;
+        final remaining = (widget.totalAmount - paid).clamp(0.0, widget.totalAmount);
         _amountController.text = remaining > 0 ? remaining.toStringAsFixed(2) : '0.00';
         _refController.clear();
       });
@@ -1389,186 +1693,219 @@ class _PaymentDialogState extends State<PaymentDialog> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final paid = _payments.fold(0.0, (sum, p) => sum + p.amount);
-    final remaining = widget.totalAmount - paid;
+    final remaining = (widget.totalAmount - paid).clamp(0.0, widget.totalAmount);
+    final bool isMoMo = _selectedMethod == PaymentMethod.mobileMoney;
 
-    return AlertDialog(
+    // Lock amount for MoMo
+    if (isMoMo && double.tryParse(_amountController.text) != remaining) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _amountController.text = remaining.toStringAsFixed(2));
+      });
+    }
+
+    return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
-      title: Row(
-        children: [
-          Icon(Icons.payments, color: theme.colorScheme.primary),
-          const SizedBox(width: 12),
-          const Text('Payment Collection'),
-        ],
-      ),
-      content: SizedBox(
-        width: 450,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(AppRadius.m),
-                  border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.1)),
+      child: Container(
+        width: 440,
+        height: 600, // Balanced height
+        padding: const EdgeInsets.all(AppSpacing.l),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Icon(Icons.payments_rounded, color: theme.colorScheme.primary),
+                const SizedBox(width: 12),
+                Text(
+                  'COLLECT PAYMENT',
+                  style: TextStyle(color: theme.colorScheme.primary, fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1.5),
                 ),
+              ],
+            ),
+            const Divider(height: 24),
+            Expanded(
+              child: SingleChildScrollView(
                 child: Column(
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Total Bill:', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
-                        Text('₵${widget.totalAmount.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: theme.colorScheme.onSurface)),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('Remaining:', style: TextStyle(color: remaining > 0 ? Colors.red : Colors.green, fontWeight: FontWeight.bold)),
-                        Text('₵${remaining.toStringAsFixed(2)}', 
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: remaining > 0 ? Colors.red : Colors.green)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: PaymentMethod.values.map((m) => Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: ChoiceChip(
-                      label: Text(m.name.toUpperCase(), style: const TextStyle(fontSize: 10)), 
-                      selected: _selectedMethod == m, 
-                      onSelected: (_) => setState(() => _selectedMethod = m),
-                      selectedColor: theme.colorScheme.primary,
-                      labelStyle: TextStyle(color: _selectedMethod == m ? Colors.white : theme.colorScheme.primary),
-                    ),
-                  ),
-                )).toList(),
-              ),
-              const SizedBox(height: 16),
-              Form(
-                key: _formKey,
-                child: Column(
-                  children: [
-                    TextFormField(
-                      controller: _amountController, 
-                      decoration: const InputDecoration(
-                        labelText: 'Amount Received from Customer', 
-                        prefixText: '₵ ', 
-                        helperText: 'Enter the actual amount handed over by the customer',
+                    // Compact Summary Card
+                    Container(
+                      padding: const EdgeInsets.all(AppSpacing.m),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(AppRadius.m),
+                        border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.1)),
                       ),
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-                      onChanged: (v) => setState(() {}),
-                      validator: (v) {
-                        if (v == null || v.isEmpty) return 'Required';
-                        if (double.tryParse(v) == null || double.tryParse(v)! <= 0) return 'Invalid amount';
-                        return null;
-                      },
+                      child: Column(
+                        children: [
+                          _billRow(context, 'Net Bill', '₵${widget.totalAmount.toStringAsFixed(2)}', theme),
+                          const SizedBox(height: 4),
+                          _billRow(context, 'Balance Due', '₵${remaining.toStringAsFixed(2)}', theme, 
+                            color: remaining > 0 ? Colors.red : Colors.green, isBold: true),
+                        ],
+                      ),
                     ),
-                    if (double.tryParse(_amountController.text) != null && double.tryParse(_amountController.text)! > remaining) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(8),
+                    const SizedBox(height: 20),
+                    
+                    // Compact Method Selector
+                    Row(
+                      children: PaymentMethod.values.map((m) => Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: InkWell(
+                            onTap: () => setState(() => _selectedMethod = m),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: _selectedMethod == m ? theme.colorScheme.primary : Colors.transparent,
+                                borderRadius: BorderRadius.circular(AppRadius.s),
+                                border: Border.all(color: _selectedMethod == m ? theme.colorScheme.primary : theme.dividerColor),
+                              ),
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    m == PaymentMethod.cash ? Icons.money_rounded : Icons.smartphone_rounded,
+                                    color: _selectedMethod == m ? Colors.white : theme.colorScheme.primary,
+                                    size: 20,
+                                  ),
+                                  Text(
+                                    m.name.toUpperCase(),
+                                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: _selectedMethod == m ? Colors.white : theme.colorScheme.onSurface),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      )).toList(),
+                    ),
+                    const SizedBox(height: 20),
+
+                    Form(
+                      key: _formKey,
+                      child: Column(
+                        children: [
+                          TextFormField(
+                            controller: _amountController, 
+                            readOnly: isMoMo,
+                            textAlign: TextAlign.center,
+                            decoration: InputDecoration(
+                              labelText: isMoMo ? 'Amount (Locked)' : 'Amount Received', 
+                              prefixText: '₵ ', 
+                              isDense: true,
+                            ),
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            onChanged: (v) => setState(() {}),
+                            validator: (v) => (v == null || (double.tryParse(v) ?? 0) <= 0) ? '!' : null,
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _refController,
+                            decoration: InputDecoration(
+                              labelText: isMoMo ? 'MoMo Number' : 'Note (Optional)',
+                              prefixIcon: Icon(isMoMo ? Icons.phone_iphone_rounded : Icons.note_alt_outlined),
+                              isDense: true,
+                            ),
+                            style: const TextStyle(fontSize: 13),
+                            keyboardType: isMoMo ? TextInputType.phone : TextInputType.text,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _addPayment,
+                        icon: Icon(isMoMo ? Icons.send_to_mobile : Icons.add_circle_outline, size: 18),
+                        label: Text(isMoMo ? 'INITIATE PULL' : 'APPLY PAYMENT'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.accentGreen, 
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
+                    ),
+
+                    if (_payments.isNotEmpty) ...[
+                      const SizedBox(height: 20),
+                      ..._payments.map((p) => Container(
+                        margin: const EdgeInsets.only(bottom: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
-                          color: Colors.green.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(4),
+                          color: theme.colorScheme.surface,
+                          borderRadius: BorderRadius.circular(AppRadius.s),
+                          border: Border.all(color: theme.dividerColor),
                         ),
                         child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Change to Give:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.green)),
-                            Text('₵${(double.tryParse(_amountController.text)! - remaining).toStringAsFixed(2)}', 
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.green)),
+                            Icon(p.method == PaymentMethod.cash ? Icons.money : Icons.smartphone, size: 16, color: Colors.green),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text(p.method.name.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
+                            Text('₵${p.amount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            IconButton(
+                              icon: const Icon(Icons.close, color: Colors.red, size: 16), 
+                              onPressed: () => setState(() => _payments.remove(p))
+                            ),
                           ],
                         ),
-                      ),
-                    ],
-                    const SizedBox(height: 12),
-                    if (_selectedMethod == PaymentMethod.mobileMoney) ...[
-                      TextFormField(
-                        controller: _refController,
-                        decoration: const InputDecoration(
-                          labelText: 'MoMo Number',
-                          prefixIcon: Icon(Icons.phone_iphone),
-                          hintText: '10 digits',
-                        ),
-                        keyboardType: TextInputType.phone,
-                        inputFormatters: [
-                          FilteringTextInputFormatter.digitsOnly,
-                          LengthLimitingTextInputFormatter(10),
-                        ],
-                        validator: (v) {
-                          if (v == null || v.isEmpty) return 'Required for MoMo';
-                          if (v.length != 10) return 'Exactly 10 digits required';
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      Text('A prompt will be sent to the customer.', style: TextStyle(fontSize: 10, fontStyle: FontStyle.italic, color: theme.colorScheme.onSurfaceVariant)),
-                    ] else ...[
-                      TextFormField(controller: _refController, decoration: const InputDecoration(labelText: 'Ref/Note (Optional)')),
+                      )),
                     ],
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _addPayment,
-                  icon: Icon(_selectedMethod == PaymentMethod.mobileMoney ? Icons.send_to_mobile : Icons.add),
-                  label: Text(_selectedMethod == PaymentMethod.mobileMoney ? 'Initiate MoMo Pull' : 'Add Payment'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentGreen, 
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+            ),
+            const Divider(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
+                ),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _payments.isEmpty ? null : () {
+                      Navigator.pop(context);
+                      widget.onComplete(_payments);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.colorScheme.primary, 
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('COMPLETE'),
                   ),
                 ),
-              ),
-              if (_payments.isNotEmpty) ...[
-                const SizedBox(height: 24),
-                Align(alignment: Alignment.centerLeft, child: Text('Applied Payments', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: theme.colorScheme.onSurface))),
-                Divider(color: theme.dividerColor),
-                ..._payments.map((p) => ListTile(
-                  dense: true,
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.check_circle, color: Colors.green, size: 20),
-                  title: Text(p.method.name.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold)),
-                  subtitle: p.reference != null ? Text(p.reference!) : null,
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('₵${p.amount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      IconButton(icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 18), onPressed: () => setState(() => _payments.remove(p))),
-                    ],
-                  ),
-                )),
               ],
-            ],
-          ),
+            ),
+          ],
         ),
       ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: TextStyle(color: theme.colorScheme.onSurfaceVariant))),
-        ElevatedButton(
-          onPressed: _payments.isEmpty ? null : () {
-            Navigator.pop(context); // Close Payment Dialog first
-            widget.onComplete(_payments);
-          },
-          style: ElevatedButton.styleFrom(
-            backgroundColor: theme.colorScheme.primary, 
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+    );
+  }
+
+  Widget _billRow(BuildContext context, String label, String value, ThemeData theme, {bool isTotal = false, Color? color, bool isBold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(label, 
+              style: TextStyle(
+                fontSize: isTotal ? 13 : 12, 
+                color: isTotal ? theme.colorScheme.onSurface : theme.colorScheme.onSurfaceVariant,
+                fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-          child: const Text('Complete Sale'),
-        ),
-      ],
+          const SizedBox(width: 8),
+          Text(value, style: TextStyle(
+            fontSize: isTotal ? 16 : 14, 
+            fontWeight: (isTotal || isBold) ? FontWeight.bold : FontWeight.w600,
+            color: color ?? theme.colorScheme.onSurface,
+          )),
+        ],
+      ),
     );
   }
 }
@@ -1588,61 +1925,145 @@ class _ReceiptSuccessDialogState extends State<ReceiptSuccessDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return AlertDialog(
+    return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
-      title: const Row(
-        children: [
-          Icon(Icons.check_circle, color: Colors.green),
-          SizedBox(width: 8),
-          Text('Transaction Complete'),
-        ],
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('The sale has been successfully recorded.', style: TextStyle(color: theme.colorScheme.onSurface)),
-          const SizedBox(height: 16),
-          _detailRow('Invoice ID', widget.sale.id),
-          _detailRow('Total Amount', '₵${widget.sale.totalAmount.toStringAsFixed(2)}'),
-          _detailRow('Cashier', '${widget.sale.cashierName} (${widget.sale.cashierId})'),
-          _detailRow('Customer', widget.sale.customerName ?? 'Walk-in'),
-        ],
-      ),
-      actions: [
-        OutlinedButton.icon(
-          onPressed: _isPrinting ? null : () async {
-            setState(() => _isPrinting = true);
-            try {
-              await ReceiptService.printReceipt(widget.sale);
-            } finally {
-              if (mounted) setState(() => _isPrinting = false);
-            }
-          },
-          icon: _isPrinting 
-            ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)) 
-            : const Icon(Icons.print, size: 18),
-          label: const Text('Print Receipt'),
+      child: Container(
+        width: 380,
+        height: 520, // Compact but fits details
+        padding: const EdgeInsets.all(AppSpacing.l),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.green.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.check_circle_rounded, color: Colors.green, size: 20),
+                  SizedBox(width: 8),
+                  Text('SALE SUCCESSFUL', style: TextStyle(color: Colors.green, fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 1.2)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            // Digital Receipt Card
+            Expanded(
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(AppSpacing.m),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(AppRadius.s),
+                  border: Border.all(color: Colors.grey.shade200),
+                  boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10)],
+                ),
+                child: Column(
+                  children: [
+                    const Text('Mi CORAZON', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1)),
+                    const Text('Digital Copy', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                    const Divider(height: 24),
+                    _receiptPreviewRow('Invoice ID', widget.sale.id.substring(widget.sale.id.length - 8).toUpperCase()),
+                    _receiptPreviewRow('Cashier', widget.sale.cashierName.split(' ')[0]),
+                    const Divider(height: 24),
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: widget.sale.items.length,
+                        itemBuilder: (context, index) {
+                          final item = widget.sale.items[index];
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Row(
+                              children: [
+                                Expanded(child: Text(item.product.name, style: const TextStyle(fontSize: 11))),
+                                Text('₵${item.total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                    const Divider(height: 24),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('TOTAL', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
+                        Text('₵${widget.sale.totalAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Colors.black)),
+                      ],
+                    ),
+                    if (widget.sale.balance > 0) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('AMOUNT PAID', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                          Text('₵${widget.sale.amountPaid.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('BALANCE DUE (DEBT)', style: TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold)),
+                          Text('₵${widget.sale.balance.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.red)),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _isPrinting ? null : () async {
+                  setState(() => _isPrinting = true);
+                  try {
+                    await ReceiptService.printReceipt(widget.sale);
+                  } finally {
+                    if (mounted) setState(() => _isPrinting = false);
+                  }
+                },
+                icon: _isPrinting 
+                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) 
+                  : const Icon(Icons.print_rounded, size: 20),
+                label: const Text('PRINT RECEIPT', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accentOrange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => Navigator.pop(context), 
+              child: const Text('CLOSE WINDOW', style: TextStyle(color: AppColors.textLight, fontWeight: FontWeight.bold, fontSize: 11)),
+            ),
+          ],
         ),
-        ElevatedButton(
-          onPressed: () => Navigator.pop(context),
-          style: ElevatedButton.styleFrom(backgroundColor: theme.colorScheme.primary, foregroundColor: Colors.white),
-          child: const Text('OK'),
-        ),
-      ],
+      ),
     );
   }
 
-  Widget _detailRow(String label, String value) {
-    final theme = Theme.of(context);
+  Widget _receiptPreviewRow(String label, String value) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant)),
-          Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+          Expanded(
+            child: Text(label, 
+              style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(value, style: const TextStyle(fontSize: 10, color: Colors.black, fontWeight: FontWeight.w500)),
         ],
       ),
     );

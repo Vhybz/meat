@@ -7,6 +7,7 @@ import '../../services/user_provider.dart';
 import '../../services/product_service.dart';
 import '../../models/user_model.dart';
 import '../../models/product.dart';
+import '../../widgets/responsive_layout.dart';
 
 class SuperAdminScreen extends ConsumerWidget {
   const SuperAdminScreen({super.key});
@@ -15,6 +16,7 @@ class SuperAdminScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final users = ref.watch(userProvider);
     final productsAsync = ref.watch(productsFutureProvider);
+    final isMobile = ResponsiveLayout.isMobile(context);
     
     final deletedUsers = users.where((u) => u.isDeleted).toList();
     final pendingUsers = users.where((u) => !u.isDeleted && u.status == AccountStatus.pending).toList();
@@ -46,12 +48,14 @@ class SuperAdminScreen extends ConsumerWidget {
 
             _buildSectionTitle('Data Recovery Hub', Icons.restore_from_trash, Colors.green),
             const SizedBox(height: AppSpacing.m),
-            Row(
+            Flex(
+              direction: isMobile ? Axis.vertical : Axis.horizontal,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(child: _buildDeletedUsersList(context, ref, deletedUsers)),
-                const SizedBox(width: AppSpacing.l),
+                Expanded(flex: isMobile ? 0 : 1, child: _buildDeletedUsersList(context, ref, deletedUsers)),
+                if (isMobile) const SizedBox(height: AppSpacing.l) else const SizedBox(width: AppSpacing.l),
                 Expanded(
+                  flex: isMobile ? 0 : 1,
                   child: productsAsync.when(
                     data: (products) => _buildDeletedProductsList(context, ref, products.where((p) => p.isDeleted).toList()),
                     loading: () => const Center(child: CircularProgressIndicator()),

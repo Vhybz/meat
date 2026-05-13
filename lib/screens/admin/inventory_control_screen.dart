@@ -13,6 +13,8 @@ import '../../widgets/app_sidebar.dart';
 import '../../services/menu_service.dart';
 import '../../services/user_provider.dart';
 
+import '../../widgets/role_pop_scope.dart';
+
 class InventoryControlScreen extends ConsumerStatefulWidget {
   const InventoryControlScreen({super.key});
 
@@ -33,13 +35,27 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
     final isDesktop = ResponsiveLayout.isDesktop(context);
     const currentRoute = '/admin/stock';
 
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      appBar: const MainAppBar(title: 'Inventory Control', showMenuButton: true),
-      drawer: isDesktop
-          ? null
-          : Drawer(
-              child: AppSidebar(
+    return RolePopScope(
+      currentRoute: currentRoute,
+      child: Scaffold(
+        backgroundColor: theme.scaffoldBackgroundColor,
+        appBar: const MainAppBar(title: 'Inventory Control', showMenuButton: true),
+        drawer: isDesktop
+            ? null
+            : Drawer(
+                child: AppSidebar(
+                  userId: user.id,
+                  userName: user.name,
+                  userRole: user.activePrimaryRole.name.toUpperCase(),
+                  currentRoute: currentRoute,
+                  items: MenuService.getMenuItemsForUser(user),
+                  onTap: (route) => MenuService.navigate(context, route, currentRoute),
+                ),
+              ),
+        body: Row(
+          children: [
+            if (isDesktop)
+              AppSidebar(
                 userId: user.id,
                 userName: user.name,
                 userRole: user.activePrimaryRole.name.toUpperCase(),
@@ -47,60 +63,51 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                 items: MenuService.getMenuItemsForUser(user),
                 onTap: (route) => MenuService.navigate(context, route, currentRoute),
               ),
-            ),
-      body: Row(
-        children: [
-          if (isDesktop)
-            AppSidebar(
-              userId: user.id,
-              userName: user.name,
-              userRole: user.activePrimaryRole.name.toUpperCase(),
-              currentRoute: currentRoute,
-              items: MenuService.getMenuItemsForUser(user),
-              onTap: (route) => MenuService.navigate(context, route, currentRoute),
-            ),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSpacing.l),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(context, ref, productsAsync.value ?? []),
-                  const SizedBox(height: AppSpacing.l),
-                  _buildSearchBar(theme),
-                  const SizedBox(height: AppSpacing.l),
-                  productsAsync.when(
-                    data: (products) {
-                      final activeProducts = products
-                          .where((p) => !p.isDeleted)
-                          .where((p) => p.name.toLowerCase().contains(_searchQuery.toLowerCase()) || 
-                                         p.category.toLowerCase().contains(_searchQuery.toLowerCase()))
-                          .toList();
-                      
-                      if (activeProducts.isEmpty) {
-                        return Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(40.0),
-                            child: Text('No products match "$_searchQuery"', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
-                          ),
-                        );
-                      }
-                      return _buildProductGrid(context, activeProducts, ref);
-                    },
-                    loading: () => const Center(child: CircularProgressIndicator()),
-                    error: (err, _) => Center(child: Text('Error: $err')),
-                  ),
-                ],
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(AppSpacing.l),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(context, ref, productsAsync.value ?? []),
+                    const SizedBox(height: AppSpacing.l),
+                    _buildSearchBar(theme),
+                    const SizedBox(height: AppSpacing.l),
+                    productsAsync.when(
+                      data: (products) {
+                        final activeProducts = products
+                            .where((p) => !p.isDeleted)
+                            .where((p) => p.name.toLowerCase().contains(_searchQuery.toLowerCase()) || 
+                                           p.category.toLowerCase().contains(_searchQuery.toLowerCase()))
+                            .toList();
+                        
+                        if (activeProducts.isEmpty) {
+                          return Center(
+                            child: Padding(
+                              padding: const EdgeInsets.all(40.0),
+                              child: Text('No products match "$_searchQuery"', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+                            ),
+                          );
+                        }
+                        return _buildProductGrid(context, activeProducts, ref);
+                      },
+                      loading: () => const Center(child: CircularProgressIndicator()),
+                      error: (err, _) => Center(child: Text('Error: $err')),
+                    ),
+                  ],
+                ),
               ),
             ),
+          ],
+        ),
+        floatingActionButton: SafeArea(
+          child: FloatingActionButton.extended(
+            onPressed: () => _showAddProductDialog(context, ref),
+            backgroundColor: theme.colorScheme.primary,
+            icon: const Icon(Icons.add, color: Colors.white),
+            label: const Text('Add New Product', style: TextStyle(color: Colors.white)),
           ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddProductDialog(context, ref),
-        backgroundColor: theme.colorScheme.primary,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('Add New Product', style: TextStyle(color: Colors.white)),
+        ),
       ),
     );
   }
@@ -129,44 +136,80 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
 
   Widget _buildHeader(BuildContext context, WidgetRef ref, List<Product> products) {
     final theme = Theme.of(context);
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Master Stock List', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
-            Text('Manage products, pricing, and stock levels', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
-          ],
-        ),
-        Row(
-          children: [
-            OutlinedButton.icon(
+    final isMobile = ResponsiveLayout.isMobile(context);
+
+    if (isMobile) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Master Stock List', 
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+          Text('Manage products, pricing, and stock levels', 
+            style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12)),
+          const SizedBox(height: AppSpacing.m),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
               onPressed: () => _showPromotionDialog(context, ref, products),
-              icon: const Icon(Icons.campaign_outlined),
-              label: const Text('Manage Promotions'),
+              icon: const Icon(Icons.campaign_outlined, size: 18),
+              label: const Text('Manage Promotions', style: TextStyle(fontSize: 13)),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.orange.shade800,
                 side: BorderSide(color: Colors.orange.shade800),
+                padding: const EdgeInsets.symmetric(vertical: 12),
               ),
             ),
-          ],
+          ),
+        ],
+      );
+    }
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Master Stock List', 
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+              Text('Manage products, pricing, and stock levels', 
+                style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+            ],
+          ),
+        ),
+        const SizedBox(width: 16),
+        OutlinedButton.icon(
+          onPressed: () => _showPromotionDialog(context, ref, products),
+          icon: const Icon(Icons.campaign_outlined),
+          label: const Text('Manage Promotions'),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.orange.shade800,
+            side: BorderSide(color: Colors.orange.shade800),
+          ),
         ),
       ],
     );
   }
 
-  void _showPromotionDialog(BuildContext context, WidgetRef ref, List<Product> products) {
+  void _showPromotionDialog(BuildContext context, WidgetRef ref, List<Product> products, {Product? initialProduct}) {
     final formKey = GlobalKey<FormState>();
-    final percentageController = TextEditingController();
+    final percentageController = TextEditingController(
+      text: initialProduct != null ? initialProduct.discountPercentage.toInt().toString() : ''
+    );
     final theme = Theme.of(context);
-    DateTime? startDate;
-    DateTime? endDate;
-    PromoTarget selectedTarget = PromoTarget.both;
-    PromoCustomerTarget selectedCustomerTarget = PromoCustomerTarget.all;
+    DateTime? startDate = initialProduct?.promoStartDate;
+    DateTime? endDate = initialProduct?.promoEndDate;
+    PromoTarget selectedTarget = initialProduct?.promoTarget ?? PromoTarget.both;
+    PromoCustomerTarget selectedCustomerTarget = initialProduct?.promoCustomerTarget ?? PromoCustomerTarget.all;
+    
     final selectedIds = <String>{};
-    for (var p in products) {
-      selectedIds.add(p.id);
+    if (initialProduct != null) {
+      selectedIds.add(initialProduct.id);
+    } else {
+      for (var p in products) {
+        selectedIds.add(p.id);
+      }
     }
 
     showDialog(
@@ -177,21 +220,23 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
 
           return AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
-            title: const Row(
+            title: Row(
               children: [
-                Icon(Icons.campaign_outlined, color: Colors.orange),
-                SizedBox(width: 12),
-                Text('Run Promotion'),
+                const Icon(Icons.campaign_outlined, color: Colors.orange),
+                const SizedBox(width: 12),
+                Expanded(child: Text('Run Promotion', style: theme.textTheme.titleLarge, overflow: TextOverflow.ellipsis)),
               ],
             ),
             content: Form(
               key: formKey,
               child: SizedBox(
-                width: 500,
-                child: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
+                width: MediaQuery.of(context).size.width * 0.9,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 500),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
                       TextFormField(
                         controller: percentageController,
                         decoration: const InputDecoration(
@@ -209,22 +254,24 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                       ),
                       const SizedBox(height: AppSpacing.m),
                       DropdownButtonFormField<PromoTarget>(
-                        initialValue: selectedTarget,
+                        value: selectedTarget,
+                        isExpanded: true,
                         decoration: const InputDecoration(labelText: 'Promotion Target'),
                         items: const [
-                          DropdownMenuItem(value: PromoTarget.both, child: Text('Both Retail & Wholesale')),
-                          DropdownMenuItem(value: PromoTarget.retail, child: Text('Retail Only')),
-                          DropdownMenuItem(value: PromoTarget.wholesale, child: Text('Wholesale Only')),
+                          DropdownMenuItem(value: PromoTarget.both, child: Text('Both Retail & Wholesale', overflow: TextOverflow.ellipsis)),
+                          DropdownMenuItem(value: PromoTarget.retail, child: Text('Retail Only', overflow: TextOverflow.ellipsis)),
+                          DropdownMenuItem(value: PromoTarget.wholesale, child: Text('Wholesale Only', overflow: TextOverflow.ellipsis)),
                         ],
                         onChanged: (v) => setState(() => selectedTarget = v!),
                       ),
                       const SizedBox(height: AppSpacing.m),
                       DropdownButtonFormField<PromoCustomerTarget>(
-                        initialValue: selectedCustomerTarget,
+                        value: selectedCustomerTarget,
+                        isExpanded: true,
                         decoration: const InputDecoration(labelText: 'Customer Eligibility'),
                         items: const [
-                          DropdownMenuItem(value: PromoCustomerTarget.all, child: Text('All Customers (Public)')),
-                          DropdownMenuItem(value: PromoCustomerTarget.regularsOnly, child: Text('Regulars/Favorites Only')),
+                          DropdownMenuItem(value: PromoCustomerTarget.all, child: Text('All Customers (Public)', overflow: TextOverflow.ellipsis)),
+                          DropdownMenuItem(value: PromoCustomerTarget.regularsOnly, child: Text('Regulars/Favorites Only', overflow: TextOverflow.ellipsis)),
                         ],
                         onChanged: (v) => setState(() => selectedCustomerTarget = v!),
                       ),
@@ -256,13 +303,16 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                             children: [
                               const Icon(Icons.date_range, size: 18),
                               const SizedBox(width: 8),
-                              Text(
-                                startDate == null 
-                                  ? 'Select Promotion Dates (Required)' 
-                                  : '${DateFormat('MMM dd').format(startDate!)} - ${DateFormat('MMM dd').format(endDate!)}',
-                                style: TextStyle(
-                                  color: startDate == null ? Colors.grey : theme.colorScheme.onSurface,
-                                  fontWeight: startDate == null ? FontWeight.normal : FontWeight.bold,
+                              Expanded(
+                                child: Text(
+                                  startDate == null 
+                                    ? 'Select Promotion Dates (Required)' 
+                                    : '${DateFormat('MMM dd').format(startDate!)} - ${DateFormat('MMM dd').format(endDate!)}',
+                                  style: TextStyle(
+                                    color: startDate == null ? Colors.grey : theme.colorScheme.onSurface,
+                                    fontWeight: startDate == null ? FontWeight.normal : FontWeight.bold,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
@@ -271,10 +321,13 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                       ),
                       const SizedBox(height: AppSpacing.m),
                       const Divider(),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Text('Select Products:', style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+                          Text('Select Products:', 
+                            style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+                          ),
                           TextButton(
                             onPressed: () {
                               setState(() {
@@ -285,13 +338,18 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                                 }
                               });
                             },
-                            child: Text(allSelected ? 'Deselect All' : 'Select All'),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                              minimumSize: Size.zero,
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            child: Text(allSelected ? 'Deselect All' : 'Select All', style: const TextStyle(fontSize: 12)),
                           ),
                         ],
                       ),
                       const SizedBox(height: 8),
                       Container(
-                        height: 250,
+                        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.3),
                         decoration: BoxDecoration(
                           border: Border.all(color: theme.dividerColor),
                           borderRadius: BorderRadius.circular(AppRadius.s),
@@ -301,7 +359,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                           itemBuilder: (context, index) {
                             final p = products[index];
                             return CheckboxListTile(
-                              title: Text(p.name, style: const TextStyle(fontSize: 13)),
+                              title: Text(p.name, style: const TextStyle(fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
                               subtitle: Text('Current: ₵${p.retailPrice}', style: const TextStyle(fontSize: 10)),
                               value: selectedIds.contains(p.id),
                               onChanged: (val) {
@@ -325,13 +383,16 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                 ),
               ),
             ),
-            actions: [
+          ),
+          actionsOverflowButtonSpacing: 8,
+          actionsAlignment: MainAxisAlignment.end,
+          actions: [
               TextButton(
                 onPressed: () {
                   ref.read(productsFutureProvider.notifier).clearPromotions();
                   Navigator.pop(context);
                 },
-                child: const Text('Clear All Promos', style: TextStyle(color: Colors.red)),
+                child: const Text('Clear All Promos', style: TextStyle(color: Colors.red, fontSize: 13)),
               ),
               ElevatedButton(
                 onPressed: (selectedIds.isEmpty || startDate == null || endDate == null) ? null : () {
@@ -351,9 +412,9 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                 style: ElevatedButton.styleFrom(
                   backgroundColor: theme.colorScheme.primary, 
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 ),
-                child: Text('Apply to ${selectedIds.length} Products'),
+                child: Text('Apply to ${selectedIds.length} Items', style: const TextStyle(fontSize: 13)),
               ),
             ],
           );
@@ -363,6 +424,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
   }
 
   void _showAddProductDialog(BuildContext context, WidgetRef ref) {
+    final products = ref.read(productsFutureProvider).value ?? [];
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController();
     final retailPriceController = TextEditingController();
@@ -399,7 +461,14 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
       'Other': ['Custom Entry']
     };
 
-    final categories = categoryProductMap.keys.toList();
+    // Extract existing categories from products and merge with defaults
+    final existingCategories = products.map((p) => p.category).toSet();
+    final List<String> categories = categoryProductMap.keys.toList();
+    for (var cat in existingCategories) {
+      if (!categories.contains(cat)) {
+        categories.insert(categories.length - 1, cat); // Insert before 'Other'
+      }
+    }
 
     Uint8List? imageBytes;
     String? imageName;
@@ -430,11 +499,13 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
           content: Form(
             key: formKey,
             child: SizedBox(
-              width: 500,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
+              width: MediaQuery.of(context).size.width * 0.9,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 500),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                     Center(
                       child: InkWell(
                         onTap: () async {
@@ -475,7 +546,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                     const SizedBox(height: AppSpacing.l),
 
                     DropdownButtonFormField<String>(
-                      initialValue: selectedCategory,
+                      value: selectedCategory,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Category'),
                       items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
@@ -502,10 +573,10 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                     const SizedBox(height: AppSpacing.m),
 
                     DropdownButtonFormField<String>(
-                      initialValue: selectedProductName,
+                      value: selectedProductName,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Product Name'),
-                      items: (categoryProductMap[selectedCategory] ?? ['Other']).map((name) {
+                      items: (categoryProductMap[selectedCategory] ?? (products.where((p) => p.category == selectedCategory).map((p) => p.name).toSet().toList()..add('Other'))).map((name) {
                         return DropdownMenuItem(value: name, child: Text(name));
                       }).toList(),
                       onChanged: (v) => setState(() {
@@ -589,9 +660,9 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                         const SizedBox(width: AppSpacing.m),
                         Expanded(
                           child: DropdownButtonFormField<WeightUnit>(
-                            initialValue: selectedUnit,
+                            value: selectedUnit,
                             decoration: const InputDecoration(labelText: 'Unit'),
-                            items: WeightUnit.values.map((u) => DropdownMenuItem(value: u, child: Text(u.name.toUpperCase()))).toList(),
+                            items: WeightUnit.values.map((u) => DropdownMenuItem(value: u, child: Text(u == WeightUnit.unit ? 'UNITS/PCS' : u.name.toUpperCase()))).toList(),
                             onChanged: (v) => setState(() => selectedUnit = v!),
                           ),
                         ),
@@ -602,7 +673,8 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
               ),
             ),
           ),
-          actions: [
+        ),
+        actions: [
             TextButton(
               onPressed: isUploading ? null : () => Navigator.pop(context),
               child: Text('Cancel', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
@@ -686,11 +758,13 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
           content: Form(
             key: formKey,
             child: SizedBox(
-              width: 500,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
+              width: MediaQuery.of(context).size.width * 0.9,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 500),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
                     Center(
                       child: InkWell(
                         onTap: () async {
@@ -733,7 +807,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
-                      initialValue: selectedCategory,
+                      value: selectedCategory,
                       decoration: const InputDecoration(labelText: 'Category'),
                       items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                       onChanged: (v) => setState(() => selectedCategory = v!),
@@ -787,7 +861,8 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
               ),
             ),
           ),
-          actions: [
+        ),
+        actions: [
             TextButton(
               onPressed: isUploading ? null : () => Navigator.pop(context), 
               child: Text('Cancel', style: TextStyle(color: theme.colorScheme.onSurfaceVariant))
@@ -866,8 +941,10 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
 
   Widget _buildProductGrid(BuildContext context, List<Product> products, WidgetRef ref) {
     return LayoutBuilder(builder: (context, constraints) {
+      final isMobile = constraints.maxWidth < 600;
       final crossAxisCount = constraints.maxWidth > 1200 ? 4 : (constraints.maxWidth > 800 ? 3 : (constraints.maxWidth > 500 ? 2 : 1));
-      final aspectRatio = constraints.maxWidth > 500 ? 0.75 : 1.1;
+      final aspectRatio = isMobile ? 1.4 : 0.75;
+      
       return GridView.builder(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
@@ -880,145 +957,276 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
         ),
         itemBuilder: (context, index) {
           final product = products[index];
-          final isLowStock = product.stockQuantity < 10;
-          final isScheduled = product.isPromoScheduled;
-          final hasPromo = isScheduled;
+          final isLowStock = product.stockQuantity <= product.lowStockThreshold;
+          final hasPromo = product.isPromoScheduled;
 
           return Card(
             clipBehavior: Clip.antiAlias,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.m)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Stack(
-                    children: [
-                      product.imageUrl.isEmpty
-                          ? Container(color: Theme.of(context).colorScheme.surfaceContainerHighest, child: const Center(child: Icon(Icons.image)))
-                          : product.imageUrl.startsWith('assets/')
-                              ? Image.asset(product.imageUrl, fit: BoxFit.cover, width: double.infinity)
-                              : Image.network(product.imageUrl, fit: BoxFit.cover, width: double.infinity, errorBuilder: (context, error, stackTrace) => const Icon(Icons.image)),
-                      if (isLowStock)
-                        Positioned(
-                          top: 8,
-                          right: 8,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)),
-                            child: const Text('LOW STOCK', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+            child: isMobile 
+              ? InkWell(
+                  onTap: () => _showUpdateStockDialog(context, ref, product),
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.m),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 80,
+                          height: 80,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(AppRadius.s),
+                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(AppRadius.s),
+                            child: product.imageUrl.isEmpty
+                                ? const Icon(Icons.image)
+                                : product.imageUrl.startsWith('assets/')
+                                    ? Image.asset(product.imageUrl, fit: BoxFit.cover)
+                                    : Image.network(product.imageUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.image)),
                           ),
                         ),
-                      if (hasPromo)
-                        Positioned(
-                          top: 8,
-                          left: 8,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                            decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(4)),
-                            child: Text(
-                              product.promoCustomerTarget == PromoCustomerTarget.regularsOnly 
-                                ? '-${product.discountPercentage.toInt()}% REGULARS' 
-                                : '-${product.discountPercentage.toInt()}% PROMO', 
-                              style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)
+                        const SizedBox(width: AppSpacing.m),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  ),
+                                  _buildItemMenu(context, ref, product),
+                                ],
+                              ),
+                              Text(product.category, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
+                              const Spacer(),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          alignment: Alignment.centerLeft,
+                                          child: Text('₵${product.retailPrice.toStringAsFixed(2)}', 
+                                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                                        ),
+                                        if (hasPromo) 
+                                          Text('PROMO ACTIVE', 
+                                            style: TextStyle(color: Colors.orange.shade800, fontSize: 9, fontWeight: FontWeight.bold),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: (isLowStock ? Colors.red : Colors.green).withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text('${product.stockQuantity}${product.unit}', 
+                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: isLowStock ? Colors.red : Colors.green)),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Stack(
+                        children: [
+                          product.imageUrl.isEmpty
+                              ? Container(color: Theme.of(context).colorScheme.surfaceContainerHighest, child: const Center(child: Icon(Icons.image)))
+                              : product.imageUrl.startsWith('assets/')
+                                  ? Image.asset(product.imageUrl, fit: BoxFit.cover, width: double.infinity)
+                                  : Image.network(product.imageUrl, fit: BoxFit.cover, width: double.infinity, errorBuilder: (context, error, stackTrace) => const Icon(Icons.image)),
+                          if (isLowStock)
+                            Positioned(
+                              top: 8,
+                              right: 8,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(4)),
+                                child: const Text('LOW STOCK', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                          if (hasPromo)
+                            Positioned(
+                              top: 8,
+                              left: 8,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(4)),
+                                child: Text(
+                                  product.promoCustomerTarget == PromoCustomerTarget.regularsOnly 
+                                    ? '-${product.discountPercentage.toInt()}% REGULARS' 
+                                    : '-${product.discountPercentage.toInt()}% PROMO', 
+                                  style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(AppSpacing.m),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            product.category.toUpperCase(),
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
                             ),
                           ),
-                        ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(AppSpacing.m),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        product.category.toUpperCase(),
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(child: Text(product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                          PopupMenuButton<String>(
-                            onSelected: (val) {
-                              if (val == 'edit') {
-                                _showEditProductDialog(context, ref, product);
-                              } else if (val == 'delete') {
-                                _confirmDeleteProduct(context, ref, product);
-                              }
-                            },
-                            icon: const Icon(Icons.more_vert, size: 18),
-                            padding: EdgeInsets.zero,
-                            itemBuilder: (context) => [
-                              const PopupMenuItem(
-                                value: 'edit',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.edit, size: 18),
-                                    SizedBox(width: 8),
-                                    Text('Edit Details'),
-                                  ],
-                                ),
-                              ),
-                              const PopupMenuItem(
-                                value: 'delete',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.delete_outline, size: 18, color: Colors.red),
-                                    SizedBox(width: 8),
-                                    Text('Delete Product', style: TextStyle(color: Colors.red)),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      Text(product.category, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
-                      const SizedBox(height: 8),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          const SizedBox(height: 2),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('Ret: ₵${product.retailPrice.toStringAsFixed(2)}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, decoration: product.isPromoActiveFor(false, null, ignoreCustomerFilter: true) ? TextDecoration.lineThrough : null)),
-                              if (product.isPromoActiveFor(false, null, ignoreCustomerFilter: true)) Text('₵${product.getPrice(false, ignoreCustomerFilter: true).toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.orange)),
-                              Text('Whl: ₵${product.wholesalePrice.toStringAsFixed(2)}', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant, decoration: product.isPromoActiveFor(true, null, ignoreCustomerFilter: true) ? TextDecoration.lineThrough : null)),
-                              if (product.isPromoActiveFor(true, null, ignoreCustomerFilter: true)) Text('₵${product.getPrice(true, ignoreCustomerFilter: true).toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.orange)),
+                              Expanded(child: Text(product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                              _buildItemMenu(context, ref, product),
                             ],
                           ),
-                          Text('${product.stockQuantity}${product.unit}', style: TextStyle(fontWeight: FontWeight.bold, color: isLowStock ? Colors.red : Colors.green)),
+                          Text(product.category, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.centerLeft,
+                                      child: Text('Ret: ₵${product.retailPrice.toStringAsFixed(2)}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, decoration: product.isPromoActiveFor(false, null, ignoreCustomerFilter: true) ? TextDecoration.lineThrough : null)),
+                                    ),
+                                    if (product.isPromoActiveFor(false, null, ignoreCustomerFilter: true)) 
+                                      FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: Text('₵${product.getPrice(false, ignoreCustomerFilter: true).toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.orange)),
+                                      ),
+                                    FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.centerLeft,
+                                      child: Text('Whl: ₵${product.wholesalePrice.toStringAsFixed(2)}', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant, decoration: product.isPromoActiveFor(true, null, ignoreCustomerFilter: true) ? TextDecoration.lineThrough : null)),
+                                    ),
+                                    if (product.isPromoActiveFor(true, null, ignoreCustomerFilter: true)) 
+                                      FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        alignment: Alignment.centerLeft,
+                                        child: Text('₵${product.getPrice(true, ignoreCustomerFilter: true).toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.orange)),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Text('${product.stockQuantity}${product.unit}', 
+                                style: TextStyle(fontWeight: FontWeight.bold, color: isLowStock ? Colors.red : Colors.green)),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton(
+                              onPressed: () => _showUpdateStockDialog(context, ref, product),
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(color: Theme.of(context).colorScheme.primary),
+                                foregroundColor: Theme.of(context).colorScheme.primary,
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                              ),
+                              child: const Text('Update Stock', style: TextStyle(fontSize: 12)),
+                            ),
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          onPressed: () => _showUpdateStockDialog(context, ref, product),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: Theme.of(context).colorScheme.primary),
-                            foregroundColor: Theme.of(context).colorScheme.primary,
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                          ),
-                          child: const Text('Update Stock', style: TextStyle(fontSize: 12)),
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
           );
         },
       );
     });
+  }
+
+  Widget _buildItemMenu(BuildContext context, WidgetRef ref, Product product) {
+    return PopupMenuButton<String>(
+      onSelected: (val) {
+        if (val == 'edit') {
+          _showEditProductDialog(context, ref, product);
+        } else if (val == 'delete') {
+          _confirmDeleteProduct(context, ref, product);
+        } else if (val == 'stop_promo') {
+          ref.read(productsFutureProvider.notifier).removePromotion(product.id);
+        } else if (val == 'extend_promo') {
+          _showPromotionDialog(context, ref, [product], initialProduct: product);
+        }
+      },
+      icon: const Icon(Icons.more_vert, size: 18),
+      padding: EdgeInsets.zero,
+      itemBuilder: (context) => [
+        const PopupMenuItem(
+          value: 'edit',
+          child: Row(
+            children: [
+              Icon(Icons.edit, size: 18),
+              SizedBox(width: 8),
+              Text('Edit Details'),
+            ],
+          ),
+        ),
+        if (product.discountPercentage > 0) ...[
+          const PopupMenuItem(
+            value: 'extend_promo',
+            child: Row(
+              children: [
+                Icon(Icons.timer_outlined, size: 18, color: Colors.blue),
+                SizedBox(width: 8),
+                Text('Extend/Modify Promo'),
+              ],
+            ),
+          ),
+          const PopupMenuItem(
+            value: 'stop_promo',
+            child: Row(
+              children: [
+                Icon(Icons.block, size: 18, color: Colors.orange),
+                SizedBox(width: 8),
+                Text('Stop Promotion'),
+              ],
+            ),
+          ),
+        ],
+        const PopupMenuItem(
+          value: 'delete',
+          child: Row(
+            children: [
+              Icon(Icons.delete_outline, size: 18, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Delete Product', style: TextStyle(color: Colors.red)),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   void _showUpdateStockDialog(BuildContext context, WidgetRef ref, Product product) {

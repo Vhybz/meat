@@ -39,6 +39,74 @@ extension AnimalTypeX on AnimalType {
       case AnimalType.rabbit: return 0.55;
     }
   }
+
+  List<String> get standardCuts {
+    switch (this) {
+      case AnimalType.cow:
+      case AnimalType.bull:
+        return [
+          'Mixed Meat',
+          'Boneless',
+          'Offals / Yemadeɛ',
+          'Beef Steak',
+          'Liver & Lungs',
+          'Grounded Meat',
+          'Feet',
+          'Head',
+          'Tail / Padua',
+          'Bones',
+        ];
+      case AnimalType.pig:
+        return [
+          'Mixed Meat',
+          'Boneless Meat',
+          'Offals / Yemadeɛ',
+          'Pork Steak',
+          'Head',
+          'Ear',
+          'Feet',
+          'Liver/lungs',
+          'Skin',
+        ];
+      case AnimalType.goat:
+      case AnimalType.sheep:
+        return [
+          'Mixed Meat',
+          'Boneless',
+          'Offals / Yemadeɛ',
+          'Head',
+          'Feet',
+        ];
+      case AnimalType.hardChicken:
+        return [
+          'Hard Thigh',
+          'Hard Breast',
+          'Hard Back',
+          'Hard Wings',
+          'Hard Half Chicken',
+          'Hard Whole Chicken',
+          'Hard Drumsticks',
+          'Gizzards',
+          'Feet',
+        ];
+      case AnimalType.softChicken:
+        return [
+          'Soft Thigh',
+          'Soft Breast',
+          'Soft Back',
+          'Soft Wings',
+          'Soft Half Chicken',
+          'Soft Whole Chicken',
+          'Soft Drumsticks',
+          'Gizzards',
+          'Feet',
+        ];
+      case AnimalType.turkey:
+        return ['Whole Turkey', 'Breast', 'Thighs', 'Drumsticks', 'Wings', 'Gizzards', 'Feet'];
+      case AnimalType.rabbit:
+        return ['Whole Rabbit', 'Legs', 'Saddle', 'Shoulders'];
+    }
+  }
 }
 
 class SlaughterLog {
@@ -88,7 +156,7 @@ class SlaughterLog {
       branchCode: json['branch_code'] as String?,
       animalId: json['animal_id'] as String,
       type: AnimalType.values.firstWhere((e) => e.name == json['type']),
-      weight: (json['weight'] as num).toDouble(),
+      weight: (json['initial_weight'] as num).toDouble(),
       slaughterTime: json['slaughter_time'] != null ? DateTime.parse(json['slaughter_time'] as String) : null,
       status: SlaughterStatus.values.firstWhere((e) => e.name == json['status']),
     );
@@ -99,7 +167,7 @@ class SlaughterLog {
     'branch_code': branchCode,
     'animal_id': animalId,
     'type': type.name,
-    'weight': weight,
+    'initial_weight': weight,
     'slaughter_time': slaughterTime?.toIso8601String(),
     'status': status.name,
   };
@@ -167,7 +235,7 @@ class MeatBatch {
       id: json['id'] as String,
       branchCode: json['branch_code'] as String?,
       meatType: json['meat_type'] as String,
-      weight: (json['weight'] as num).toDouble(),
+      weight: (json['initial_weight'] as num).toDouble(),
       createdAt: DateTime.parse(json['created_at'] as String),
       status: json['status'] as String,
       source: BatchSource(
@@ -184,7 +252,8 @@ class MeatBatch {
     'id': id,
     'branch_code': branchCode,
     'meat_type': meatType,
-    'weight': weight,
+    'initial_weight': weight,
+    'current_weight': weight,
     'status': status,
     'source_name': source.name,
     'source_location': source.location,
@@ -244,9 +313,73 @@ class MeatCut {
   Map<String, dynamic> toJson() => {
     'id': id,
     'branch_code': branchCode,
-    'name': name,
     'batch_id': batchId,
+    'name': name,
     'weight': weight,
     'processed_at': processedAt.toIso8601String(),
+  };
+}
+
+enum ButcherOrderStatus { pending, preparing, ready, completed }
+
+class ButcherOrder {
+  final String id;
+  final String? branchCode;
+  final String customerName;
+  final List<String> items;
+  final double totalWeight;
+  final DateTime dueDate;
+  final ButcherOrderStatus status;
+
+  ButcherOrder({
+    required this.id,
+    this.branchCode,
+    required this.customerName,
+    required this.items,
+    required this.totalWeight,
+    required this.dueDate,
+    required this.status,
+  });
+
+  ButcherOrder copyWith({
+    String? id,
+    String? branchCode,
+    String? customerName,
+    List<String>? items,
+    double? totalWeight,
+    DateTime? dueDate,
+    ButcherOrderStatus? status,
+  }) {
+    return ButcherOrder(
+      id: id ?? this.id,
+      branchCode: branchCode ?? this.branchCode,
+      customerName: customerName ?? this.customerName,
+      items: items ?? this.items,
+      totalWeight: totalWeight ?? this.totalWeight,
+      dueDate: dueDate ?? this.dueDate,
+      status: status ?? this.status,
+    );
+  }
+
+  factory ButcherOrder.fromJson(Map<String, dynamic> json) {
+    return ButcherOrder(
+      id: json['id'] as String,
+      branchCode: json['branch_code'] as String?,
+      customerName: json['customer_name'] as String,
+      items: List<String>.from(json['items'] ?? []),
+      totalWeight: (json['total_weight'] as num).toDouble(),
+      dueDate: DateTime.parse(json['due_date'] as String),
+      status: ButcherOrderStatus.values.firstWhere((e) => e.name == json['status']),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'branch_code': branchCode,
+    'customer_name': customerName,
+    'items': items,
+    'total_weight': totalWeight,
+    'due_date': dueDate.toIso8601String(),
+    'status': status.name,
   };
 }

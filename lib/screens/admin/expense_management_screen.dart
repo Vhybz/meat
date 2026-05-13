@@ -6,6 +6,7 @@ import '../../core/constants.dart';
 import '../../widgets/main_app_bar.dart';
 import '../../widgets/responsive_layout.dart';
 import '../../widgets/app_sidebar.dart';
+import '../../widgets/role_pop_scope.dart';
 import '../../services/expense_provider.dart';
 import '../../models/expense_model.dart';
 import '../../services/menu_service.dart';
@@ -24,78 +25,87 @@ class ExpenseManagementScreen extends ConsumerWidget {
     final isDesktop = ResponsiveLayout.isDesktop(context);
     const currentRoute = '/admin/expenses';
 
-    return Scaffold(
-      backgroundColor: theme.scaffoldBackgroundColor,
-      appBar: const MainAppBar(title: 'Business Expenses'),
-      drawer: isDesktop ? null : Drawer(
-        child: AppSidebar(
-          userId: user.id,
-          userName: user.name,
-          userRole: user.activePrimaryRole.name.toUpperCase(),
-          currentRoute: currentRoute,
-          items: MenuService.getMenuItemsForUser(user),
-          onTap: (route) => MenuService.navigate(context, route, currentRoute),
+    return RolePopScope(
+      currentRoute: currentRoute,
+      child: Scaffold(
+        backgroundColor: theme.scaffoldBackgroundColor,
+        appBar: const MainAppBar(title: 'Business Expenses'),
+        drawer: isDesktop ? null : Drawer(
+          child: AppSidebar(
+            userId: user.id,
+            userName: user.name,
+            userRole: user.activePrimaryRole.name.toUpperCase(),
+            currentRoute: currentRoute,
+            items: MenuService.getMenuItemsForUser(user),
+            onTap: (route) => MenuService.navigate(context, route, currentRoute),
+          ),
         ),
-      ),
-      body: Row(
-        children: [
-          if (isDesktop)
-            AppSidebar(
-              userId: user.id,
-              userName: user.name,
-              userRole: user.activePrimaryRole.name.toUpperCase(),
-              currentRoute: currentRoute,
-              items: MenuService.getMenuItemsForUser(user),
-              onTap: (route) => MenuService.navigate(context, route, currentRoute),
-            ),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSpacing.l),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(context, ref),
-                  const SizedBox(height: AppSpacing.xl),
-                  _buildMonthlySummary(context, expenseState.records),
-                  const SizedBox(height: AppSpacing.xl),
-                  _buildExpenseList(context, ref, expenseState.records),
-                ],
+        body: Row(
+          children: [
+            if (isDesktop)
+              AppSidebar(
+                userId: user.id,
+                userName: user.name,
+                userRole: user.activePrimaryRole.name.toUpperCase(),
+                currentRoute: currentRoute,
+                items: MenuService.getMenuItemsForUser(user),
+                onTap: (route) => MenuService.navigate(context, route, currentRoute),
+              ),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(AppSpacing.l),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(context, ref),
+                    const SizedBox(height: AppSpacing.xl),
+                    _buildMonthlySummary(context, expenseState.records),
+                    const SizedBox(height: AppSpacing.xl),
+                    _buildExpenseList(context, ref, expenseState.records),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildHeader(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    return Row(
+    final isMobile = ResponsiveLayout.isMobile(context);
+    
+    return Flex(
+      direction: isMobile ? Axis.vertical : Axis.horizontal,
+      crossAxisAlignment: isMobile ? CrossAxisAlignment.start : CrossAxisAlignment.center,
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Expense Tracking', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
-            Text('Manage operational costs and taxes', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+            Text('Expense Tracking', style: TextStyle(fontSize: isMobile ? 20 : 24, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+            Text('Manage operational costs and taxes', style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12)),
           ],
         ),
-        Row(
+        if (isMobile) const SizedBox(height: AppSpacing.m),
+        Wrap(
+          spacing: AppSpacing.s,
+          runSpacing: AppSpacing.s,
           children: [
             OutlinedButton.icon(
               onPressed: () => _showAddCategoryDialog(context, ref),
-              icon: const Icon(Icons.settings),
-              label: const Text('Customize Categories'),
+              icon: const Icon(Icons.settings, size: 18),
+              label: const Text('Categories', style: TextStyle(fontSize: 12)),
             ),
-            const SizedBox(width: AppSpacing.m),
             ElevatedButton.icon(
               onPressed: () => _showAddExpenseDialog(context, ref),
-              icon: const Icon(Icons.add),
-              label: const Text('Add Expense'),
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Add Expense', style: TextStyle(fontSize: 12)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: theme.colorScheme.primary,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 24, vertical: 12),
               ),
             ),
           ],
@@ -106,13 +116,15 @@ class ExpenseManagementScreen extends ConsumerWidget {
 
   Widget _buildMonthlySummary(BuildContext context, List<ExpenseRecord> expenses) {
     final theme = Theme.of(context);
+    final isMobile = ResponsiveLayout.isMobile(context);
     final now = DateTime.now();
     final thisMonthExpenses = expenses
         .where((e) => e.date.month == now.month && e.date.year == now.year)
         .fold(0.0, (sum, e) => sum + e.amount);
 
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.xl),
+      width: double.infinity,
+      padding: EdgeInsets.all(isMobile ? AppSpacing.l : AppSpacing.xl),
       decoration: BoxDecoration(
         color: theme.colorScheme.primary,
         borderRadius: BorderRadius.circular(AppRadius.l),
@@ -120,17 +132,19 @@ class ExpenseManagementScreen extends ConsumerWidget {
           BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10, offset: const Offset(0, 4)),
         ],
       ),
-      child: Row(
+      child: Flex(
+        direction: isMobile ? Axis.vertical : Axis.horizontal,
+        crossAxisAlignment: isMobile ? CrossAxisAlignment.start : CrossAxisAlignment.center,
         children: [
-          const Icon(Icons.account_balance_rounded, color: Colors.white, size: 40),
-          const SizedBox(width: AppSpacing.xl),
+          Icon(Icons.account_balance_rounded, color: Colors.white, size: isMobile ? 32 : 40),
+          SizedBox(width: isMobile ? 0 : AppSpacing.xl, height: isMobile ? AppSpacing.m : 0),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('${DateFormat('MMMM yyyy').format(now)} Total Expenses', 
-                style: const TextStyle(color: Colors.white70, fontSize: 14)),
+                style: TextStyle(color: Colors.white70, fontSize: isMobile ? 12 : 14)),
               Text('GHS ${thisMonthExpenses.toStringAsFixed(2)}', 
-                style: const TextStyle(color: Colors.white, fontSize: 32, fontWeight: FontWeight.bold)),
+                style: TextStyle(color: Colors.white, fontSize: isMobile ? 24 : 32, fontWeight: FontWeight.bold)),
             ],
           ),
         ],

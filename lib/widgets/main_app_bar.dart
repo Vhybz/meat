@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -34,18 +35,18 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
     final isDark = themeMode == ThemeMode.dark;
     
     final Color roleColor = _getRoleColor(role, isDark, theme);
-    final Color contentColor = Colors.white; // Contrast for role-based background
+    final Color contentColor = Colors.white; 
     
     final now = DateTime.now();
     final notifications = ref.watch(notificationProvider);
     final unreadCount = notifications.where((n) => !n.isRead).length;
 
-    return Container(
+    final Widget body = Container(
       decoration: BoxDecoration(
         color: roleColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.1),
+            color: Colors.black.withOpacity(isDark ? 0.4 : 0.1),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -53,6 +54,7 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
         border: isDark ? Border(bottom: BorderSide(color: theme.dividerColor)) : null,
       ),
       child: SafeArea(
+        bottom: false,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.l, vertical: AppSpacing.s),
           child: Row(
@@ -71,15 +73,26 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: contentColor,
-                        letterSpacing: -0.5,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            title,
+                            style: TextStyle(
+                              fontSize: isDesktop ? 20 : 16,
+                              fontWeight: FontWeight.bold,
+                              color: contentColor,
+                              letterSpacing: -0.5,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (!isDesktop) ...[
+                          const SizedBox(width: 8),
+                          _buildLiveIndicator(ref),
+                        ],
+                      ],
                     ),
                     if (isDesktop)
                       Text(
@@ -88,34 +101,40 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
                           : 'Mi Corazon Butchery System',
                         style: TextStyle(
                           fontSize: 11,
-                          color: Colors.white.withValues(alpha: 0.7),
+                          color: Colors.white.withOpacity(0.7),
                           fontWeight: FontWeight.w400,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                   ],
                 ),
               ),
 
               if (isDesktop) ...[
+                const SizedBox(width: AppSpacing.m),
                 _buildInfoChip(
                   context,
                   icon: Icons.calendar_today_rounded,
                   label: DateFormat('EEE, MMM dd').format(now),
                 ),
-                const SizedBox(width: AppSpacing.m),
+                const SizedBox(width: AppSpacing.s),
                 _buildInfoChip(
                   context,
                   icon: Icons.access_time_rounded,
                   label: DateFormat('hh:mm a').format(now),
                 ),
-                const SizedBox(width: AppSpacing.l),
+                const SizedBox(width: AppSpacing.s),
+                _buildLiveIndicator(ref),
               ],
 
-              if (actions != null) ...actions!,
+              if (actions != null) ...[
+                const SizedBox(width: AppSpacing.m),
+                ...actions!,
+              ],
               
-              const SizedBox(width: AppSpacing.m),
+              const SizedBox(width: AppSpacing.s),
               
-              // Theme Toggle
               _buildRoundButton(
                 context, 
                 isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded, 
@@ -132,12 +151,49 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
         ),
       ),
     );
+
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarIconBrightness: isDark ? Brightness.light : Brightness.dark,
+      ),
+      child: body,
+    );
+  }
+
+  Widget _buildLiveIndicator(WidgetRef ref) {
+    final heartbeat = ref.watch(liveHeartbeatProvider);
+    return heartbeat.when(
+      data: (tick) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.green.withOpacity(0.5)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 5,
+              height: 5,
+              decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 4),
+            const Text('LIVE', style: TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ),
+      loading: () => const SizedBox.shrink(),
+      error: (_, __) => const Icon(Icons.sync_problem, size: 12, color: Colors.white),
+    );
   }
 
   Color _getRoleColor(UserRole? role, bool isDark, ThemeData theme) {
     if (isDark) return theme.appBarTheme.backgroundColor ?? const Color(0xFF1E1E1E);
-    
-    return AppColors.primaryMaroon; // Deep Red like splashscreen
+    return AppColors.primaryMaroon;
   }
 
   Widget _buildNotificationButton(BuildContext context, int count, VoidCallback onTap) {
@@ -205,7 +261,7 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
                         title: Text(n.title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                         subtitle: Text(n.message, style: const TextStyle(fontSize: 11)),
                         trailing: Text(DateFormat('hh:mm').format(n.timestamp), style: const TextStyle(fontSize: 10)),
-                        tileColor: n.isRead ? null : Colors.orange.withValues(alpha: 0.05),
+                        tileColor: n.isRead ? null : Colors.orange.withOpacity(0.05),
                         onTap: () {
                           ref.read(notificationProvider.notifier).markAsRead(n.id);
                         },
@@ -231,9 +287,9 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.15),
+        color: Colors.white.withOpacity(0.15),
         borderRadius: BorderRadius.circular(AppRadius.l),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+        border: Border.all(color: Colors.white.withOpacity(0.2)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -255,7 +311,7 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
 
   Widget _buildRoundButton(BuildContext context, IconData icon, VoidCallback onTap) {
     return Material(
-      color: Colors.white.withValues(alpha: 0.15),
+      color: Colors.white.withOpacity(0.15),
       shape: const CircleBorder(),
       child: InkWell(
         onTap: onTap,
@@ -272,22 +328,11 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
     final user = ref.watch(currentUserProvider);
 
     return InkWell(
-      onTap: () async {
+      onTap: () {
         if (onProfileTap != null) {
           onProfileTap!();
         } else {
-          final picker = ImagePicker();
-          final XFile? image = await picker.pickImage(
-            source: ImageSource.gallery,
-            maxWidth: 512,
-            maxHeight: 512,
-            imageQuality: 75,
-          );
-
-          if (image != null && user != null) {
-            final bytes = await image.readAsBytes();
-            await ref.read(userProvider.notifier).updatePhoto(user.id, bytes);
-          }
+          Navigator.pushNamed(context, '/profile');
         }
       },
       borderRadius: BorderRadius.circular(20),
@@ -295,7 +340,7 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
         padding: const EdgeInsets.all(2),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 2),
+          border: Border.all(color: Colors.white.withOpacity(0.4), width: 2),
         ),
         child: SizedBox(
           width: 32,
