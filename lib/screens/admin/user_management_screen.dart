@@ -887,121 +887,156 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
           ),
           content: Form(
             key: formKey,
-            child: SizedBox(
-              width: 500,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _buildFormTextField(
-                            context: context,
-                            controller: firstNameController,
-                            label: 'First Name',
-                            icon: Icons.person_outline,
-                            validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
-                            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z]'))],
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.m),
-                        Expanded(
-                          child: _buildFormTextField(
-                            context: context,
-                            controller: surnameController,
-                            label: 'Surname',
-                            icon: Icons.person_outline,
-                            validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
-                            inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z]'))],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.m),
-                    _buildFormTextField(
-                      context: context,
-                      controller: emailController,
-                      label: 'Email Address',
-                      icon: Icons.email_outlined,
-                      keyboardType: TextInputType.emailAddress,
-                      validator: (v) {
-                        if (v == null || v.isEmpty) return 'Required';
-                        if (!v.contains('@')) return 'Invalid email';
-                        return null;
-                      },
-                      inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s'))],
-                    ),
-                    const SizedBox(height: AppSpacing.m),
-                    DropdownButtonFormField<UserRole>(
-                      initialValue: selectedRole,
-                      decoration: const InputDecoration(
-                        labelText: 'Managed Role',
-                        prefixIcon: Icon(Icons.work_outline),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 500),
+              child: SizedBox(
+                width: MediaQuery.of(context).size.width * 0.9,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          if (constraints.maxWidth < 300) {
+                            return Column(
+                              children: [
+                                _buildFormTextField(
+                                  context: context,
+                                  controller: firstNameController,
+                                  label: 'First Name',
+                                  icon: Icons.person_outline,
+                                  validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z]'))],
+                                ),
+                                const SizedBox(height: AppSpacing.m),
+                                _buildFormTextField(
+                                  context: context,
+                                  controller: surnameController,
+                                  label: 'Surname',
+                                  icon: Icons.person_outline,
+                                  validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z]'))],
+                                ),
+                              ],
+                            );
+                          }
+                          return Row(
+                            children: [
+                              Expanded(
+                                child: _buildFormTextField(
+                                  context: context,
+                                  controller: firstNameController,
+                                  label: 'First Name',
+                                  icon: Icons.person_outline,
+                                  validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z]'))],
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.m),
+                              Expanded(
+                                child: _buildFormTextField(
+                                  context: context,
+                                  controller: surnameController,
+                                  label: 'Surname',
+                                  icon: Icons.person_outline,
+                                  validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                                  inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z]'))],
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
-                      items: UserRole.values
-                          .where((r) => r != UserRole.superAdmin)
-                          .map((r) => DropdownMenuItem(value: r, child: Text(r.name.toUpperCase())))
-                          .toList(),
-                      onChanged: (v) => setState(() => selectedRole = v!),
-                    ),
-                    const SizedBox(height: AppSpacing.m),
-                    Consumer(
-                      builder: (context, ref, _) {
-                        final branchesAsync = ref.watch(branchesProvider);
-                        final isSuperAdmin = currentUser?.role == UserRole.superAdmin;
+                      const SizedBox(height: AppSpacing.m),
+                      _buildFormTextField(
+                        context: context,
+                        controller: emailController,
+                        label: 'Email Address',
+                        icon: Icons.email_outlined,
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (v) {
+                          if (v == null || v.isEmpty) return 'Required';
+                          if (!v.contains('@')) return 'Invalid email';
+                          return null;
+                        },
+                        inputFormatters: [FilteringTextInputFormatter.deny(RegExp(r'\s'))],
+                      ),
+                      const SizedBox(height: AppSpacing.m),
+                      DropdownButtonFormField<UserRole>(
+                        initialValue: selectedRole,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          labelText: 'Managed Role',
+                          prefixIcon: Icon(Icons.work_outline),
+                        ),
+                        items: UserRole.values
+                            .where((r) => r != UserRole.superAdmin)
+                            .map((r) => DropdownMenuItem(
+                              value: r, 
+                              child: Text(r.name.toUpperCase(), overflow: TextOverflow.ellipsis)
+                            ))
+                            .toList(),
+                        onChanged: (v) => setState(() => selectedRole = v!),
+                      ),
+                      const SizedBox(height: AppSpacing.m),
+                      Consumer(
+                        builder: (context, ref, _) {
+                          final branchesAsync = ref.watch(branchesProvider);
+                          final isSuperAdmin = currentUser?.role == UserRole.superAdmin;
 
-                        return branchesAsync.when(
-                          data: (branches) => DropdownButtonFormField<String>(
-                            initialValue: selectedBranchCode,
-                            decoration: InputDecoration(
-                              labelText: 'Assign to Branch',
-                              prefixIcon: const Icon(Icons.map_outlined),
-                              fillColor: isSuperAdmin ? null : theme.colorScheme.surfaceContainerHighest,
-                              helperText: isSuperAdmin ? 'Select destination branch' : 'Locked to your current branch',
+                          return branchesAsync.when(
+                            data: (branches) => DropdownButtonFormField<String>(
+                              initialValue: selectedBranchCode,
+                              isExpanded: true,
+                              decoration: InputDecoration(
+                                labelText: 'Assign to Branch',
+                                prefixIcon: const Icon(Icons.map_outlined),
+                                fillColor: isSuperAdmin ? null : theme.colorScheme.surfaceContainerHighest,
+                                helperText: isSuperAdmin ? 'Select destination branch' : 'Locked to your current branch',
+                              ),
+                              items: branches.map((b) => DropdownMenuItem(
+                                value: b.code, 
+                                child: Text('${b.name} (${b.location})', overflow: TextOverflow.ellipsis)
+                              )).toList(),
+                              onChanged: isSuperAdmin ? (v) => setState(() => selectedBranchCode = v!) : null,
+                              validator: (v) => v == null ? 'Required' : null,
                             ),
-                            items: branches.map((b) => DropdownMenuItem(
-                              value: b.code, 
-                              child: Text('${b.name} (${b.location})')
-                            )).toList(),
-                            onChanged: isSuperAdmin ? (v) => setState(() => selectedBranchCode = v) : null,
-                            validator: (v) => v == null ? 'Required' : null,
-                          ),
-                          loading: () => const Center(
-                            child: Padding(
-                              padding: EdgeInsets.all(8.0),
-                              child: LinearProgressIndicator(),
+                            loading: () => const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(8.0),
+                                child: LinearProgressIndicator(),
+                              ),
                             ),
-                          ),
-                          error: (err, _) => const Text(
-                            'Error loading branches. Ensure they are created in Admin.',
-                            style: TextStyle(color: Colors.red, fontSize: 11),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(AppSpacing.m),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.withValues(alpha: 0.05),
-                        borderRadius: BorderRadius.circular(AppRadius.s),
-                        border: Border.all(color: Colors.blue.withValues(alpha: 0.1)),
+                            error: (err, _) => const Text(
+                              'Error loading branches. Ensure they are created in Admin.',
+                              style: TextStyle(color: Colors.red, fontSize: 11),
+                            ),
+                          );
+                        },
                       ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.info_outline, size: 16, color: Colors.blue),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'The employee will need to set their own password upon first login or contact support.',
-                              style: TextStyle(fontSize: 10, color: Colors.blue),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.all(AppSpacing.m),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(AppRadius.s),
+                          border: Border.all(color: Colors.blue.withOpacity(0.1)),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.info_outline, size: 16, color: Colors.blue),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'The employee will need to set their own password upon first login or contact support.',
+                                style: TextStyle(fontSize: 10, color: Colors.blue),
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),

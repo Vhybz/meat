@@ -51,7 +51,11 @@ void main() async {
       debugPrint('Supabase Environment Variables not found in build. Attempting .env file fallback...');
       await SupabaseConfig.initialize();
     } else {
-      await Supabase.initialize(url: url, anonKey: anonKey);
+      await Supabase.initialize(
+        url: url, 
+        anonKey: anonKey,
+        authOptions: const FlutterAuthClientOptions(authFlowType: AuthFlowType.pkce),
+      );
     }
 
     runApp(
@@ -62,48 +66,157 @@ void main() async {
   } catch (e) {
     debugPrint('CRITICAL INITIALIZATION FAILURE: $e');
     runApp(
-      MaterialApp(
+      const MaterialApp(
         debugShowCheckedModeBanner: false,
-        home: Scaffold(
-          body: Container(
-            color: const Color(0xFF6B1111), // App Maroon
-            padding: const EdgeInsets.all(24),
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.error_outline, color: Colors.white, size: 64),
-                  const SizedBox(height: 24),
-                  const Text(
-                    'Initialization Failure',
-                    style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+        home: InitializationErrorScreen(),
+      ),
+    );
+  }
+}
+
+class InitializationErrorScreen extends StatelessWidget {
+  const InitializationErrorScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        color: const Color(0xFF6B1111), // App Maroon
+        width: double.infinity,
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.cloud_off_rounded, color: Colors.white, size: 80),
+                const SizedBox(height: 32),
+                const Text(
+                  'Configuration Missing',
+                  style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'The application cannot connect to the database because the Supabase configuration is missing.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 16),
+                ),
+                const SizedBox(height: 40),
+                _buildErrorBox(
+                  'LOCAL DEVELOPMENT (VS Code/Android Studio)',
+                  'Ensure you have a .env file in the root folder with:\nSUPABASE_URL=your_url\nSUPABASE_ANON_KEY=your_key',
+                ),
+                const SizedBox(height: 16),
+                _buildErrorBox(
+                  'PRODUCTION/WEB DEPLOYMENT',
+                  'Provide these as environment variables during build using --dart-define or --dart-define-from-file.',
+                ),
+                const SizedBox(height: 40),
+                ElevatedButton(
+                  onPressed: () => _showManualConfigDialog(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF6B1111),
+                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'The application failed to start because the Supabase configuration is missing in the production build.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 16),
-                  ),
-                  const SizedBox(height: 32),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      'Action Required:\nAdd SUPABASE_URL and SUPABASE_ANON_KEY to Netlify Environment Variables AND update the build command to use --dart-define.',
-                      style: TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
+                  child: const Text('ENTER CONFIG MANUALLY', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(height: 24),
+                const Text(
+                  'After updating configuration, please restart the app or refresh your browser.',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                  textAlign: TextAlign.center,
+                ),
+              ],
             ),
           ),
         ),
       ),
     );
   }
+}
+
+  Widget _buildErrorBox(String title, String content) {
+    return Container(
+      width: 600,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            content,
+            style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+void _showManualConfigDialog(BuildContext context) {
+  final urlController = TextEditingController();
+  final keyController = TextEditingController();
+
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Manual Supabase Config'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: urlController,
+            decoration: const InputDecoration(labelText: 'Supabase URL', hintText: 'https://xxx.supabase.co'),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: keyController,
+            decoration: const InputDecoration(labelText: 'Anon Key'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
+        ElevatedButton(
+          onPressed: () async {
+            if (urlController.text.isNotEmpty && keyController.text.isNotEmpty) {
+              try {
+                await Supabase.initialize(
+                  url: urlController.text.trim(),
+                  anonKey: keyController.text.trim(),
+                );
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  // Since we are in a minimal MaterialApp, just showing success
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Config saved! Please refresh the page.')),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Initialization failed: $e')),
+                  );
+                }
+              }
+            }
+          },
+          child: const Text('INITIALIZE'),
+        ),
+      ],
+    ),
+  );
 }
 
 class MeatShopApp extends ConsumerWidget {

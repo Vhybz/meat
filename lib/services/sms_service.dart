@@ -5,7 +5,7 @@ import '../models/sale_model.dart';
 import '../models/user_model.dart';
 
 class SmsService {
-  static String get _apiKey => dotenv.env['ARKESEL_API_KEY'] ?? '';
+  static String get _apiKey => dotenv.env['ARKESEL_API_KEY'] ?? 'ZGhHekhSWnpHbmF1VWlGR0ZqemI';
   static String get _senderId => dotenv.env['ARKESEL_SENDER_ID'] ?? 'MiCorazon';
   static String get _adminPhone => dotenv.env['ADMIN_PHONE'] ?? '0209276200';
 

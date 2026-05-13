@@ -19,6 +19,7 @@ import '../../services/menu_service.dart';
 import '../../services/user_provider.dart';
 import '../../models/user_model.dart';
 import '../../widgets/role_pop_scope.dart';
+import '../../services/report_service.dart';
 
 class AdminDashboard extends ConsumerStatefulWidget {
   const AdminDashboard({super.key});
@@ -664,7 +665,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
       runSpacing: AppSpacing.s,
       children: [
         ElevatedButton.icon(
-          onPressed: () {},
+          onPressed: () => _showExportReportDialog(context),
           icon: const Icon(Icons.download, size: 18),
           label: const Text('Export PDF'),
           style: ElevatedButton.styleFrom(
@@ -679,7 +680,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
           ),
         ),
         ElevatedButton.icon(
-          onPressed: () {},
+          onPressed: () => _handleQuickAddStaff(context),
           icon: const Icon(Icons.add, size: 18),
           label: const Text('Add Staff'),
           style: ElevatedButton.styleFrom(
@@ -693,6 +694,196 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
           ),
         ),
       ],
+    );
+  }
+
+  void _handleQuickAddStaff(BuildContext context) {
+    // Navigate to user management and use the callback to open dialog
+    Navigator.pushReplacementNamed(context, '/admin/users');
+    // Note: In a real app, we might pass a flag in arguments to auto-open the dialog
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Opening Staff Registration...'), duration: Duration(seconds: 1)),
+    );
+  }
+
+  void _showExportReportDialog(BuildContext context) {
+    final theme = Theme.of(context);
+    final searchController = TextEditingController();
+    
+    final List<Map<String, dynamic>> reports = [
+      {'title': 'Daily Sales Report', 'desc': 'Detailed list of all transactions today', 'icon': Icons.point_of_sale, 'cat': 'Financial'},
+      {'title': 'Monthly Revenue Summary', 'desc': 'Financial overview for the current month', 'icon': Icons.account_balance, 'cat': 'Financial'},
+      {'title': 'Inventory Audit', 'desc': 'Stock levels and low-stock warnings', 'icon': Icons.inventory_2, 'cat': 'Stock'},
+      {'title': 'Slaughter & Yield Log', 'desc': 'Operational efficiency and carcass records', 'icon': Icons.precision_manufacturing, 'cat': 'Production'},
+      {'title': 'Staff Performance', 'desc': 'Individual sales and processing metrics', 'icon': Icons.badge, 'cat': 'Staff'},
+      {'title': 'Customer Debt Statement', 'desc': 'Outstanding balances and payment history', 'icon': Icons.money_off, 'cat': 'Customers'},
+      {'title': 'Business Expense Ledger', 'desc': 'Categorized operational costs', 'icon': Icons.receipt_long, 'cat': 'Financial'},
+      {'title': 'Meat Breakdown Analysis', 'desc': 'Detailed cuts and waste percentages', 'icon': Icons.restaurant, 'cat': 'Production'},
+      {'title': 'Operational Reports', 'desc': 'Combined view of workstation logs', 'icon': Icons.assignment, 'cat': 'General'},
+      {'title': 'System Audit Log', 'desc': 'Record of administrative changes', 'icon': Icons.history_edu, 'cat': 'Security'},
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          final query = searchController.text.toLowerCase();
+          final filteredReports = reports.where((r) => 
+            r['title'].toLowerCase().contains(query) ||
+            r['desc'].toLowerCase().contains(query) ||
+            r['cat'].toLowerCase().contains(query)
+          ).toList();
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
+            titlePadding: EdgeInsets.zero,
+            title: Container(
+              padding: const EdgeInsets.all(AppSpacing.l),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primary,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(AppRadius.l)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.picture_as_pdf, color: Colors.white),
+                  SizedBox(width: 12),
+                  Expanded(child: Text('Generate Report PDF', style: TextStyle(color: Colors.white, fontSize: 18))),
+                ],
+              ),
+            ),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 500),
+              child: SizedBox(
+                width: MediaQuery.of(context).size.width * 0.9,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: searchController,
+                      onChanged: (v) => setState(() {}),
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: 'Search by title, category or description...',
+                        prefixIcon: const Icon(Icons.search),
+                        suffixIcon: query.isNotEmpty ? IconButton(icon: const Icon(Icons.clear), onPressed: () {
+                          searchController.clear();
+                          setState(() {});
+                        }) : null,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.s)),
+                        isDense: true,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Flexible(
+                      child: Container(
+                        constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.4),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: theme.dividerColor),
+                          borderRadius: BorderRadius.circular(AppRadius.s),
+                        ),
+                        child: filteredReports.isEmpty
+                          ? const Center(child: Padding(padding: EdgeInsets.all(40), child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.search_off, size: 48, color: Colors.grey),
+                                SizedBox(height: 12),
+                                Text('No matching reports found.', style: TextStyle(color: Colors.grey)),
+                              ],
+                            )))
+                          : ListView.separated(
+                              shrinkWrap: true,
+                              itemCount: filteredReports.length,
+                              separatorBuilder: (context, index) => Divider(height: 1, color: theme.dividerColor),
+                              itemBuilder: (context, index) {
+                                final r = filteredReports[index];
+                                return ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                  leading: Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: theme.colorScheme.primary.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Icon(r['icon'], color: theme.colorScheme.primary, size: 20),
+                                  ),
+                                  title: Text(r['title'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  subtitle: Text(r['desc'], style: const TextStyle(fontSize: 10), maxLines: 2, overflow: TextOverflow.ellipsis),
+                                  trailing: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.download_for_offline, size: 18, color: Colors.green),
+                                      const SizedBox(height: 2),
+                                      Text(r['cat'].toUpperCase(), style: const TextStyle(fontSize: 7, fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
+                                  onTap: () async {
+                                    Navigator.pop(context);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Generating ${r['title']}... Please wait.'),
+                                        backgroundColor: AppColors.accentGreen,
+                                      ),
+                                    );
+                                    
+                                    try {
+                                      if (r['title'] == 'Daily Sales Report') {
+                                        final sales = ref.read(saleHistoryProvider);
+                                        await ReportService.generateDailySalesReport(sales, DateTime.now());
+                                      } else if (r['title'] == 'Monthly Revenue Summary') {
+                                        final sales = ref.read(saleHistoryProvider);
+                                        await ReportService.generateMonthlyRevenueSummary(sales, DateTime.now());
+                                      } else if (r['title'] == 'Inventory Audit') {
+                                        final products = ref.read(productsFutureProvider).value ?? [];
+                                        await ReportService.generateInventoryAudit(products);
+                                      } else if (r['title'] == 'Slaughter & Yield Log') {
+                                        final logs = ref.read(slaughterLogsProvider).value ?? [];
+                                        await ReportService.generateSlaughterLogReport(logs);
+                                      } else if (r['title'] == 'Business Expense Ledger') {
+                                        final expenses = ref.read(expenseProvider).records;
+                                        await ReportService.generateExpenseLedger(expenses);
+                                      } else if (r['title'] == 'Customer Debt Statement') {
+                                        final sales = ref.read(saleHistoryProvider);
+                                        await ReportService.generateCustomerDebtStatement(sales);
+                                      } else if (r['title'] == 'Meat Breakdown Analysis') {
+                                        final cuts = ref.read(recentCutsProvider).value ?? [];
+                                        await ReportService.generateMeatBreakdownAnalysis(cuts);
+                                      } else if (r['title'] == 'Staff Performance') {
+                                        final sales = ref.read(saleHistoryProvider);
+                                        final staff = ref.read(userProvider);
+                                        await ReportService.generateStaffPerformanceReport(sales, staff);
+                                      } else {
+                                        // Default placeholder for other reports
+                                        await Future.delayed(const Duration(seconds: 1));
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('This report type is coming soon in the next update!')),
+                                          );
+                                        }
+                                      }
+                                    } catch (e) {
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Error generating report: $e'), backgroundColor: Colors.red),
+                                        );
+                                      }
+                                    }
+                                  },
+                                );
+                              },
+                            ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: Text('Close Window', style: TextStyle(color: theme.colorScheme.onSurfaceVariant))),
+            ],
+          );
+        },
+      ),
     );
   }
 

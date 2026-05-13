@@ -119,7 +119,7 @@ class ProductCard extends StatelessWidget {
                           style: TextStyle(
                             color: promoLabel != null 
                               ? Colors.orange.shade800 
-                              : theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                              : theme.colorScheme.onSurface.withOpacity(0.8),
                             fontSize: 11,
                             fontWeight: FontWeight.bold,
                           ),

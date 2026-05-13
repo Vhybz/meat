@@ -46,7 +46,7 @@ class CartItemTile extends StatelessWidget {
           const SizedBox(width: 8),
           IconButton(
             onPressed: onDelete,
-            icon: Icon(Icons.delete_outline, size: 18, color: theme.colorScheme.error.withValues(alpha: 0.7)),
+            icon: Icon(Icons.delete_outline, size: 18, color: theme.colorScheme.error.withOpacity(0.7)),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
           ),

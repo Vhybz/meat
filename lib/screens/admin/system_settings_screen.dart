@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants.dart';
 import '../../widgets/main_app_bar.dart';
-
 import '../../widgets/responsive_layout.dart';
 import '../../widgets/app_sidebar.dart';
 import '../../services/menu_service.dart';
@@ -60,83 +59,52 @@ class _SystemSettingsScreenState extends ConsumerState<SystemSettingsScreen> {
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(AppSpacing.l),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('General Configuration', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
-                    const SizedBox(height: AppSpacing.xl),
-                    _buildSection(
-                      context,
-                      'Shop Information',
-                      [
-                        _settingTile(context, Icons.store, 'Shop Name', 'Mi CORAZON FRESHMEAT BUTCHERY'),
-                        _settingTile(context, Icons.location_on, 'Location', 'New Town, Road linking From Water works Ltd. to Atronie Road'),
-                        _settingTile(context, Icons.gps_fixed, 'GPS Address', 'BS-0006-1566'),
-                        _settingTile(context, Icons.phone, 'Contact', '0209276200 / 0209276217 / 0243672146'),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.xl),
-                    _buildSection(
-                      context,
-                      'Brand Identity',
-                      [
-                        _settingTile(context, Icons.auto_awesome, 'Slogan', 'Uncompromising Quality, Unforgettable Taste'),
-                        _settingTile(context, Icons.color_lens, 'Primary Theme', 'Maroon & White'),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.xl),
-                    _buildSection(
-                      context,
-                      'Finance & Taxes',
-                      [
-                        _settingTile(context, Icons.currency_exchange, 'Default Currency', 'GHS (Ghana Cedi)'),
-                        _settingTile(context, Icons.receipt_long, 'Tax Rate (VAT)', '15.0%'),
-                        _settingTile(context, Icons.print, 'Receipt Footer', '“Give thanks to the Lord...”'),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.xl),
-                    _buildSection(
-                      context,
-                      'Database & Maintenance',
-                      [
-                        ListTile(
-                          leading: Icon(Icons.inventory_2, color: theme.colorScheme.onSurfaceVariant),
-                          title: Text('Initial Product Catalog', style: TextStyle(fontSize: 14, color: theme.colorScheme.onSurface)),
-                          subtitle: Text('Populate database with default Chicken, Beef, Pork and Goat items', style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 11)),
-                          trailing: _isSeeding 
-                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                            : Icon(Icons.upload_file, color: theme.colorScheme.primary),
-                          onTap: _isSeeding ? null : () async {
-                            setState(() => _isSeeding = true);
-                            try {
-                              await ref.read(productSeederProvider).seedProducts();
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Product catalog populated successfully!'), backgroundColor: AppColors.accentGreen),
-                                );
-                              }
-                            } catch (e) {
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-                                );
-                              }
-                            } finally {
-                              if (mounted) setState(() => _isSeeding = false);
-                            }
-                          },
+                child: Center(
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 800),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildHeroHeader(theme),
+                        const SizedBox(height: AppSpacing.xl),
+                        _buildSection(
+                          context,
+                          'Shop Identification',
+                          Icons.business_rounded,
+                          [
+                            _settingTile(context, Icons.store_rounded, 'Legal Shop Name', 'Mi CORAZON FRESHMEAT BUTCHERY'),
+                            _settingTile(context, Icons.location_on_rounded, 'Physical Location', 'New Town, Road linking Water Works to Atronie Road'),
+                            _settingTile(context, Icons.gps_fixed_rounded, 'Digital Address (GPS)', 'BS-0006-1566'),
+                            _settingTile(context, Icons.phone_android_rounded, 'Emergency Contacts', '0209276200 / 0243672146'),
+                          ],
                         ),
-                        _settingTile(context, Icons.backup, 'Cloud Backup', 'Last synced: 2 hours ago'),
+                        const SizedBox(height: AppSpacing.xl),
+                        _buildSection(
+                          context,
+                          'Configuration & Defaults',
+                          Icons.settings_suggest_rounded,
+                          [
+                            _settingTile(context, Icons.currency_exchange_rounded, 'System Currency', 'Ghana Cedi (GHS)'),
+                            _settingTile(context, Icons.percent_rounded, 'VAT/Tax Rate', '15.0%'),
+                            _settingTile(context, Icons.auto_awesome_rounded, 'Brand Slogan', 'Uncompromising Quality, Unforgettable Taste'),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.xl),
+                        _buildSection(
+                          context,
+                          'Maintenance & Data',
+                          Icons.storage_rounded,
+                          [
+                            _buildSeedingTile(context, theme),
+                            _settingTile(context, Icons.cloud_done_rounded, 'Cloud Sync Status', 'Live & Secure', color: Colors.green),
+                            _settingTile(context, Icons.history_edu_rounded, 'System Logs', 'View administrative audit trail'),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.xl),
+                        _buildFooter(theme),
                       ],
                     ),
-                    const SizedBox(height: AppSpacing.xl),
-                    Center(
-                      child: Text(
-                        'Meat Shop Management System v1.0.0 (Build +1)',
-                        style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -146,60 +114,176 @@ class _SystemSettingsScreenState extends ConsumerState<SystemSettingsScreen> {
     );
   }
 
-  Widget _buildSection(BuildContext context, String title, List<Widget> children) {
+  Widget _buildHeroHeader(ThemeData theme) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.xl),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            theme.colorScheme.primary,
+            theme.colorScheme.primary.withOpacity(0.8),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(AppRadius.l),
+        boxShadow: [
+          BoxShadow(
+            color: theme.colorScheme.primary.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.settings_applications_rounded, color: Colors.white, size: 40),
+          const SizedBox(height: 16),
+          const Text(
+            'System Control Center',
+            style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          Text(
+            'Configure global parameters, branding, and maintenance tasks for Mi Corazon.',
+            style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 13),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSection(BuildContext context, String title, IconData icon, List<Widget> children) {
     final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Container(
-              width: 4,
-              height: 18,
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary,
-                borderRadius: BorderRadius.circular(2),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 8.0),
+          child: Row(
+            children: [
+              Icon(icon, size: 18, color: theme.colorScheme.primary),
+              const SizedBox(width: 12),
+              Text(
+                title.toUpperCase(),
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12,
+                  color: theme.colorScheme.onSurfaceVariant,
+                  letterSpacing: 1.2,
+                ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: theme.colorScheme.primary, letterSpacing: 0.5)),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.m),
-        Container(
-          decoration: BoxDecoration(
-            color: theme.cardTheme.color,
-            borderRadius: BorderRadius.circular(AppRadius.m),
-            boxShadow: [
-              if (!isDark) BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10)
             ],
-            border: Border.all(color: theme.dividerColor),
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(AppRadius.m),
-            child: Column(children: children),
+        ),
+        Card(
+          elevation: 0,
+          margin: EdgeInsets.zero,
+          color: theme.cardTheme.color,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppRadius.l),
+            side: BorderSide(color: theme.dividerColor.withOpacity(0.5)),
           ),
+          child: Column(children: children),
         ),
       ],
     );
   }
 
-  Widget _settingTile(BuildContext context, IconData icon, String label, String value) {
+  Widget _settingTile(BuildContext context, IconData icon, String label, String value, {Color? color}) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
     return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.l, vertical: 4),
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: theme.colorScheme.primary.withValues(alpha: 0.1),
-          borderRadius: BorderRadius.circular(8),
+          color: (color ?? theme.colorScheme.primary).withOpacity(isDark ? 0.15 : 0.08),
+          borderRadius: BorderRadius.circular(10),
         ),
-        child: Icon(icon, color: theme.colorScheme.primary, size: 20),
+        child: Icon(icon, color: color ?? theme.colorScheme.primary, size: 22),
       ),
-      title: Text(label, style: TextStyle(fontSize: 14, color: theme.colorScheme.onSurface, fontWeight: FontWeight.w500)),
-      subtitle: Text(value, style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurfaceVariant, fontSize: 13)),
-      trailing: Icon(Icons.chevron_right, size: 16, color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5)),
-      onTap: () {},
+      title: Text(label, style: TextStyle(fontSize: 13, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.w500)),
+      subtitle: Text(value, style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface, fontSize: 14)),
+      trailing: Icon(Icons.arrow_forward_ios_rounded, size: 14, color: theme.dividerColor),
+      onTap: () {
+        // Future: Show individual edit dialogs
+      },
+    );
+  }
+
+  Widget _buildSeedingTile(BuildContext context, ThemeData theme) {
+    final isDark = theme.brightness == Brightness.dark;
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.l, vertical: 8),
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.secondary.withOpacity(isDark ? 0.15 : 0.08),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(Icons.inventory_2_rounded, color: theme.colorScheme.secondary, size: 22),
+      ),
+      title: const Text('Initial Product Catalog', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+      subtitle: const Text('Populate database with default product categories', style: TextStyle(fontSize: 12)),
+      trailing: _isSeeding 
+        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+        : Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: const Text('RUN SEEDER', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+          ),
+      onTap: _isSeeding ? null : () async {
+        setState(() => _isSeeding = true);
+        try {
+          await ref.read(productSeederProvider).seedProducts();
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Product catalog populated successfully!'), backgroundColor: Colors.green),
+            );
+          }
+        } catch (e) {
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+            );
+          }
+        } finally {
+          if (mounted) setState(() => _isSeeding = false);
+        }
+      },
+    );
+  }
+
+  Widget _buildFooter(ThemeData theme) {
+    return Center(
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: theme.dividerColor.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(Icons.verified_user_rounded, color: theme.colorScheme.primary.withOpacity(0.5), size: 24),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Mi Corazon Freshmeat Butchery Management',
+            style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold, fontSize: 14),
+          ),
+          Text(
+            'Version 1.0.0 (Build +1) • Enterprise Edition',
+            style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 11),
+          ),
+          const SizedBox(height: 24),
+        ],
+      ),
     );
   }
 }

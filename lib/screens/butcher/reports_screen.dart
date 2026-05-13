@@ -251,7 +251,7 @@ class ReportsScreen extends ConsumerWidget {
                 contentPadding: EdgeInsets.zero,
                 dense: true,
                 leading: CircleAvatar(
-                  backgroundColor: AppColors.primaryMaroon.withValues(alpha: 0.1),
+                  backgroundColor: AppColors.primaryMaroon.withOpacity(0.1),
                   radius: 16,
                   child: const Icon(Icons.pets, size: 14, color: AppColors.primaryMaroon),
                 ),
