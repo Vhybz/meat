@@ -43,6 +43,27 @@ class SlaughterLogNotifier extends StateNotifier<AsyncValue<List<SlaughterLog>>>
     }
   }
 
+  Future<void> updateSlaughterRecord(SlaughterLog log) async {
+    try {
+      await _service.updateSlaughterLog(log);
+      
+      // If completed, ensure batch status is updated too
+      if (log.status == SlaughterStatus.completed) {
+        await _service.updateBatchStatus(log.id, 'processing');
+        ref.read(meatBatchesProvider.notifier).loadBatches(silent: true);
+      }
+
+      state.whenData((logs) {
+        state = AsyncValue.data([
+          for (final l in logs)
+            if (l.id == log.id) log else l
+        ]);
+      });
+    } catch (e) {
+      debugPrint('Error updating slaughter record: $e');
+    }
+  }
+
   Future<void> updateStatus(String id, SlaughterStatus status) async {
     try {
       final time = status == SlaughterStatus.completed ? DateTime.now() : null;
@@ -166,6 +187,25 @@ class MeatCutNotifier extends StateNotifier<AsyncValue<List<MeatCut>>> {
       });
     } catch (e) {
       debugPrint('Error adding meat cut: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> addCuts(List<MeatCut> cuts) async {
+    try {
+      final branchCode = ref.read(currentUserProvider)?.branchCode;
+      if (branchCode == null) throw Exception('No branch code assigned to user');
+      
+      final cutsWithBranch = cuts.map((c) => c.copyWith(branchCode: branchCode)).toList();
+      for (var cut in cutsWithBranch) {
+        await _service.addMeatCut(cut);
+      }
+      
+      state.whenData((currentCuts) {
+        state = AsyncValue.data([...cutsWithBranch, ...currentCuts]);
+      });
+    } catch (e) {
+      debugPrint('Error adding multiple cuts: $e');
       rethrow;
     }
   }

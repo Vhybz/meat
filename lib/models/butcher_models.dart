@@ -117,6 +117,7 @@ class SlaughterLog {
   final double weight;
   final DateTime? slaughterTime;
   final SlaughterStatus status;
+  final double? recordedWaste;
 
   SlaughterLog({
     required this.id,
@@ -126,9 +127,12 @@ class SlaughterLog {
     required this.weight,
     this.slaughterTime,
     required this.status,
+    this.recordedWaste,
   });
 
-  double get estimatedYield => weight * type.dressingPercentage;
+  double get estimatedYield => recordedWaste != null 
+    ? (weight - recordedWaste!) 
+    : weight * type.dressingPercentage;
 
   SlaughterLog copyWith({
     String? id,
@@ -138,6 +142,7 @@ class SlaughterLog {
     double? weight,
     DateTime? slaughterTime,
     SlaughterStatus? status,
+    double? recordedWaste,
   }) {
     return SlaughterLog(
       id: id ?? this.id,
@@ -147,6 +152,7 @@ class SlaughterLog {
       weight: weight ?? this.weight,
       slaughterTime: slaughterTime ?? this.slaughterTime,
       status: status ?? this.status,
+      recordedWaste: recordedWaste ?? this.recordedWaste,
     );
   }
 
@@ -159,6 +165,9 @@ class SlaughterLog {
       weight: (json['initial_weight'] as num).toDouble(),
       slaughterTime: json['slaughter_time'] != null ? DateTime.parse(json['slaughter_time'] as String) : null,
       status: SlaughterStatus.values.firstWhere((e) => e.name == json['status']),
+      recordedWaste: json['carcass_weight'] != null 
+        ? ((json['initial_weight'] as num).toDouble() - (json['carcass_weight'] as num).toDouble())
+        : null,
     );
   }
 
@@ -170,6 +179,7 @@ class SlaughterLog {
     'initial_weight': weight,
     'slaughter_time': slaughterTime?.toIso8601String(),
     'status': status.name,
+    'carcass_weight': estimatedYield, // We store the yield as carcass_weight in DB
   };
 }
 

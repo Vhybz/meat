@@ -66,7 +66,9 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
     final isDesktop = ResponsiveLayout.isDesktop(context);
     final isMobile = ResponsiveLayout.isMobile(context);
     final transfers = ref.watch(transferProvider);
-    final pendingTransfers = transfers.where((t) => t.status == TransferStatus.pending).toList();
+    final pendingTransfers = transfers
+        .where((t) => t.status == TransferStatus.pending && t.destination == user.branchCode)
+        .toList();
     final isWholesale = ref.watch(isWholesaleProvider);
     final menuItems = ref.watch(menuItemsProvider);
 
@@ -1189,60 +1191,132 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
 
   void _showIncomingStockDialog(BuildContext context, WidgetRef ref, List<StockTransfer> transfers) {
     final theme = Theme.of(context);
+    final scanController = TextEditingController();
+    final scanFocusNode = FocusNode();
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
-        title: Row(
-          children: [
-            Icon(Icons.inventory_2, color: theme.colorScheme.primary),
-            const SizedBox(width: 12),
-            const Text('Incoming Stock'),
-          ],
-        ),
-        content: SizedBox(
-          width: 400,
-          child: transfers.isEmpty
-              ? const Padding(padding: EdgeInsets.all(20), child: Text('No pending stock transfers.', textAlign: TextAlign.center))
-              : ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: transfers.length,
-                  itemBuilder: (context, index) {
-                    final t = transfers[index];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      elevation: 0,
-                      color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.m), side: BorderSide(color: theme.dividerColor)),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        title: Text(t.meatType, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                        subtitle: Text('Weight: ${WeightConverter.formatShort(t.weight)} • Batch: ${t.batchId.substring(0, 8).toUpperCase()}', 
-                          style: const TextStyle(fontSize: 10)),
-                        trailing: ElevatedButton(
-                          onPressed: () {
-                            ref.read(transferProvider.notifier).markAsReceived(t.id);
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Received ${t.weight}kg of ${t.meatType}')),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: theme.colorScheme.primary, 
-                            foregroundColor: Colors.white, 
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.s)),
-                          ),
-                          child: const Text('RECEIVE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
-                        ),
-                      ),
-                    );
-                  },
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          void handleScan(String value) {
+            if (value.isEmpty) return;
+            // Try to find a matching transfer by ID (handling short IDs on labels)
+            final match = transfers.where((t) => 
+              t.id.toLowerCase() == value.toLowerCase() || 
+              t.id.endsWith(value.toUpperCase())
+            ).firstOrNull;
+
+            if (match != null) {
+              ref.read(transferProvider.notifier).markAsReceived(match.id);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Scanned & Received: ${match.meatType}'),
+                  backgroundColor: Colors.green,
                 ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
-        ],
+              );
+              scanController.clear();
+              // Refresh dialog state to show item is gone
+              setDialogState(() {});
+            } else {
+              // Not found feedback
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('No matching stock found for this barcode.'), duration: Duration(seconds: 1)),
+              );
+              scanController.clear();
+            }
+            scanFocusNode.requestFocus();
+          }
+
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
+            title: Row(
+              children: [
+                Icon(Icons.inventory_2, color: theme.colorScheme.primary),
+                const SizedBox(width: 12),
+                const Expanded(child: Text('Incoming Stock Verification')),
+                if (transfers.isNotEmpty)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(color: Colors.orange.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+                    child: Text('${transfers.length} PENDING', style: const TextStyle(color: Colors.orange, fontSize: 10, fontWeight: FontWeight.bold)),
+                  ),
+              ],
+            ),
+            content: SizedBox(
+              width: 450,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (transfers.isNotEmpty) ...[
+                    TextField(
+                      controller: scanController,
+                      focusNode: scanFocusNode,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: 'Scan barcode or type ID...',
+                        prefixIcon: const Icon(Icons.qr_code_scanner),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.check_circle_outline),
+                          onPressed: () => handleScan(scanController.text),
+                        ),
+                        border: const OutlineInputBorder(),
+                        isDense: true,
+                        helperText: 'Connect a scanner to automate verification',
+                        helperStyle: const TextStyle(fontSize: 9),
+                      ),
+                      onSubmitted: handleScan,
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  Flexible(
+                    child: transfers.isEmpty
+                        ? const Padding(padding: EdgeInsets.all(30), child: Column(
+                            children: [
+                              Icon(Icons.check_circle, color: Colors.green, size: 48),
+                              SizedBox(height: 12),
+                              Text('All stock verified and received.', textAlign: TextAlign.center),
+                            ],
+                          ))
+                        : ListView.builder(
+                            shrinkWrap: true,
+                            itemCount: transfers.length,
+                            itemBuilder: (context, index) {
+                              final t = transfers[index];
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                elevation: 0,
+                                color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.m), side: BorderSide(color: theme.dividerColor)),
+                                child: ListTile(
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                  leading: const Icon(Icons.shopping_basket_outlined, size: 20),
+                                  title: Text(t.meatType, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                  subtitle: Text('Weight: ${WeightConverter.formatShort(t.weight)} • Batch: ${t.batchId.substring(0, 8).toUpperCase()}', 
+                                    style: const TextStyle(fontSize: 10)),
+                                  trailing: IconButton(
+                                    icon: const Icon(Icons.add_task, color: Colors.green),
+                                    tooltip: 'Verify Manually',
+                                    onPressed: () {
+                                      ref.read(transferProvider.notifier).markAsReceived(t.id);
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Manually Received ${t.weight}kg of ${t.meatType}')),
+                                      );
+                                      setDialogState(() {});
+                                    },
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close Window')),
+            ],
+          );
+        }
       ),
     );
   }

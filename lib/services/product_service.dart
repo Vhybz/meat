@@ -143,11 +143,33 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
 
     try {
       final product = products.firstWhere((p) => p.id == id);
+      final now = DateTime.now();
+      
+      double currentDailyAdded = product.dailyStockAdded;
+      
+      // Reset daily added if it's a new day
+      if (product.lastStockUpdate != null) {
+        final lastUpdate = product.lastStockUpdate!;
+        if (lastUpdate.year != now.year || lastUpdate.month != now.month || lastUpdate.day != now.day) {
+          currentDailyAdded = 0;
+        }
+      }
+
       final newQuantity = product.stockQuantity + quantityChange;
-      await _service.updateStock(id, newQuantity);
+      // Only track positive additions to stock for "added today"
+      final newDailyAdded = quantityChange > 0 ? (currentDailyAdded + quantityChange) : currentDailyAdded;
+      
+      final updatedProduct = product.copyWith(
+        stockQuantity: newQuantity,
+        dailyStockAdded: newDailyAdded,
+        lastStockUpdate: now,
+      );
+
+      await _service.updateProduct(updatedProduct);
+      
       state = AsyncValue.data(products.map((p) {
         if (p.id == id) {
-          return p.copyWith(stockQuantity: newQuantity);
+          return updatedProduct;
         }
         return p;
       }).toList());

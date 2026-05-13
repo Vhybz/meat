@@ -109,7 +109,13 @@ CREATE TABLE products (
 
   promo_customer_target TEXT DEFAULT 'all',
 
-  is_deleted BOOLEAN DEFAULT false
+  is_deleted BOOLEAN DEFAULT false,
+
+  low_stock_threshold DECIMAL(10,2) DEFAULT 5.0,
+
+  daily_stock_added DECIMAL(10,2) DEFAULT 0,
+
+  last_stock_update TIMESTAMPTZ
 );
 
 -- =====================================================

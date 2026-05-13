@@ -8,6 +8,7 @@ List<SidebarItem> getAdminMenuItems(UserAccount? user) {
   final allItems = [
     SidebarItem(icon: Icons.dashboard_rounded, label: 'Dashboard', route: '/admin'),
     SidebarItem(icon: Icons.bar_chart_rounded, label: 'Sales Reports', route: '/admin/sales'),
+    SidebarItem(icon: Icons.analytics_outlined, label: 'Butcher Analytics', route: '/admin/butcher'),
     SidebarItem(icon: Icons.receipt_long_rounded, label: 'Business Expenses', route: '/admin/expenses'),
     SidebarItem(icon: Icons.people_outline_rounded, label: 'Customer Directory', route: '/admin/customers'),
     SidebarItem(icon: Icons.account_balance_wallet_rounded, label: 'Debt Tracker', route: '/admin/debts'),

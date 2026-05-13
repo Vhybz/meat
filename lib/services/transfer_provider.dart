@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/transfer_models.dart';
 import 'supabase_transfer_service.dart';
 import 'product_service.dart';
+import 'notification_service.dart';
 
 class TransferNotifier extends StateNotifier<List<StockTransfer>> {
   final SupabaseTransferService _service;
@@ -26,8 +28,34 @@ class TransferNotifier extends StateNotifier<List<StockTransfer>> {
     try {
       await _service.addTransfer(transfer);
       state = [transfer, ...state];
+      
+      // Notify System (Local)
+      ref.read(notificationProvider.notifier).addNotification(
+        'NEW STOCK TRANSFER',
+        '${transfer.meatType} (${transfer.weight}kg) sent to branch ${transfer.destination}.',
+      );
     } catch (e) {
-      // Log error
+      debugPrint('Error adding transfer: $e');
+    }
+  }
+
+  Future<void> addTransfers(List<StockTransfer> transfers) async {
+    try {
+      for (final t in transfers) {
+        await _service.addTransfer(t);
+      }
+      state = [...transfers, ...state];
+      
+      // Notify System (Local) - Grouped notification
+      if (transfers.isNotEmpty) {
+        final totalWeight = transfers.fold(0.0, (sum, t) => sum + t.weight);
+        ref.read(notificationProvider.notifier).addNotification(
+          'NEW BULK STOCK TRANSFER',
+          '${transfers.length} items (${totalWeight.toStringAsFixed(1)}kg) sent to branch ${transfers.first.destination}.',
+        );
+      }
+    } catch (e) {
+      debugPrint('Error adding bulk transfers: $e');
     }
   }
 

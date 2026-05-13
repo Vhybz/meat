@@ -12,6 +12,8 @@ import '../../models/sale_model.dart';
 import '../../services/notification_service.dart';
 import '../../services/product_service.dart';
 import '../../services/customer_provider.dart';
+import '../../services/butcher_service.dart';
+import '../../models/butcher_models.dart';
 
 import '../../services/menu_service.dart';
 import '../../services/user_provider.dart';
@@ -701,6 +703,13 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
     final allSales = ref.watch(saleHistoryProvider);
     final sales = allSales.where((s) => s.status != SaleStatus.cancelled).toList();
     
+    final logsAsync = ref.watch(slaughterLogsProvider);
+    final todayLogs = logsAsync.value?.where((l) {
+      final now = DateTime.now();
+      final date = l.slaughterTime ?? now;
+      return date.day == now.day && date.month == now.month && date.year == now.year;
+    }).toList() ?? [];
+
     final totalRevenue = sales.fold(0.0, (sum, sale) => sum + sale.totalAmount);
     final totalDebt = sales.fold(0.0, (sum, sale) => sum + (sale.balance > 0 ? sale.balance : 0));
     final totalDiscounts = sales.fold(0.0, (sum, sale) => sum + sale.totalDiscount);
@@ -744,6 +753,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
             _kpiWithTrend(context, 'Customers', '$totalCustomers', Icons.people, Colors.purple, 'ACTIVE'),
             _kpiWithTrend(context, 'Promo Impact', '₵${totalDiscounts.toStringAsFixed(0)}', Icons.auto_awesome, Colors.orange, 'SAVED'),
             _kpiWithTrend(context, 'Stock Sold', '${totalWeightSold.toStringAsFixed(1)} kg', Icons.scale, AppColors.primaryMaroon, 'LIVE'),
+            _kpiWithTrend(context, 'Daily Slaughter', '${todayLogs.length}', Icons.precision_manufacturing, Colors.green, 'TODAY'),
           ],
         ),
       ],
@@ -816,6 +826,8 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
   Widget _buildResponsiveMainContent(BuildContext context, WidgetRef ref) {
     final isDesktop = ResponsiveLayout.isDesktop(context);
     final sales = ref.watch(saleHistoryProvider);
+    final logsAsync = ref.watch(slaughterLogsProvider);
+    
     final promoSales = sales.where((s) => s.totalDiscount > 0).toList();
     final totalImpact = promoSales.fold(0.0, (sum, s) => sum + s.totalDiscount);
 
@@ -823,7 +835,20 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
       return Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(flex: 2, child: _buildPerformanceChart(context, sales)),
+          Expanded(
+            flex: 2, 
+            child: Column(
+              children: [
+                _buildPerformanceChart(context, sales),
+                const SizedBox(height: AppSpacing.l),
+                logsAsync.when(
+                  data: (logs) => _buildSlaughterTrendChart(context, logs),
+                  loading: () => const SizedBox(height: 200, child: Center(child: CircularProgressIndicator())),
+                  error: (e, _) => const Text('Error loading slaughter trend'),
+                ),
+              ],
+            )
+          ),
           const SizedBox(width: AppSpacing.l),
           Expanded(
             flex: 1, 
@@ -842,12 +867,122 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
         children: [
           _buildPerformanceChart(context, sales),
           const SizedBox(height: AppSpacing.l),
+          logsAsync.when(
+            data: (logs) => _buildSlaughterTrendChart(context, logs),
+            loading: () => const SizedBox(height: 200, child: Center(child: CircularProgressIndicator())),
+            error: (e, _) => const Text('Error loading slaughter trend'),
+          ),
+          const SizedBox(height: AppSpacing.l),
           _buildPromotionImpactCard(context, promoSales, totalImpact),
           const SizedBox(height: AppSpacing.l),
           _buildCriticalAlerts(context, ref),
         ],
       );
     }
+  }
+
+  Widget _buildSlaughterTrendChart(BuildContext context, List<SlaughterLog> logs) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
+    // Group logs by day for the last 7 days
+    final now = DateTime.now();
+    final last7Days = List.generate(7, (index) {
+      return now.subtract(Duration(days: 6 - index));
+    });
+
+    final dailyCounts = last7Days.map((date) {
+      return logs.where((l) {
+        final logDate = l.slaughterTime ?? DateTime.now();
+        return logDate.year == date.year && logDate.month == date.month && logDate.day == date.day;
+      }).length;
+    }).toList();
+
+    final maxCount = dailyCounts.isEmpty ? 10 : (dailyCounts.reduce((a, b) => a > b ? a : b) + 2);
+
+    return Container(
+      height: 350,
+      padding: const EdgeInsets.all(AppSpacing.l),
+      decoration: BoxDecoration(
+        color: theme.cardTheme.color,
+        borderRadius: BorderRadius.circular(AppRadius.l),
+        boxShadow: [
+          if (!isDark) BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
+        border: isDark ? Border.all(color: theme.dividerColor) : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Slaughter Trend', 
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: theme.colorScheme.onSurface),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text('Animals processed daily', 
+                      style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: () => Navigator.pushReplacementNamed(context, '/admin/butcher'),
+                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                child: const Text('View Full', style: TextStyle(fontSize: 10)),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xl),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: List.generate(dailyCounts.length, (index) {
+                final count = dailyCounts[index];
+                final date = last7Days[index];
+                final double barHeight = count == 0 ? 5 : (count / maxCount) * 180;
+                final isToday = index == 6;
+
+                return Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      FittedBox(
+                        child: Text(count > 0 ? '$count' : '', 
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isToday ? Colors.orange : theme.colorScheme.onSurfaceVariant)),
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        height: barHeight,
+                        decoration: BoxDecoration(
+                          color: isToday ? Colors.orange : Colors.orange.withValues(alpha: 0.4),
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        DateFormat('E').format(date).substring(0, 1),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                          color: isToday ? Colors.orange : theme.colorScheme.onSurfaceVariant
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildPromotionImpactCard(BuildContext context, List<SaleRecord> promoSales, double totalImpact) {

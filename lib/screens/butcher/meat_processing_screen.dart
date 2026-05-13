@@ -107,12 +107,23 @@ class MeatProcessingScreen extends ConsumerWidget {
                         ),
                         const Divider(),
                         Text('Type: ${batch.meatType}', style: const TextStyle(fontSize: 11)),
-                        Text('Intake Weight: ${WeightConverter.formatShort(batch.weight)}', style: const TextStyle(fontSize: 11)),
+                        Text('Intake: ${WeightConverter.formatShort(batch.weight)}', style: const TextStyle(fontSize: 11)),
+                        const SizedBox(height: 4),
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('Cuts: ${WeightConverter.formatShort(processedWeight)}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue)),
-                            Text('Waste: ${WeightConverter.formatShort(wastedWeight)}', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange)),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Cuts: ${WeightConverter.formatShort(processedWeight)}', 
+                                    style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.blue),
+                                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                                  Text('Waste: ${WeightConverter.formatShort(wastedWeight)}', 
+                                    style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.orange),
+                                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
                         const Spacer(),
@@ -127,19 +138,35 @@ class MeatProcessingScreen extends ConsumerWidget {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text('${(progress * 100).toStringAsFixed(0)}% Accounted', style: const TextStyle(fontSize: 10, color: AppColors.textLight)),
+                            Expanded(
+                              child: Text('${(progress * 100).toStringAsFixed(0)}% Accounted', 
+                                style: const TextStyle(fontSize: 9, color: AppColors.textLight),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis
+                              ),
+                            ),
+                            const SizedBox(width: 4),
                             Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 TextButton(
                                   onPressed: () => _showRecordWasteDialog(context, ref, batch),
-                                  style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(50, 20), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                                  child: const Text('Add Waste', style: TextStyle(fontSize: 10, color: Colors.orange)),
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4), 
+                                    minimumSize: Size.zero, 
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap
+                                  ),
+                                  child: const Text('Add Waste', style: TextStyle(fontSize: 9, color: Colors.orange)),
                                 ),
-                                const SizedBox(width: 8),
+                                const SizedBox(width: 4),
                                 TextButton(
                                   onPressed: () => _confirmCloseBatch(context, ref, batch),
-                                  style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(50, 20), tapTargetSize: MaterialTapTargetSize.shrinkWrap),
-                                  child: const Text('Close Batch', style: TextStyle(fontSize: 10, color: Colors.red)),
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 4), 
+                                    minimumSize: Size.zero, 
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap
+                                  ),
+                                  child: const Text('Close Batch', style: TextStyle(fontSize: 9, color: Colors.red)),
                                 ),
                               ],
                             ),
@@ -192,9 +219,10 @@ class MeatProcessingScreen extends ConsumerWidget {
                 child: Table(
                   columnWidths: const {
                     0: FlexColumnWidth(2),
-                    1: FlexColumnWidth(1),
+                    1: FlexColumnWidth(1.2),
                     2: FlexColumnWidth(1),
-                    3: FlexColumnWidth(1.2),
+                    3: FlexColumnWidth(1),
+                    4: FlexColumnWidth(1.3),
                   },
                   children: [
                     const TableRow(
@@ -209,10 +237,10 @@ class MeatProcessingScreen extends ConsumerWidget {
                     ),
                     ...cuts.map((cut) => TableRow(
                       children: [
-                        Padding(padding: const EdgeInsets.all(12), child: Text(cut.name, style: const TextStyle(fontSize: 12))),
-                        Padding(padding: const EdgeInsets.all(12), child: Text(cut.batchId, style: const TextStyle(fontSize: 12))),
+                        Padding(padding: const EdgeInsets.all(12), child: Text(cut.name, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis)),
+                        Padding(padding: const EdgeInsets.all(12), child: Text(cut.batchId.length > 8 ? cut.batchId.substring(0,8) : cut.batchId, style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis)),
                         Padding(padding: const EdgeInsets.all(12), child: Text(WeightConverter.formatShort(cut.weight), style: const TextStyle(fontSize: 11))),
-                        Padding(padding: const EdgeInsets.all(12), child: Text(DateFormat('hh:mm').format(cut.processedAt), style: const TextStyle(fontSize: 12))),
+                        Padding(padding: const EdgeInsets.all(12), child: Text(DateFormat('HH:mm').format(cut.processedAt), style: const TextStyle(fontSize: 11))),
                         Padding(
                           padding: const EdgeInsets.all(4),
                           child: ElevatedButton.icon(

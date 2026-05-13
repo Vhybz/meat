@@ -78,6 +78,12 @@ class ButcherDashboard extends ConsumerWidget {
                         children: [
                           _buildInteractiveWorkflow(ref),
                           const SizedBox(height: AppSpacing.l),
+                          logsAsync.when(
+                            data: (logs) => _buildSlaughterTrendChart(context, logs, ref),
+                            loading: () => const SizedBox(height: 200, child: Center(child: CircularProgressIndicator())),
+                            error: (e, _) => const Text('Error loading slaughter trend'),
+                          ),
+                          const SizedBox(height: AppSpacing.l),
                           _buildSlaughterLogs(ref, logsAsync),
                         ],
                       ),
@@ -102,6 +108,12 @@ class ButcherDashboard extends ConsumerWidget {
                   children: [
                     _buildInteractiveWorkflow(ref),
                     const SizedBox(height: AppSpacing.l),
+                    logsAsync.when(
+                      data: (logs) => _buildSlaughterTrendChart(context, logs, ref),
+                      loading: () => const SizedBox(height: 200, child: Center(child: CircularProgressIndicator())),
+                      error: (e, _) => const Text('Error loading slaughter trend'),
+                    ),
+                    const SizedBox(height: AppSpacing.l),
                     _buildSmartInsights(logsAsync),
                     const SizedBox(height: AppSpacing.l),
                     _buildMeatSummary(logsAsync),
@@ -115,6 +127,110 @@ class ButcherDashboard extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildSlaughterTrendChart(BuildContext context, List<SlaughterLog> logs, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
+    // Group logs by day for the last 7 days
+    final now = DateTime.now();
+    final last7Days = List.generate(7, (index) {
+      return now.subtract(Duration(days: 6 - index));
+    });
+
+    final dailyCounts = last7Days.map((date) {
+      return logs.where((l) {
+        final logDate = l.slaughterTime ?? DateTime.now();
+        return logDate.year == date.year && logDate.month == date.month && logDate.day == date.day;
+      }).length;
+    }).toList();
+
+    final maxCount = dailyCounts.isEmpty ? 10 : (dailyCounts.reduce((a, b) => a > b ? a : b) + 2);
+
+    return Container(
+      height: 300,
+      padding: const EdgeInsets.all(AppSpacing.l),
+      decoration: BoxDecoration(
+        color: theme.cardTheme.color,
+        borderRadius: BorderRadius.circular(AppRadius.l),
+        boxShadow: [
+          if (!isDark) BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
+        ],
+        border: isDark ? Border.all(color: theme.dividerColor) : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Slaughter Trend', 
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: theme.colorScheme.onSurface),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text('Animals processed daily', 
+                      style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant),
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: () => ref.read(butcherNavProvider.notifier).setScreen(ButcherScreen.slaughterLog),
+                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                child: const Text('View Logs', style: TextStyle(fontSize: 10)),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.xl),
+          Expanded(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: List.generate(dailyCounts.length, (index) {
+                final count = dailyCounts[index];
+                final date = last7Days[index];
+                final double barHeight = count == 0 ? 5 : (count / maxCount) * 140;
+                final isToday = index == 6;
+
+                return Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      FittedBox(
+                        child: Text(count > 0 ? '$count' : '', 
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isToday ? AppColors.primaryMaroon : theme.colorScheme.onSurfaceVariant)),
+                      ),
+                      const SizedBox(height: 4),
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 4),
+                        height: barHeight,
+                        decoration: BoxDecoration(
+                          color: isToday ? AppColors.primaryMaroon : AppColors.primaryMaroon.withValues(alpha: 0.3),
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        DateFormat('E').format(date).substring(0, 1),
+                        style: TextStyle(
+                          fontSize: 10, 
+                          fontWeight: isToday ? FontWeight.bold : FontWeight.normal,
+                          color: isToday ? AppColors.primaryMaroon : theme.colorScheme.onSurfaceVariant
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -353,17 +469,25 @@ class ButcherDashboard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Yield Summary (MT)', style: TextStyle(fontWeight: FontWeight.bold)),
+            const Text('Yield Summary (Today)', style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: AppSpacing.m),
             logsAsync.when(
               data: (logs) {
-                final totalIntake = logs.fold(0.0, (sum, l) => sum + l.weight);
-                final totalYield = logs.where((l) => l.status == SlaughterStatus.completed).fold(0.0, (sum, l) => sum + l.estimatedYield);
+                final today = DateTime.now();
+                final todayLogs = logs.where((l) {
+                  final date = l.slaughterTime ?? today;
+                  return date.day == today.day && date.month == today.month && date.year == today.year;
+                }).toList();
+
+                final totalIntake = todayLogs.fold(0.0, (sum, l) => sum + l.weight);
+                final totalYield = todayLogs.where((l) => l.status == SlaughterStatus.completed).fold(0.0, (sum, l) => sum + l.estimatedYield);
+                final totalWaste = totalIntake - totalYield;
+
                 return Column(
                   children: [
-                    SummaryRow(icon: Icons.monitor_weight_outlined, label: 'Gross Intake', value: '${totalIntake.toStringAsFixed(0)}kg'),
-                    SummaryRow(icon: Icons.restaurant, label: 'Est. Net Yield', value: '${totalYield.toStringAsFixed(0)}kg'),
-                    SummaryRow(icon: Icons.delete_outline, label: 'Est. Waste/Bone', value: '${(totalIntake - totalYield).toStringAsFixed(0)}kg', iconColor: Colors.red),
+                    SummaryRow(icon: Icons.monitor_weight_outlined, label: 'Gross Intake', value: '${totalIntake.toStringAsFixed(1)}kg'),
+                    SummaryRow(icon: Icons.restaurant, label: 'Actual Net Yield', value: '${totalYield.toStringAsFixed(1)}kg'),
+                    SummaryRow(icon: Icons.delete_outline, label: 'Recorded Waste', value: '${totalWaste.toStringAsFixed(1)}kg', iconColor: Colors.red),
                   ],
                 );
               },

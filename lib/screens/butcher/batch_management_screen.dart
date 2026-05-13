@@ -4,6 +4,7 @@ import '../../core/constants.dart';
 import '../../services/butcher_service.dart';
 import '../../widgets/status_chip.dart';
 import '../../core/utils.dart';
+import '../../services/label_service.dart';
 
 class BatchManagementScreen extends ConsumerWidget {
   const BatchManagementScreen({super.key});
@@ -61,11 +62,7 @@ class BatchManagementScreen extends ConsumerWidget {
                                     StatusChip(label: batch.status.toUpperCase(), color: Colors.blue),
                                     const Spacer(),
                                     IconButton(
-                                      onPressed: () {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text('Sending batch ${batch.id} to label printer...')),
-                                        );
-                                      }, 
+                                      onPressed: () => LabelService.printBatchLabel(batch),
                                       icon: const Icon(Icons.print, size: 16), 
                                       tooltip: 'Print Labels'
                                     ),

@@ -9,6 +9,7 @@ import '../../services/butcher_service.dart';
 import '../../models/transfer_models.dart';
 import '../../models/butcher_models.dart';
 import '../../services/user_provider.dart';
+import '../../services/branch_provider.dart';
 import '../../services/label_service.dart';
 
 class StockTransferScreen extends ConsumerStatefulWidget {
@@ -203,8 +204,8 @@ class NewTransferDialog extends ConsumerStatefulWidget {
 }
 
 class _NewTransferDialogState extends ConsumerState<NewTransferDialog> {
-  MeatBatch? _selectedBatch;
-  MeatCut? _selectedCut;
+  String? _selectedBatchId;
+  final Set<String> _selectedCutIds = {};
   String? _destination;
 
   @override
@@ -212,84 +213,138 @@ class _NewTransferDialogState extends ConsumerState<NewTransferDialog> {
     final batchesAsync = ref.watch(activeBatchesProvider);
     final cutsAsync = ref.watch(recentCutsProvider);
     final transfers = ref.watch(transferProvider);
-    final cashiers = ref.watch(userProvider.notifier).getCashiers();
+    final branchesAsync = ref.watch(branchesProvider);
     
-    // Set default destination if not yet set
-    if (_destination == null && cashiers.isNotEmpty) {
-      _destination = cashiers.first.shopLocation ?? cashiers.first.name;
+    final activeBatches = batchesAsync.value ?? [];
+    final activeCuts = cutsAsync.value ?? [];
+    final branches = branchesAsync.value ?? [];
+    
+    // Set default destination branch if not yet set
+    if (_destination == null && branches.isNotEmpty) {
+      _destination = branches.first.code;
     }
 
-    final activeCuts = cutsAsync.value ?? [];
+    // Find the selected objects based on IDs (safe against provider refreshes)
+    final selectedBatch = _selectedBatchId != null 
+        ? activeBatches.where((b) => b.id == _selectedBatchId).firstOrNull 
+        : null;
+
     // Filter cuts by selected batch and ensure they haven't been transferred yet
-    // (A simple check: if a transfer exists with this batchId and meatType containing the cut name)
-    // Better: We should ideally have a unique ID for each cut in the transfer table.
-    final availableCuts = _selectedBatch == null 
+    final availableCuts = selectedBatch == null 
         ? <MeatCut>[] 
-        : activeCuts.where((c) => c.batchId == _selectedBatch!.id && 
+        : activeCuts.where((c) => c.batchId == selectedBatch.id && 
             !transfers.any((t) => t.batchId == c.batchId && t.meatType.contains(c.name))).toList();
 
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
-      title: const Row(
+      title: Row(
         children: [
-          Icon(Icons.local_shipping_outlined, color: AppColors.primaryMaroon),
-          SizedBox(width: 12),
-          Text('Move Stock to Retail'),
+          const Icon(Icons.local_shipping_outlined, color: AppColors.primaryMaroon),
+          const SizedBox(width: 12),
+          Expanded(child: Text('Move Stock to Retail', style: const TextStyle(fontSize: 18), overflow: TextOverflow.ellipsis)),
         ],
       ),
-      content: SizedBox(
-        width: 500,
-        child: SingleChildScrollView(
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 450, maxHeight: 500),
+        child: SizedBox(
+          width: MediaQuery.of(context).size.width * 0.85,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               batchesAsync.when(
-                data: (batches) => DropdownButtonFormField<MeatBatch>(
+                data: (batches) => DropdownButtonFormField<String>(
                   isExpanded: true,
+                  value: _selectedBatchId,
                   decoration: const InputDecoration(labelText: '1. Select Source Batch', border: OutlineInputBorder()),
-                  items: batches.map((b) => DropdownMenuItem(
-                    value: b,
-                    child: Text('${b.id.substring(0,8)} (${b.meatType})', overflow: TextOverflow.ellipsis),
+                  items: batches.map((b) => DropdownMenuItem<String>(
+                    value: b.id,
+                    child: Text(
+                      '${b.id.length > 8 ? b.id.substring(0,8) : b.id} (${b.meatType})', 
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 13),
+                    ),
                   )).toList(),
                   onChanged: (v) => setState(() {
-                    _selectedBatch = v;
-                    _selectedCut = null;
+                    _selectedBatchId = v;
+                    _selectedCutIds.clear();
                   }),
                 ),
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Text('Error: $e'),
+                error: (e, _) => Text('Error loading batches', style: const TextStyle(fontSize: 12, color: Colors.red)),
               ),
               const SizedBox(height: 16),
-              DropdownButtonFormField<MeatCut>(
-                isExpanded: true,
-                value: _selectedCut,
-                decoration: const InputDecoration(labelText: '2. Select Part/Cut to Move', border: OutlineInputBorder()),
-                items: availableCuts.map((c) => DropdownMenuItem(
-                  value: c,
-                  child: Text('${c.name} (${c.weight}kg)', overflow: TextOverflow.ellipsis),
-                )).toList(),
-                onChanged: (v) => setState(() => _selectedCut = v),
-                disabledHint: const Text('Select batch first or no cuts available'),
+              const Align(alignment: Alignment.centerLeft, child: Text('2. Select Parts to Move', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+              const SizedBox(height: 8),
+              if (selectedBatch != null && availableCuts.isNotEmpty) 
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () {
+                      setState(() {
+                        if (_selectedCutIds.length == availableCuts.length) {
+                          _selectedCutIds.clear();
+                        } else {
+                          _selectedCutIds.addAll(availableCuts.map((c) => c.id));
+                        }
+                      });
+                    },
+                    child: Text(_selectedCutIds.length == availableCuts.length ? 'Deselect All' : 'Select All Available'),
+                  ),
+                ),
+              Flexible(
+                child: Container(
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade300),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: availableCuts.isEmpty 
+                    ? Center(child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Text(selectedBatch == null ? 'Select batch first' : 'No parts available for transfer', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                      ))
+                    : ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: availableCuts.length,
+                        separatorBuilder: (context, index) => const Divider(height: 1),
+                        itemBuilder: (context, index) {
+                          final cut = availableCuts[index];
+                          final isSelected = _selectedCutIds.contains(cut.id);
+                          return CheckboxListTile(
+                            title: Text(cut.name, style: const TextStyle(fontSize: 13)),
+                            subtitle: Text('${cut.weight}kg', style: const TextStyle(fontSize: 11)),
+                            value: isSelected,
+                            onChanged: (val) {
+                              setState(() {
+                                if (val == true) {
+                                  _selectedCutIds.add(cut.id);
+                                } else {
+                                  _selectedCutIds.remove(cut.id);
+                                }
+                              });
+                            },
+                            dense: true,
+                            controlAffinity: ListTileControlAffinity.leading,
+                          );
+                        },
+                      ),
+                ),
               ),
               const SizedBox(height: 16),
-              if (cashiers.isNotEmpty)
-                DropdownButtonFormField<String>(
+              branchesAsync.when(
+                data: (branches) => DropdownButtonFormField<String>(
                   isExpanded: true,
-                  initialValue: _destination,
-                  decoration: const InputDecoration(labelText: '3. Destination Shop', border: OutlineInputBorder()),
-                  items: cashiers.map((u) {
-                    final label = u.shopLocation != null ? '${u.name} (${u.shopLocation})' : u.name;
-                    final value = u.shopLocation ?? u.name;
-                    return DropdownMenuItem(
-                      value: value,
-                      child: Text(label, overflow: TextOverflow.ellipsis),
-                    );
-                  }).toList(),
+                  value: _destination,
+                  decoration: const InputDecoration(labelText: '3. Destination Branch', border: OutlineInputBorder()),
+                  items: branches.map((b) => DropdownMenuItem<String>(
+                    value: b.code,
+                    child: Text('${b.name} (${b.location})', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+                  )).toList(),
                   onChanged: (v) => setState(() => _destination = v!),
-                )
-              else
-                const Text('No cashier accounts found. Please create one in Admin.', 
-                  style: TextStyle(color: Colors.red, fontSize: 12)),
+                ),
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => const Text('Error loading branches', style: TextStyle(color: Colors.red, fontSize: 12)),
+              ),
             ],
           ),
         ),
@@ -297,28 +352,34 @@ class _NewTransferDialogState extends ConsumerState<NewTransferDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         ElevatedButton(
-          onPressed: (_selectedCut == null || _destination == null) ? null : () {
-            final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
-            final String suffix = timestamp.substring(timestamp.length - 12);
-            final String validUuid = '00000000-0000-0000-0000-$suffix';
+          onPressed: (_selectedCutIds.isEmpty || _destination == null || selectedBatch == null) ? null : () {
+            final List<StockTransfer> transfersList = [];
+            final now = DateTime.now();
 
-            // We combine animal type and cut name for the transfer record
-            final transfer = StockTransfer(
-              id: validUuid,
-              batchId: _selectedCut!.batchId,
-              meatType: '${_selectedBatch!.meatType} - ${_selectedCut!.name}',
-              weight: _selectedCut!.weight,
-              destination: _destination!,
-              transferTime: DateTime.now(),
-            );
-            ref.read(transferProvider.notifier).addTransfer(transfer);
+            for (final cutId in _selectedCutIds) {
+              final cut = availableCuts.firstWhere((c) => c.id == cutId);
+              final String timestamp = now.millisecondsSinceEpoch.toString();
+              final String suffix = timestamp.substring(timestamp.length - 10);
+              final String indexStr = transfersList.length.toString().padLeft(2, '0');
+              
+              transfersList.add(StockTransfer(
+                id: '00000000-0000-0000-0000-$suffix$indexStr',
+                batchId: cut.batchId,
+                meatType: '${selectedBatch.meatType} - ${cut.name}',
+                weight: cut.weight,
+                destination: _destination!,
+                transferTime: now,
+              ));
+            }
+
+            ref.read(transferProvider.notifier).addTransfers(transfersList);
             Navigator.pop(context);
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Transferring ${_selectedCut!.weight}kg of ${_selectedCut!.name} to $_destination')),
+              SnackBar(content: Text('Transferred ${transfersList.length} items to $_destination')),
             );
           },
           style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMaroon, foregroundColor: Colors.white),
-          child: const Text('Confirm Transfer'),
+          child: Text(_selectedCutIds.length > 1 ? 'Confirm Bulk Transfer' : 'Confirm Transfer'),
         ),
       ],
     );

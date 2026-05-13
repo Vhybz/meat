@@ -1025,14 +1025,30 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                                     ),
                                   ),
                                   const SizedBox(width: 4),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: (isLowStock ? Colors.red : Colors.green).withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text('${product.stockQuantity}${product.unit}', 
-                                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: isLowStock ? Colors.red : Colors.green)),
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: (isLowStock ? Colors.red : Colors.green).withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text('${product.stockQuantity}${product.unit}', 
+                                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: isLowStock ? Colors.red : Colors.green)),
+                                      ),
+                                      if (product.dailyStockAdded > 0 && 
+                                          product.lastStockUpdate != null && 
+                                          product.lastStockUpdate!.year == DateTime.now().year &&
+                                          product.lastStockUpdate!.month == DateTime.now().month &&
+                                          product.lastStockUpdate!.day == DateTime.now().day)
+                                        Padding(
+                                          padding: const EdgeInsets.only(top: 2),
+                                          child: Text('+${product.dailyStockAdded}${product.unit} today', 
+                                            style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.blue)),
+                                        ),
+                                    ],
                                   ),
                                 ],
                               ),
@@ -1139,8 +1155,21 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                                 ),
                               ),
                               const SizedBox(width: 4),
-                              Text('${product.stockQuantity}${product.unit}', 
-                                style: TextStyle(fontWeight: FontWeight.bold, color: isLowStock ? Colors.red : Colors.green)),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text('${product.stockQuantity}${product.unit}', 
+                                    style: TextStyle(fontWeight: FontWeight.bold, color: isLowStock ? Colors.red : Colors.green)),
+                                  if (product.dailyStockAdded > 0 && 
+                                      product.lastStockUpdate != null && 
+                                      product.lastStockUpdate!.year == DateTime.now().year &&
+                                      product.lastStockUpdate!.month == DateTime.now().month &&
+                                      product.lastStockUpdate!.day == DateTime.now().day)
+                                    Text('+${product.dailyStockAdded}${product.unit} today', 
+                                      style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.blue)),
+                                ],
+                              ),
                             ],
                           ),
                           const SizedBox(height: 12),
@@ -1237,51 +1266,75 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.m)),
-        title: Text('Update Stock: ${product.name}', style: const TextStyle(fontWeight: FontWeight.bold)),
-        content: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(AppSpacing.m),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(AppRadius.s),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.inventory_2, color: theme.colorScheme.primary),
-                    const SizedBox(width: AppSpacing.m),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
+          children: [
+            const Icon(Icons.edit_note, color: AppColors.primaryMaroon),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text('Update Stock: ${product.name}', 
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                overflow: TextOverflow.ellipsis
+              ),
+            ),
+          ],
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: SingleChildScrollView(
+            child: Form(
+              key: formKey,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(AppSpacing.m),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primary.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(AppRadius.s),
+                    ),
+                    child: Row(
                       children: [
-                        Text('Current Inventory', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant)),
-                        Text('${product.stockQuantity} ${product.unit}', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: theme.colorScheme.primary)),
+                        Icon(Icons.inventory_2, color: theme.colorScheme.primary),
+                        const SizedBox(width: AppSpacing.m),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Current Inventory', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.bold)),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                alignment: Alignment.centerLeft,
+                                child: Text('${product.stockQuantity} ${product.unit}', 
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: theme.colorScheme.primary)),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
-                  ],
-                ),
+                  ),
+                  const SizedBox(height: AppSpacing.l),
+                  TextFormField(
+                    controller: stockController,
+                    decoration: InputDecoration(
+                      labelText: 'Add/Remove Quantity',
+                      helperText: 'Use negative value to reduce stock',
+                      suffixText: product.unit,
+                      border: const OutlineInputBorder(),
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-]'))],
+                    autofocus: true,
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return 'Required';
+                      if (double.tryParse(v) == null) return 'Invalid quantity';
+                      return null;
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(height: AppSpacing.l),
-              TextFormField(
-                controller: stockController,
-                decoration: InputDecoration(
-                  labelText: 'Add/Remove Quantity',
-                  helperText: 'Use negative value to reduce stock',
-                  suffixText: product.unit,
-                ),
-                keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
-                inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.\-]'))],
-                autofocus: true,
-                validator: (v) {
-                  if (v == null || v.isEmpty) return 'Required';
-                  if (double.tryParse(v) == null) return 'Invalid quantity';
-                  return null;
-                },
-              ),
-            ],
+            ),
           ),
         ),
         actions: [

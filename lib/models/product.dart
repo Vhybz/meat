@@ -34,6 +34,8 @@ class Product {
   final PromoCustomerTarget promoCustomerTarget;
   final bool isDeleted; // Soft delete
   final double lowStockThreshold;
+  final double dailyStockAdded;
+  final DateTime? lastStockUpdate;
 
   Product({
     required this.id,
@@ -54,6 +56,8 @@ class Product {
     this.promoCustomerTarget = PromoCustomerTarget.all,
     this.isDeleted = false,
     this.lowStockThreshold = 5.0, // Default threshold
+    this.dailyStockAdded = 0.0,
+    this.lastStockUpdate,
   });
 
   /// Logic to check if promotion is currently scheduled correctly by date
@@ -122,6 +126,8 @@ class Product {
     String? imageUrl,
     bool? isDeleted,
     double? lowStockThreshold,
+    double? dailyStockAdded,
+    DateTime? lastStockUpdate,
   }) {
     return Product(
       id: id,
@@ -142,6 +148,8 @@ class Product {
       promoCustomerTarget: promoCustomerTarget ?? this.promoCustomerTarget,
       isDeleted: isDeleted ?? this.isDeleted,
       lowStockThreshold: lowStockThreshold ?? this.lowStockThreshold,
+      dailyStockAdded: dailyStockAdded ?? this.dailyStockAdded,
+      lastStockUpdate: lastStockUpdate ?? this.lastStockUpdate,
     );
   }
 
@@ -163,6 +171,8 @@ class Product {
       promoCustomerTarget: PromoCustomerTarget.values.byName(json['promo_customer_target'] ?? 'all'),
       isDeleted: json['is_deleted'] ?? false,
       lowStockThreshold: (json['low_stock_threshold'] as num? ?? 5.0).toDouble(),
+      dailyStockAdded: (json['daily_stock_added'] as num? ?? 0.0).toDouble(),
+      lastStockUpdate: json['last_stock_update'] != null ? DateTime.parse(json['last_stock_update']) : null,
     );
   }
 
@@ -183,6 +193,8 @@ class Product {
         'promo_customer_target': promoCustomerTarget.name,
         'is_deleted': isDeleted,
         'low_stock_threshold': lowStockThreshold,
+        'daily_stock_added': dailyStockAdded,
+        'last_stock_update': lastStockUpdate?.toIso8601String(),
       };
 }
 
