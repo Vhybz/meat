@@ -23,8 +23,8 @@ class SlaughterLogNotifier extends StateNotifier<AsyncValue<List<SlaughterLog>>>
       if (!silent) state = const AsyncValue.loading();
       final logs = await _service.getSlaughterLogs(branchCode);
       state = AsyncValue.data(logs);
-    } catch (e, st) {
-      if (!silent) state = AsyncValue.error(e, st);
+    } catch (e) {
+      if (!silent) state = AsyncValue.error(e, StackTrace.current);
     }
   }
 
@@ -115,8 +115,8 @@ class MeatBatchNotifier extends StateNotifier<AsyncValue<List<MeatBatch>>> {
       if (!silent) state = const AsyncValue.loading();
       final batches = await _service.getActiveBatches(branchCode);
       state = AsyncValue.data(batches);
-    } catch (e, st) {
-      if (!silent) state = AsyncValue.error(e, st);
+    } catch (e) {
+      if (!silent) state = AsyncValue.error(e, StackTrace.current);
     }
   }
 
@@ -171,8 +171,8 @@ class MeatCutNotifier extends StateNotifier<AsyncValue<List<MeatCut>>> {
       if (!silent) state = const AsyncValue.loading();
       final cuts = await _service.getRecentCuts(branchCode);
       state = AsyncValue.data(cuts);
-    } catch (e, st) {
-      if (!silent) state = AsyncValue.error(e, st);
+    } catch (e) {
+      if (!silent) state = AsyncValue.error(e, StackTrace.current);
     }
   }
 
@@ -233,8 +233,8 @@ class ButcherWasteNotifier extends StateNotifier<AsyncValue<List<Map<String, dyn
       if (!silent) state = const AsyncValue.loading();
       final waste = await _service.getWaste(branchCode);
       state = AsyncValue.data(waste);
-    } catch (e, st) {
-      if (!silent) state = AsyncValue.error(e, st);
+    } catch (e) {
+      if (!silent) state = AsyncValue.error(e, StackTrace.current);
     }
   }
 
@@ -272,31 +272,9 @@ class ButcherOrderNotifier extends StateNotifier<AsyncValue<List<ButcherOrder>>>
       if (!silent) state = const AsyncValue.loading();
       final orders = await _service.getButcherOrders(branchCode);
       state = AsyncValue.data(orders);
-    } catch (e, st) {
-      // For demo/offline, let's provide some mock data if it fails
-      if (!silent) state = AsyncValue.data(_getMockOrders());
+    } catch (e) {
+      if (!silent) state = AsyncValue.error(e, StackTrace.current);
     }
-  }
-
-  List<ButcherOrder> _getMockOrders() {
-    return [
-      ButcherOrder(
-        id: 'MS-ORD-101',
-        customerName: 'Prime Steakhouse Inc.',
-        items: ['Beef Sirloin (10kg)', 'Pork Ribs (5kg)'],
-        totalWeight: 15.0,
-        dueDate: DateTime.now().add(const Duration(days: 1)),
-        status: ButcherOrderStatus.preparing,
-      ),
-      ButcherOrder(
-        id: 'MS-ORD-102',
-        customerName: 'City Grill',
-        items: ['Chicken Wings (20kg)', 'Whole Chicken (10)'],
-        totalWeight: 32.5,
-        dueDate: DateTime.now().add(const Duration(days: 2)),
-        status: ButcherOrderStatus.pending,
-      ),
-    ];
   }
 
   Future<void> updateStatus(String id, ButcherOrderStatus status) async {
@@ -310,6 +288,20 @@ class ButcherOrderNotifier extends StateNotifier<AsyncValue<List<ButcherOrder>>>
       });
     } catch (e) {
       debugPrint('Error updating order status: $e');
+    }
+  }
+
+  Future<void> addOrder(ButcherOrder order) async {
+    try {
+      final branchCode = ref.read(currentUserProvider)?.branchCode;
+      final orderWithBranch = order.copyWith(branchCode: branchCode);
+      await _service.addButcherOrder(orderWithBranch);
+      state.whenData((orders) {
+        state = AsyncValue.data([orderWithBranch, ...orders]);
+      });
+    } catch (e) {
+      debugPrint('Error adding butcher order: $e');
+      rethrow;
     }
   }
 }

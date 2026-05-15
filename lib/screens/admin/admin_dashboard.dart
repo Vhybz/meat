@@ -801,7 +801,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
                                   leading: Container(
                                     padding: const EdgeInsets.all(8),
                                     decoration: BoxDecoration(
-                                      color: theme.colorScheme.primary.withOpacity(0.1),
+                                      color: theme.colorScheme.primary.withValues(alpha: 0.1),
                                       borderRadius: BorderRadius.circular(8),
                                     ),
                                     child: Icon(r['icon'], color: theme.colorScheme.primary, size: 20),
@@ -1120,12 +1120,6 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
                       maxLines: 1, overflow: TextOverflow.ellipsis),
                   ],
                 ),
-              ),
-              const SizedBox(width: 8),
-              TextButton(
-                onPressed: () => Navigator.pushReplacementNamed(context, '/admin/butcher'),
-                style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
-                child: const Text('View Full', style: TextStyle(fontSize: 10)),
               ),
             ],
           ),

@@ -148,4 +148,8 @@ class SupabaseButcherService {
         .update({'status': status.name})
         .eq('id', id);
   }
+
+  Future<void> addButcherOrder(ButcherOrder order) async {
+    await _client.from('butcher_orders').insert(order.toJson());
+  }
 }

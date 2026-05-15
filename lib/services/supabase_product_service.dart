@@ -46,7 +46,7 @@ class SupabaseProductService implements ProductService {
   Future<void> deleteProduct(String id) async {
     await _client
         .from('products')
-        .update({'is_deleted': true})
+        .delete()
         .eq('id', id);
   }
 

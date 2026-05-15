@@ -33,6 +33,13 @@ class SupabaseUserService {
         .eq('id', id);
   }
 
+  Future<void> hardDeleteUser(String id) async {
+    await _client
+        .from('users')
+        .delete()
+        .eq('id', id);
+  }
+
   Future<UserAccount?> getUserById(String id) async {
     try {
       final response = await _client

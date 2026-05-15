@@ -25,6 +25,11 @@ class SupabaseSaleService {
         .eq('id', sale.id);
   }
 
+  Future<void> deleteSales(List<String> ids) async {
+    if (ids.isEmpty) return;
+    await _client.from('sales').delete().filter('id', 'in', '(${ids.join(',')})');
+  }
+
   Stream<List<SaleRecord>> getSalesStream(String branchCode) {
     return _client
         .from('sales')

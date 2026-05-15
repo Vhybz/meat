@@ -119,7 +119,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
       decoration: BoxDecoration(
         color: theme.cardTheme.color,
         borderRadius: BorderRadius.circular(AppRadius.l),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.5)),
+        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5)),
       ),
       child: Column(
         children: [
@@ -139,9 +139,9 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
             decoration: BoxDecoration(
-              color: theme.colorScheme.primary.withOpacity(0.1),
+              color: theme.colorScheme.primary.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: theme.colorScheme.primary.withOpacity(0.2)),
+              border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.2)),
             ),
             child: Text(
               user.role.name.toUpperCase(),
@@ -168,7 +168,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
               shape: BoxShape.circle,
               border: Border.all(color: theme.colorScheme.primary, width: 3),
               boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4)),
+                BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 4)),
               ],
             ),
             child: ClipOval(
@@ -206,7 +206,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
       decoration: BoxDecoration(
         color: theme.cardTheme.color,
         borderRadius: BorderRadius.circular(AppRadius.l),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.5)),
+        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -219,7 +219,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
                 onPressed: () => setState(() => _isEditing = !_isEditing),
                 icon: Icon(_isEditing ? Icons.close_rounded : Icons.edit_rounded, size: 20),
                 style: IconButton.styleFrom(
-                  backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
+                  backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
                   foregroundColor: theme.colorScheme.primary,
                 ),
               ),
@@ -324,10 +324,10 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: theme.colorScheme.onSurface.withOpacity(0.05),
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, size: 20, color: theme.colorScheme.primary.withOpacity(0.7)),
+            child: Icon(icon, size: 20, color: theme.colorScheme.primary.withValues(alpha: 0.7)),
           ),
           const SizedBox(width: 16),
           Expanded(

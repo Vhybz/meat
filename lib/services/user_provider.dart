@@ -136,11 +136,8 @@ class UserNotifier extends StateNotifier<List<UserAccount>> {
 
   Future<void> deleteUser(String userId) async {
     try {
-      await service.deleteUser(userId);
-      state = [
-        for (final u in state)
-          if (u.id == userId) u.copyWith(isDeleted: true) else u
-      ];
+      await service.hardDeleteUser(userId);
+      state = state.where((u) => u.id != userId).toList();
     } catch (e) {
       debugPrint('Delete User Error: $e');
     }
@@ -277,6 +274,7 @@ class UserNotifier extends StateNotifier<List<UserAccount>> {
 
   Future<void> permanentlyDeleteUser(String userId) async {
     try {
+      await service.hardDeleteUser(userId);
       state = state.where((u) => u.id != userId).toList();
     } catch (e) {
       debugPrint('Delete Error: $e');

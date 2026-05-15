@@ -144,12 +144,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.3),
+                                color: Colors.black.withValues(alpha: 0.3),
                                 blurRadius: 20,
                                 offset: const Offset(0, 10),
                               ),
                             ],
-                            border: Border.all(color: Colors.white.withOpacity(0.2), width: 6),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 6),
                           ),
                           child: ClipOval(
                             child: Image.asset(
@@ -205,7 +205,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
                             borderRadius: BorderRadius.circular(10),
                             child: LinearProgressIndicator(
                               value: _progressAnimation.value,
-                              backgroundColor: Colors.white.withOpacity(0.1),
+                              backgroundColor: Colors.white.withValues(alpha: 0.1),
                               valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
                               minHeight: 4,
                             ),
@@ -214,7 +214,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
                           Text(
                             'Preparing Fresh Cuts... ${(_progressAnimation.value * 100).toInt()}%',
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.6),
+                              color: Colors.white.withValues(alpha: 0.6),
                               fontSize: 11,
                               fontWeight: FontWeight.w400,
                               letterSpacing: 1,
@@ -244,7 +244,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
         height: size,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: Colors.white.withOpacity(0.03),
+          color: Colors.white.withValues(alpha: 0.03),
         ),
       ),
     );

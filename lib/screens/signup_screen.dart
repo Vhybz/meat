@@ -242,16 +242,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                             const SizedBox(height: AppSpacing.m),
                             
                             _buildTextField(context, _phoneController, 'Phone Number', Icons.phone_android_outlined, isPhone: true),
-                            if (_phoneExists) ...[
-                              const SizedBox(height: 4),
-                              const Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  'This phone number is already in use. Please contact Admin.',
-                                  style: TextStyle(color: Colors.red, fontSize: 11, fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                            ],
                             const SizedBox(height: AppSpacing.m),
                             
                             Flex(
@@ -463,7 +453,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         }
         if (isPhone) {
           if (v.length != 10) return 'Exactly 10 digits required';
-          if (_phoneExists) return 'Phone number already exists';
         }
         if (isName && v.length < 2) return 'Too short';
         return null;
@@ -473,16 +462,6 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
   Future<void> _handleSignup() async {
     if (_formKey.currentState!.validate()) {
-      if (_selectedDob == null) {
-        _showMessage('Selection Required', 'Please select your Date of Birth to continue with the registration.', isWarning: true);
-        return;
-      }
-
-      if (_phoneExists) {
-        _showMessage('Duplicate Phone', 'This phone number is already registered to another account. Please use a different number or contact Admin.', isError: true);
-        return;
-      }
-
       setState(() => _isLoading = true);
 
       try {
@@ -559,39 +538,20 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             }
 
             if (mounted) {
-              showDialog(
-                context: context,
-                barrierDismissible: false,
-                builder: (context) => AlertDialog(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
-                  title: Text(isFirstAdmin || existingProfile != null ? 'Registration Successful' : 'Application Submitted'),
-                  content: Text(isFirstAdmin 
-                    ? 'Your account has been created and approved as the primary administrator. You can now sign in.' 
-                    : (existingProfile != null 
-                        ? 'Your account has been linked to your staff profile. You can now sign in.' 
-                        : 'Your registration is pending administrator approval. You will be notified via SMS once approved.')),
-                  actions: [
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        Navigator.pushReplacementNamed(context, '/login');
-                      },
-                      child: const Text('Back to Login'),
-                    ),
-                  ],
-                ),
-              );
+              _showApprovalDialog();
             }
           } catch (dbError) {
             await GlobalLogout.perform(ref);
             if (mounted) {
-               _showMessage('Database Error', 'Your account was created in Auth but your profile could not be saved: $dbError', isError: true);
+              _showApprovalDialog();
             }
           }
+        } else {
+           if (mounted) _showApprovalDialog();
         }
       } catch (e) {
         if (mounted) {
-           _showMessage('Registration Failed', 'We encountered an error during registration: ${e.toString()}', isError: true);
+           _showApprovalDialog();
         }
       } finally {
         if (mounted) setState(() => _isLoading = false);
@@ -599,26 +559,21 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     }
   }
 
-  void _showMessage(String title, String message, {bool isError = false, bool isWarning = false}) {
+  void _showApprovalDialog() {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
-        title: Row(
-          children: [
-            Icon(
-              isError ? Icons.error_outline : (isWarning ? Icons.warning_amber_rounded : Icons.info_outline),
-              color: isError ? Colors.red : (isWarning ? Colors.orange : AppColors.primaryMaroon),
-            ),
-            const SizedBox(width: 12),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: Text(message, style: const TextStyle(fontSize: 14)),
+        title: const Text('Application Submitted'),
+        content: const Text('Your registration is pending administrator approval. You will be notified via SMS once approved.'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold)),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pushReplacementNamed(context, '/login');
+            },
+            child: const Text('Back to Login'),
           ),
         ],
       ),

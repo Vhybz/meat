@@ -257,8 +257,8 @@ class ReportService {
     
     final Map<String, Map<String, dynamic>> performance = {};
     for (final s in sales) {
-      final name = s.cashierName ?? 'System';
-      performance[name] = performance[name] ?? {'total': 0.0, 'count': 0};
+      final name = s.cashierName;
+      performance.putIfAbsent(name, () => {'total': 0.0, 'count': 0});
       performance[name]!['total'] += s.totalAmount;
       performance[name]!['count'] += 1;
     }

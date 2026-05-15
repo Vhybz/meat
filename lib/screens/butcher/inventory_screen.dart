@@ -123,7 +123,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> with SingleTi
                       crossAxisCount: crossAxisCount,
                       crossAxisSpacing: AppSpacing.m,
                       mainAxisSpacing: AppSpacing.m,
-                      childAspectRatio: constraints.maxWidth < 600 ? 1.0 : 1.1,
+                      childAspectRatio: constraints.maxWidth < 600 ? 0.9 : 1.1,
                     ),
                     itemCount: filtered.length,
                     itemBuilder: (context, index) => _buildInventoryCard(filtered[index]),
@@ -195,7 +195,7 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> with SingleTi
                       crossAxisCount: crossAxisCount,
                       crossAxisSpacing: AppSpacing.m,
                       mainAxisSpacing: AppSpacing.m,
-                      childAspectRatio: constraints.maxWidth < 600 ? 1.0 : 1.1,
+                      childAspectRatio: constraints.maxWidth < 600 ? 0.9 : 1.1,
                     ),
                     itemCount: activeProducts.length,
                     itemBuilder: (context, index) => _buildProductInventoryCard(activeProducts[index]),
@@ -214,7 +214,6 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> with SingleTi
   Widget _buildStockAlerts(String message) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isMobile = constraints.maxWidth < 600;
         return Container(
           padding: const EdgeInsets.all(AppSpacing.m),
           decoration: BoxDecoration(
@@ -273,9 +272,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> with SingleTi
             const Spacer(),
             Text(cut.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
             Text('ID: ${cut.batchId.substring(0, 8).toUpperCase()}', style: const TextStyle(color: AppColors.textLight, fontSize: 9), overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             const Divider(height: 1),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -339,9 +338,9 @@ class _InventoryScreenState extends ConsumerState<InventoryScreen> with SingleTi
             const Spacer(),
             Text(product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
             Text(product.category, style: const TextStyle(color: AppColors.textLight, fontSize: 9), overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             const Divider(height: 1),
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [

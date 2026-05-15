@@ -88,6 +88,15 @@ class SaleHistoryNotifier extends StateNotifier<List<SaleRecord>> {
       debugPrint('Update Sale Error: $e');
     }
   }
+
+  Future<void> deleteSales(List<String> ids) async {
+    try {
+      await _service.deleteSales(ids);
+    } catch (e) {
+      debugPrint('Delete Sales Error: $e');
+      rethrow;
+    }
+  }
 }
 
 final saleServiceProvider = Provider<SupabaseSaleService>((ref) {

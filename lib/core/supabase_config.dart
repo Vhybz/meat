@@ -7,35 +7,53 @@ class SupabaseConfig {
     try {
       debugPrint('Starting Supabase initialization...');
       
-      // 1. Try to load from .env file (Local development)
+      // Load .env only if not on web or if we really want to try
+      // On web release, loading .env can be flaky depending on hosting
       try {
         await dotenv.load(fileName: ".env");
-        debugPrint('.env file loaded successfully.');
       } catch (e) {
-        debugPrint('.env file not found or failed to load: $e');
+        try {
+          await dotenv.load(fileName: "assets/.env");
+        } catch (e2) {
+          debugPrint('Dotenv load failed (Expected on some web hosts): $e2');
+        }
       }
       
-      // 2. Resolve credentials using priority: 
-      //    --dart-define > .env file > Hardcoded Defaults (for seamless PC build)
-      
-      String? url = const String.fromEnvironment('SUPABASE_URL');
-      if (url.isEmpty) {
-        url = dotenv.env['SUPABASE_URL'] ?? 'https://jdvtktjdyduxpsjrilkp.supabase.co';
+      // Credentials with multiple fallback layers
+      String url = const String.fromEnvironment('SUPABASE_URL');
+      if (url.isEmpty || url == 'your_url') {
+        url = dotenv.env['SUPABASE_URL'] ?? '';
+      }
+      if (url.isEmpty || url == 'your_url') {
+        url = 'https://jdvtktjdyduxpsjrilkp.supabase.co';
       }
           
-      String? anonKey = const String.fromEnvironment('SUPABASE_ANON_KEY');
-      if (anonKey.isEmpty) {
-        anonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpkdnRrdGpkeWR1eHBzanJpbGtwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzNDQwOTgsImV4cCI6MjA5MzkyMDA5OH0.t74kyocVAXs5oF-3_EEH-E3vUXVkz82NbIVgN6t2jpw';
+      String anonKey = const String.fromEnvironment('SUPABASE_ANON_KEY');
+      if (anonKey.isEmpty || anonKey == 'your_key') {
+        anonKey = dotenv.env['SUPABASE_ANON_KEY'] ?? '';
+      }
+      if (anonKey.isEmpty || anonKey == 'your_key') {
+        anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpkdnRrdGpkeWR1eHBzanJpbGtwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzNDQwOTgsImV4cCI6MjA5MzkyMDA5OH0.t74kyocVAXs5oF-3_EEH-E3vUXVkz82NbIVgN6t2jpw';
       }
 
+      debugPrint('Initializing Supabase client...');
+
       await Supabase.initialize(
-        url: url,
-        anonKey: anonKey,
-        authOptions: const FlutterAuthClientOptions(authFlowType: AuthFlowType.pkce),
+        url: url.trim(),
+        anonKey: anonKey.trim(),
+        authOptions: const FlutterAuthClientOptions(
+          authFlowType: AuthFlowType.pkce,
+          // Disable localStorage on web if it might cause issues in some restricted environments
+          // but usually it's required for persistence.
+        ),
       );
-      debugPrint('Supabase.initialize() completed for $url');
+      
+      debugPrint('Supabase initialized successfully.');
     } catch (e) {
-      debugPrint('CRITICAL: Supabase Init Error: $e');
+      if (e.toString().contains('already been initialized')) {
+        return;
+      }
+      debugPrint('Supabase Initialization Error: $e');
       rethrow;
     }
   }

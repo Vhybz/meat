@@ -124,7 +124,7 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
     try {
       await _service.deleteProduct(id);
       state.whenData((products) {
-        state = AsyncValue.data(products.map((p) => p.id == id ? p.copyWith(isDeleted: true) : p).toList());
+        state = AsyncValue.data(products.where((p) => p.id != id).toList());
       });
     } catch (e) {
       debugPrint('Delete Product Error: $e');

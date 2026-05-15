@@ -254,7 +254,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                       ),
                       const SizedBox(height: AppSpacing.m),
                       DropdownButtonFormField<PromoTarget>(
-                        value: selectedTarget,
+                        initialValue: selectedTarget,
                         isExpanded: true,
                         decoration: const InputDecoration(labelText: 'Promotion Target'),
                         items: const [
@@ -266,7 +266,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                       ),
                       const SizedBox(height: AppSpacing.m),
                       DropdownButtonFormField<PromoCustomerTarget>(
-                        value: selectedCustomerTarget,
+                        initialValue: selectedCustomerTarget,
                         isExpanded: true,
                         decoration: const InputDecoration(labelText: 'Customer Eligibility'),
                         items: const [
@@ -499,7 +499,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
           content: Form(
             key: formKey,
             child: SizedBox(
-              width: MediaQuery.of(context).size.width * 0.9,
+              width: MediaQuery.of(context).size.width * 0.85,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 500),
                 child: SingleChildScrollView(
@@ -611,7 +611,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                           child: _buildFormTextField(
                             context: context,
                             controller: retailPriceController,
-                            label: 'Retail Price',
+                            label: 'Retail',
                             prefix: '₵ ',
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
                             validator: (v) {
@@ -626,7 +626,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                           child: _buildFormTextField(
                             context: context,
                             controller: wholesalePriceController,
-                            label: 'Wholesale Price',
+                            label: 'Wholesale',
                             prefix: '₵ ',
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
                             validator: (v) {
@@ -648,7 +648,6 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                             controller: stockController,
                             label: 'Initial Stock',
                             suffix: selectedUnit.name,
-                            icon: Icons.inventory_2_outlined,
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
                             validator: (v) {
                               if (v == null || v.isEmpty) return 'Required';
@@ -657,12 +656,13 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                             },
                           ),
                         ),
-                        const SizedBox(width: AppSpacing.m),
+                        const SizedBox(width: AppSpacing.s),
                         Expanded(
                           child: DropdownButtonFormField<WeightUnit>(
                             value: selectedUnit,
+                            isExpanded: true,
                             decoration: const InputDecoration(labelText: 'Unit'),
-                            items: WeightUnit.values.map((u) => DropdownMenuItem(value: u, child: Text(u == WeightUnit.unit ? 'UNITS/PCS' : u.name.toUpperCase()))).toList(),
+                            items: WeightUnit.values.map((u) => DropdownMenuItem(value: u, child: Text(u == WeightUnit.unit ? 'PCS' : u.name.toUpperCase()))).toList(),
                             onChanged: (v) => setState(() => selectedUnit = v!),
                           ),
                         ),
@@ -758,7 +758,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
           content: Form(
             key: formKey,
             child: SizedBox(
-              width: MediaQuery.of(context).size.width * 0.9,
+              width: MediaQuery.of(context).size.width * 0.85,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 500),
                 child: SingleChildScrollView(

@@ -1018,9 +1018,9 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                       Container(
                         padding: const EdgeInsets.all(AppSpacing.m),
                         decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.05),
+                          color: Colors.blue.withValues(alpha: 0.05),
                           borderRadius: BorderRadius.circular(AppRadius.s),
-                          border: Border.all(color: Colors.blue.withOpacity(0.1)),
+                          border: Border.all(color: Colors.blue.withValues(alpha: 0.1)),
                         ),
                         child: const Row(
                           children: [

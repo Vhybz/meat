@@ -28,6 +28,9 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
   DateTime? _startDate;
   DateTime? _endDate;
   SaleStatus? _statusFilter;
+  final Set<String> _selectedSaleIds = {};
+  bool _isPrintingSelected = false;
+  bool _isDeletingSelected = false;
 
   @override
   Widget build(BuildContext context) {
@@ -216,12 +219,58 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
         ),
       );
 
+      final printSelectedButton = _selectedSaleIds.isNotEmpty 
+        ? ElevatedButton.icon(
+            onPressed: _isPrintingSelected ? null : () async {
+              setState(() => _isPrintingSelected = true);
+              final selectedSales = filteredSales.where((s) => _selectedSaleIds.contains(s.id)).toList();
+              await ReceiptService.printInvoices(selectedSales);
+              setState(() {
+                _isPrintingSelected = false;
+                _selectedSaleIds.clear();
+              });
+            },
+            icon: _isPrintingSelected 
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.print),
+            label: Text('Print Selected (${_selectedSaleIds.length})'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+            ),
+          )
+        : null;
+
+      final deleteSelectedButton = _selectedSaleIds.isNotEmpty
+        ? ElevatedButton.icon(
+            onPressed: _isDeletingSelected ? null : () => _confirmDeleteSelected(context),
+            icon: _isDeletingSelected
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.delete_outline),
+            label: Text('Delete (${_selectedSaleIds.length})'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade800,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+            ),
+          )
+        : null;
+
       if (isMobile) {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             headerText,
             const SizedBox(height: AppSpacing.m),
+            if (deleteSelectedButton != null) ...[
+              SizedBox(width: double.infinity, child: deleteSelectedButton),
+              const SizedBox(height: AppSpacing.s),
+            ],
+            if (printSelectedButton != null) ...[
+              SizedBox(width: double.infinity, child: printSelectedButton),
+              const SizedBox(height: AppSpacing.s),
+            ],
             SizedBox(width: double.infinity, child: exportButton),
           ],
         );
@@ -232,6 +281,14 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
         children: [
           Expanded(child: headerText),
           const SizedBox(width: 16),
+          if (deleteSelectedButton != null) ...[
+            deleteSelectedButton,
+            const SizedBox(width: 8),
+          ],
+          if (printSelectedButton != null) ...[
+            printSelectedButton,
+            const SizedBox(width: 8),
+          ],
           exportButton,
         ],
       );
@@ -345,6 +402,16 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
                 child: DataTable(
                   columnSpacing: 24,
                   horizontalMargin: 12,
+                  showCheckboxColumn: true,
+                  onSelectAll: (selected) {
+                    setState(() {
+                      if (selected == true) {
+                        _selectedSaleIds.addAll(sales.map((s) => s.id));
+                      } else {
+                        _selectedSaleIds.clear();
+                      }
+                    });
+                  },
                   headingTextStyle: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.primary, fontSize: 12),
                   columns: const [
                     DataColumn(label: Text('Invoice ID')),
@@ -355,10 +422,26 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
                     DataColumn(label: Text('Status')),
                   ],
                   rows: sales.map<DataRow>((sale) {
+                    final isSelected = _selectedSaleIds.contains(sale.id);
                     return DataRow(
-                      onSelectChanged: (_) => _showSaleDetails(context, sale),
+                      selected: isSelected,
+                      onSelectChanged: (selected) {
+                        setState(() {
+                          if (selected == true) {
+                            _selectedSaleIds.add(sale.id);
+                          } else {
+                            _selectedSaleIds.remove(sale.id);
+                          }
+                        });
+                      },
+                      onLongPress: () => _showSaleDetails(context, sale),
                       cells: [
-                        DataCell(Text(sale.id, style: const TextStyle(fontWeight: FontWeight.bold))),
+                        DataCell(
+                          InkWell(
+                            onTap: () => _showSaleDetails(context, sale),
+                            child: Text(sale.id, style: const TextStyle(fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
+                          ),
+                        ),
                         DataCell(Text(DateFormat('MMM dd, HH:mm:ss').format(sale.timestamp))),
                         DataCell(
                           SizedBox(
@@ -741,5 +824,45 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
       case SaleStatus.pendingCorrection: return Colors.orange;
       case SaleStatus.cancelled: return Colors.red;
     }
+  }
+
+  void _confirmDeleteSelected(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Transactions?'),
+        content: Text('Are you sure you want to permanently delete ${_selectedSaleIds.length} selected transactions? This action cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              setState(() => _isDeletingSelected = true);
+              try {
+                await ref.read(saleHistoryProvider.notifier).deleteSales(_selectedSaleIds.toList());
+                setState(() {
+                  _selectedSaleIds.clear();
+                  _isDeletingSelected = false;
+                });
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Transactions deleted successfully.')),
+                  );
+                }
+              } catch (e) {
+                setState(() => _isDeletingSelected = false);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Failed to delete: $e'), backgroundColor: Colors.red),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('DELETE'),
+          ),
+        ],
+      ),
+    );
   }
 }

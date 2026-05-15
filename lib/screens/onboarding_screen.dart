@@ -54,7 +54,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   image: AssetImage(_pages[_currentPage].bgAsset),
                   fit: BoxFit.cover,
                   colorFilter: ColorFilter.mode(
-                    Colors.black.withOpacity(0.85),
+                    Colors.black.withValues(alpha: 0.85),
                     BlendMode.darken,
                   ),
                 ),

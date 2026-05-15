@@ -13,7 +13,6 @@ import '../../services/menu_service.dart';
 import '../../services/user_provider.dart';
 import '../../models/customer_metrics.dart';
 import '../../services/customer_metrics_provider.dart';
-import '../../services/sale_provider.dart';
 
 class CustomerManagementScreen extends ConsumerWidget {
   const CustomerManagementScreen({super.key});

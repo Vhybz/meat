@@ -24,6 +24,7 @@ import 'screens/profile_screen.dart';
 import 'services/theme_provider.dart';
 import 'services/sync_provider.dart';
 import 'core/supabase_config.dart';
+import 'services/push_notification_service.dart';
 
 import 'screens/admin/super_admin_screen.dart';
 
@@ -31,6 +32,13 @@ void main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
     usePathUrlStrategy();
+
+    // Initialize System Tray Notifications (Graceful failure)
+    try {
+      await PushNotificationService.initialize();
+    } catch (e) {
+      debugPrint('Push Notification initialization failed: $e');
+    }
 
     // Enable edge-to-edge support
     SystemChrome.setSystemUIOverlayStyle(
@@ -43,39 +51,33 @@ void main() async {
     );
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     
-    // Explicitly check for configuration before calling the config class
-    const url = String.fromEnvironment('SUPABASE_URL');
-    const anonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
-
-    if (url.isEmpty || anonKey.isEmpty) {
-      debugPrint('Supabase Environment Variables not found in build. Attempting .env file fallback...');
-      await SupabaseConfig.initialize();
-    } else {
-      await Supabase.initialize(
-        url: url, 
-        anonKey: anonKey,
-        authOptions: const FlutterAuthClientOptions(authFlowType: AuthFlowType.pkce),
-      );
-    }
+    // Unified Supabase Initialization
+    await SupabaseConfig.initialize();
 
     runApp(
       const ProviderScope(
         child: MeatShopApp(),
       ),
     );
-  } catch (e) {
+  } catch (e, stack) {
     debugPrint('CRITICAL INITIALIZATION FAILURE: $e');
+    debugPrint('STACK TRACE: $stack');
     runApp(
-      const MaterialApp(
+      MaterialApp(
         debugShowCheckedModeBanner: false,
-        home: InitializationErrorScreen(),
+        home: InitializationErrorScreen(
+          errorMessage: e.toString(),
+          stackTrace: stack.toString(),
+        ),
       ),
     );
   }
 }
 
 class InitializationErrorScreen extends StatelessWidget {
-  const InitializationErrorScreen({super.key});
+  final String? errorMessage;
+  final String? stackTrace;
+  const InitializationErrorScreen({super.key, this.errorMessage, this.stackTrace});
 
   @override
   Widget build(BuildContext context) {
@@ -95,11 +97,41 @@ class InitializationErrorScreen extends StatelessWidget {
                   'Configuration Missing',
                   style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold),
                 ),
+                if (errorMessage != null) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    width: 800,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.redAccent.withValues(alpha: 0.5)),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          'Technical Error: $errorMessage',
+                          style: const TextStyle(color: Colors.yellowAccent, fontSize: 13, fontFamily: 'monospace', fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
+                        ),
+                        if (stackTrace != null) ...[
+                          const Divider(color: Colors.white24),
+                          Text(
+                            stackTrace!,
+                            style: const TextStyle(color: Colors.white70, fontSize: 10, fontFamily: 'monospace'),
+                            maxLines: 10,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Text(
-                  'The application cannot connect to the database because the Supabase configuration is missing.',
+                  'The application cannot connect to the database. Please ensure your configuration is correct.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 16),
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 16),
                 ),
                 const SizedBox(height: 40),
                 _buildErrorBox(
@@ -135,16 +167,15 @@ class InitializationErrorScreen extends StatelessWidget {
       ),
     );
   }
-}
 
   Widget _buildErrorBox(String title, String content) {
     return Container(
       width: 600,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.3),
+        color: Colors.black.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.2)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

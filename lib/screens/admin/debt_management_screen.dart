@@ -46,10 +46,20 @@ class _DebtManagementScreenState extends ConsumerState<DebtManagementScreen> {
           (s.payments.length > 1 || s.payments.any((p) => p.reference?.contains('Collection') ?? false));
 
       if (_showPaidInvoices) {
-        return isClearedDebt;
+        if (!isClearedDebt) return false;
       } else {
-        return isDebt;
+        if (!isDebt) return false;
       }
+
+      if (_searchQuery.isNotEmpty) {
+        final query = _searchQuery.toLowerCase();
+        final matchesName = s.customerName?.toLowerCase().contains(query) ?? false;
+        final matchesPhone = s.customerPhone?.contains(query) ?? false;
+        final matchesId = s.id.toLowerCase().contains(query);
+        return matchesName || matchesPhone || matchesId;
+      }
+
+      return true;
     }).toList();
 
     // Sort by most recent first
@@ -118,26 +128,33 @@ class _DebtManagementScreenState extends ConsumerState<DebtManagementScreen> {
   }
 
   Widget _buildControls(ThemeData theme) {
-    return Row(
+    final isSmall = MediaQuery.of(context).size.width < 500;
+    return Flex(
+      direction: isSmall ? Axis.vertical : Axis.horizontal,
       children: [
         Expanded(
+          flex: isSmall ? 0 : 1,
           child: TextField(
-            onChanged: (v) => setState(() => _searchQuery = v),
+            controller: TextEditingController(text: _searchQuery),
+            onSubmitted: (v) => setState(() => _searchQuery = v),
             decoration: InputDecoration(
-              hintText: 'Search by Customer Name, Phone or Invoice #',
+              hintText: 'Search Name, Phone or Invoice #',
               prefixIcon: const Icon(Icons.search),
               isDense: true,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.m)),
             ),
           ),
         ),
-        const SizedBox(width: AppSpacing.m),
-        FilterChip(
-          label: const Text('Show Fully Paid'),
-          selected: _showPaidInvoices,
-          onSelected: (v) => setState(() => _showPaidInvoices = v),
-          selectedColor: theme.colorScheme.primary.withValues(alpha: 0.2),
-          checkmarkColor: theme.colorScheme.primary,
+        if (isSmall) const SizedBox(height: AppSpacing.s) else const SizedBox(width: AppSpacing.m),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilterChip(
+            label: const Text('Show Fully Paid', style: TextStyle(fontSize: 12)),
+            selected: _showPaidInvoices,
+            onSelected: (v) => setState(() => _showPaidInvoices = v),
+            selectedColor: theme.colorScheme.primary.withValues(alpha: 0.2),
+            checkmarkColor: theme.colorScheme.primary,
+          ),
         ),
       ],
     );
@@ -340,8 +357,15 @@ class _DebtManagementScreenState extends ConsumerState<DebtManagementScreen> {
           child: Icon(isPaid ? Icons.check_circle_outline : Icons.person, color: isPaid ? Colors.green : Colors.orange),
         ),
         title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Text(sale.customerName ?? 'Walk-in Customer', style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+            Flexible(
+              child: Text(
+                sale.customerName ?? 'Walk-in Customer', 
+                style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
             if (!isPaid && ageInDays > 7)
               Container(
                 margin: const EdgeInsets.only(left: 8),
@@ -354,21 +378,35 @@ class _DebtManagementScreenState extends ConsumerState<DebtManagementScreen> {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Invoice: ${sale.id} • ${DateFormat('MMM dd, HH:mm').format(sale.timestamp)}', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+            Text(
+              'Invoice: ${sale.id} • ${DateFormat('MMM dd, HH:mm').format(sale.timestamp)}', 
+              style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 11),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
             if (sale.customerPhone != null)
-              Text('Phone: ${sale.customerPhone}', style: const TextStyle(fontSize: 12)),
+              Text('Phone: ${sale.customerPhone}', style: const TextStyle(fontSize: 11)),
           ],
         ),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(isPaid ? 'Fully Paid' : 'Balance Due', style: TextStyle(fontSize: 10, color: isPaid ? Colors.green : theme.colorScheme.onSurfaceVariant)),
-            Text(
-              '₵${sale.balance.toStringAsFixed(2)}',
-              style: TextStyle(color: isPaid ? Colors.green : Colors.red, fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-          ],
+        trailing: SizedBox(
+          width: 80,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(isPaid ? 'Fully Paid' : 'Balance Due', 
+                style: TextStyle(fontSize: 9, color: isPaid ? Colors.green : theme.colorScheme.onSurfaceVariant),
+                textAlign: TextAlign.right,
+              ),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  '₵${sale.balance.toStringAsFixed(2)}',
+                  style: TextStyle(color: isPaid ? Colors.green : Colors.red, fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+              ),
+            ],
+          ),
         ),
         onTap: () => _showCollectionDialog(context, sale),
       ),

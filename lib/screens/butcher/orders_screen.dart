@@ -122,8 +122,192 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
   }
 
   void _showNewOrderDialog(BuildContext context) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Order intake form is being synchronized with the Sales unit...'))
+    final theme = Theme.of(context);
+    final formKey = GlobalKey<FormState>();
+    final customerNameController = TextEditingController();
+    final weightController = TextEditingController();
+    DateTime selectedDate = DateTime.now().add(const Duration(days: 1));
+    TimeOfDay selectedTime = const TimeOfDay(hour: 10, minute: 0);
+    final List<String> selectedItems = [];
+    final List<String> availableItems = [
+      'Beef Sirloin', 'Beef Fillet', 'Beef Chuck', 'Beef Ribs',
+      'Pork Belly', 'Pork Chops', 'Pork Shoulder', 'Pork Leg',
+      'Goat Mixed', 'Goat Head', 'Goat Feet',
+      'Whole Chicken (Hard)', 'Whole Chicken (Soft)',
+      'Chicken Wings', 'Chicken Drumsticks', 'Gizzards'
+    ];
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
+          title: Row(
+            children: [
+              const Icon(Icons.add_task, color: AppColors.primaryMaroon),
+              const SizedBox(width: 12),
+              const Text('Create Pre-Order'),
+            ],
+          ),
+          content: SizedBox(
+            width: 500,
+            child: Form(
+              key: formKey,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextFormField(
+                      controller: customerNameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Customer/Client Name',
+                        prefixIcon: Icon(Icons.person_outline),
+                        hintText: 'e.g. Prime Steakhouse',
+                      ),
+                      validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                    ),
+                    const SizedBox(height: AppSpacing.m),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextFormField(
+                            controller: weightController,
+                            decoration: const InputDecoration(
+                              labelText: 'Total Est. Weight',
+                              prefixIcon: Icon(Icons.scale_outlined),
+                              suffixText: 'kg',
+                            ),
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            validator: (v) {
+                              if (v == null || v.isEmpty) return 'Required';
+                              if (double.tryParse(v) == null) return 'Invalid number';
+                              return null;
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.m),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () async {
+                              final picked = await showDatePicker(
+                                context: context,
+                                initialDate: selectedDate,
+                                firstDate: DateTime.now(),
+                                lastDate: DateTime.now().add(const Duration(days: 90)),
+                              );
+                              if (picked != null) setDialogState(() => selectedDate = picked);
+                            },
+                            child: InputDecorator(
+                              decoration: const InputDecoration(labelText: 'Due Date'),
+                              child: Text(DateFormat('MMM dd, yyyy').format(selectedDate), style: const TextStyle(fontSize: 13)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.m),
+                    InkWell(
+                      onTap: () async {
+                        final picked = await showTimePicker(
+                          context: context,
+                          initialTime: selectedTime,
+                        );
+                        if (picked != null) setDialogState(() => selectedTime = picked);
+                      },
+                      child: InputDecorator(
+                        decoration: const InputDecoration(labelText: 'Pick-up Time', prefixIcon: Icon(Icons.access_time)),
+                        child: Text(selectedTime.format(context), style: const TextStyle(fontSize: 13)),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.m),
+                    const Text('Select Items Required:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    const SizedBox(height: 8),
+                    Container(
+                      height: 150,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: theme.dividerColor),
+                        borderRadius: BorderRadius.circular(AppRadius.s),
+                      ),
+                      child: ListView(
+                        padding: EdgeInsets.zero,
+                        children: availableItems.map((item) => CheckboxListTile(
+                          title: Text(item, style: const TextStyle(fontSize: 12)),
+                          value: selectedItems.contains(item),
+                          onChanged: (val) {
+                            setDialogState(() {
+                              if (val == true) {
+                                selectedItems.add(item);
+                              } else {
+                                selectedItems.remove(item);
+                              }
+                            });
+                          },
+                          dense: true,
+                          visualDensity: VisualDensity.compact,
+                          activeColor: AppColors.primaryMaroon,
+                        )).toList(),
+                      ),
+                    ),
+                    if (selectedItems.isEmpty) 
+                      const Padding(
+                        padding: EdgeInsets.only(top: 4),
+                        child: Text('Please select at least one item', style: TextStyle(color: Colors.red, fontSize: 10)),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: selectedItems.isEmpty ? null : () async {
+                if (formKey.currentState!.validate()) {
+                  final dueDateTime = DateTime(
+                    selectedDate.year,
+                    selectedDate.month,
+                    selectedDate.day,
+                    selectedTime.hour,
+                    selectedTime.minute,
+                  );
+
+                  final newOrder = ButcherOrder(
+                    id: 'ORD-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}',
+                    customerName: customerNameController.text.trim(),
+                    items: selectedItems,
+                    totalWeight: double.parse(weightController.text),
+                    dueDate: dueDateTime,
+                    status: ButcherOrderStatus.pending,
+                  );
+
+                  try {
+                    await ref.read(butcherOrdersProvider.notifier).addOrder(newOrder);
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Processing order created successfully!'), backgroundColor: Colors.green),
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Failed to create order: $e'), backgroundColor: Colors.red),
+                      );
+                    }
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMaroon, foregroundColor: Colors.white),
+              child: const Text('Create Order'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -169,102 +353,159 @@ class _OrdersScreenState extends ConsumerState<OrdersScreen> {
   Widget _buildOrderCard(ButcherOrder order) {
     return Card(
       margin: const EdgeInsets.only(bottom: AppSpacing.m),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.m),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final isNarrow = constraints.maxWidth < 500;
-            return Column(
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 60,
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      decoration: BoxDecoration(color: AppColors.surfaceWhite, borderRadius: BorderRadius.circular(AppRadius.s)),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(DateFormat('MMM').format(order.dueDate), style: const TextStyle(fontSize: 10, color: AppColors.textLight)),
-                          Text(DateFormat('dd').format(order.dueDate), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                          Text(DateFormat('HH:mm').format(order.dueDate), style: const TextStyle(fontSize: 8, color: AppColors.textLight)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.m),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  'Order #${order.id.length > 8 ? order.id.substring(0, 8).toUpperCase() : order.id}', 
-                                  style: const TextStyle(fontWeight: FontWeight.bold), 
-                                  overflow: TextOverflow.ellipsis
-                                )
-                              ),
-                              const SizedBox(width: 8),
-                              StatusChip(
-                                label: order.status.name.toUpperCase(), 
-                                color: _getStatusColor(order.status)
-                              ),
-                            ],
-                          ),
-                          Text('Client: ${order.customerName}', style: const TextStyle(fontSize: 12, color: AppColors.textDark, fontWeight: FontWeight.w500)),
-                          const SizedBox(height: 4),
-                          Text('Items: ${order.items.join(", ")}', style: const TextStyle(fontSize: 11, color: AppColors.textLight), maxLines: 2, overflow: TextOverflow.ellipsis),
-                        ],
-                      ),
-                    ),
-                    if (!isNarrow) ...[
-                      const VerticalDivider(),
-                      _buildWeightInfo(order),
-                      const SizedBox(width: 12),
-                      IconButton(
-                        icon: const Icon(Icons.print_outlined, size: 20, color: AppColors.textLight),
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Printing order ticket for ${order.id}...'))
-                          );
-                        },
-                        tooltip: 'Print Order Ticket',
-                      ),
-                    ],
-                  ],
-                ),
-                if (isNarrow) ...[
-                  const Divider(),
+      child: InkWell(
+        onTap: () => _showOrderDetails(context, order),
+        borderRadius: BorderRadius.circular(AppRadius.s),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.m),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isNarrow = constraints.maxWidth < 500;
+              return Column(
+                children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildWeightInfo(order, isHorizontal: true),
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.print_outlined, size: 20),
-                            onPressed: () {},
-                          ),
-                          const SizedBox(width: 8),
-                          _buildActionButton(order),
-                        ],
+                      Container(
+                        width: 60,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        decoration: BoxDecoration(color: AppColors.surfaceWhite, borderRadius: BorderRadius.circular(AppRadius.s)),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(DateFormat('MMM').format(order.dueDate), style: const TextStyle(fontSize: 10, color: AppColors.textLight)),
+                            Text(DateFormat('dd').format(order.dueDate), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                            Text(DateFormat('HH:mm').format(order.dueDate), style: const TextStyle(fontSize: 8, color: AppColors.textLight)),
+                          ],
+                        ),
                       ),
+                      const SizedBox(width: AppSpacing.m),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    'Order #${order.id.length > 8 ? order.id.substring(0, 8).toUpperCase() : order.id}', 
+                                    style: const TextStyle(fontWeight: FontWeight.bold), 
+                                    overflow: TextOverflow.ellipsis
+                                  )
+                                ),
+                                const SizedBox(width: 8),
+                                StatusChip(
+                                  label: order.status.name.toUpperCase(), 
+                                  color: _getStatusColor(order.status)
+                                ),
+                              ],
+                            ),
+                            Text('Client: ${order.customerName}', style: const TextStyle(fontSize: 12, color: AppColors.textDark, fontWeight: FontWeight.w500)),
+                            const SizedBox(height: 4),
+                            Text('Items: ${order.items.join(", ")}', style: const TextStyle(fontSize: 11, color: AppColors.textLight), maxLines: 2, overflow: TextOverflow.ellipsis),
+                          ],
+                        ),
+                      ),
+                      if (!isNarrow) ...[
+                        const VerticalDivider(),
+                        _buildWeightInfo(order),
+                        const SizedBox(width: 12),
+                        IconButton(
+                          icon: const Icon(Icons.print_outlined, size: 20, color: AppColors.textLight),
+                          onPressed: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Printing order ticket for ${order.id}...'))
+                            );
+                          },
+                          tooltip: 'Print Order Ticket',
+                        ),
+                      ],
                     ],
                   ),
-                ] else
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: _buildActionButton(order),
+                  if (isNarrow) ...[
+                    const Divider(),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        _buildWeightInfo(order, isHorizontal: true),
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.print_outlined, size: 20),
+                              onPressed: () {},
+                            ),
+                            const SizedBox(width: 8),
+                            _buildActionButton(order),
+                          ],
+                        ),
+                      ],
                     ),
-                  ),
-              ],
-            );
-          }
+                  ] else
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: _buildActionButton(order),
+                      ),
+                    ),
+                ],
+              );
+            }
+          ),
         ),
+      ),
+    );
+  }
+
+  void _showOrderDetails(BuildContext context, ButcherOrder order) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Order Details: ${order.id.toUpperCase()}'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _detailRow('Customer', order.customerName),
+            _detailRow('Status', order.status.name.toUpperCase()),
+            _detailRow('Due Date', DateFormat('MMM dd, yyyy HH:mm').format(order.dueDate)),
+            _detailRow('Total Weight', '${order.totalWeight} kg'),
+            const Divider(),
+            const Text('Requested Items:', style: TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            ...order.items.map((item) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_outline, size: 14, color: Colors.green),
+                  const SizedBox(width: 8),
+                  Text(item, style: const TextStyle(fontSize: 13)),
+                ],
+              ),
+            )),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close')),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.print),
+            label: const Text('Print Ticket'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(color: AppColors.textLight, fontSize: 12)),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+        ],
       ),
     );
   }

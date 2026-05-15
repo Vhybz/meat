@@ -119,7 +119,7 @@ class WasteManagementScreen extends ConsumerWidget {
                       contentPadding: EdgeInsets.zero,
                       leading: Container(
                         padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(color: Colors.red.withOpacity(0.1), shape: BoxShape.circle),
+                        decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.1), shape: BoxShape.circle),
                         child: const Icon(Icons.delete_outline, color: Colors.red, size: 18),
                       ),
                       title: Text('${w['reason']}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),

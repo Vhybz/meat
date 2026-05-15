@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../core/constants.dart';
 import 'responsive_layout.dart';
@@ -46,7 +45,7 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
         color: roleColor,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.4 : 0.1),
+            color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.1),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -101,7 +100,7 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
                           : 'Mi Corazon Butchery System',
                         style: TextStyle(
                           fontSize: 11,
-                          color: Colors.white.withOpacity(0.7),
+                          color: Colors.white.withValues(alpha: 0.7),
                           fontWeight: FontWeight.w400,
                         ),
                         maxLines: 1,
@@ -261,7 +260,7 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
                         title: Text(n.title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                         subtitle: Text(n.message, style: const TextStyle(fontSize: 11)),
                         trailing: Text(DateFormat('hh:mm').format(n.timestamp), style: const TextStyle(fontSize: 10)),
-                        tileColor: n.isRead ? null : Colors.orange.withOpacity(0.05),
+                        tileColor: n.isRead ? null : Colors.orange.withValues(alpha: 0.05),
                         onTap: () {
                           ref.read(notificationProvider.notifier).markAsRead(n.id);
                         },
@@ -287,9 +286,9 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.15),
+        color: Colors.white.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(AppRadius.l),
-        border: Border.all(color: Colors.white.withOpacity(0.2)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -311,7 +310,7 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
 
   Widget _buildRoundButton(BuildContext context, IconData icon, VoidCallback onTap) {
     return Material(
-      color: Colors.white.withOpacity(0.15),
+      color: Colors.white.withValues(alpha: 0.15),
       shape: const CircleBorder(),
       child: InkWell(
         onTap: onTap,
@@ -340,7 +339,7 @@ class MainAppBar extends ConsumerWidget implements PreferredSizeWidget {
         padding: const EdgeInsets.all(2),
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.white.withOpacity(0.4), width: 2),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.4), width: 2),
         ),
         child: SizedBox(
           width: 32,

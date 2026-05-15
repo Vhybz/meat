@@ -8,7 +8,6 @@ import '../../services/transfer_provider.dart';
 import '../../services/butcher_service.dart';
 import '../../models/transfer_models.dart';
 import '../../models/butcher_models.dart';
-import '../../services/user_provider.dart';
 import '../../services/branch_provider.dart';
 import '../../services/label_service.dart';
 

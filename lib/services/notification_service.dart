@@ -1,4 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'push_notification_service.dart';
+import 'sms_service.dart';
 
 class AppNotification {
   final String id;
@@ -27,6 +29,24 @@ class NotificationNotifier extends StateNotifier<List<AppNotification>> {
       timestamp: DateTime.now(),
     );
     state = [notification, ...state];
+
+    // 1. Show System Tray "Popup" Notification
+    PushNotificationService.showNotification(
+      id: notification.timestamp.millisecondsSinceEpoch ~/ 1000,
+      title: title,
+      body: message,
+    );
+
+    // 2. If it's a critical alert, send SMS to Admin (Works even if app is closed/offline)
+    final criticalKeywords = ['BUTCHER', 'RECTIFIED', 'URGENT', 'STOCK TRANSFER', 'LOW STOCK', 'CORRECTION'];
+    bool isCritical = criticalKeywords.any((k) => title.toUpperCase().contains(k));
+
+    if (isCritical) {
+      SmsService.notifyAdmin(
+        title: title,
+        message: message,
+      );
+    }
   }
 
   void markAsRead(String id) {
