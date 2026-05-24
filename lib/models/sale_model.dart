@@ -141,13 +141,33 @@ class SaleRecord {
   // Base total before discounts
   double get baseTotal => totalAmount + totalDiscount;
 
-  // Calculations based on the provided receipt structure (Ghanaian Tax system)
-  double get basicAmount => totalAmount; 
-  double get getFund => 0.00;
-  double get nhil => 0.00;
-  double get subTotal => totalAmount;
-  double get vat => 0.00;
+  // Calculations based on the Ghanaian Tax system (Standard Rate)
+  // Basic Amount (Exclusive of Levies and VAT)
+  double get taxExclusiveAmount => totalAmount / 1.219; // Mathematical reverse of standard rate
+
+  double get getFundAmount => taxExclusiveAmount * 0.025;
+  double get nhilAmount => taxExclusiveAmount * 0.025;
+  double get covidLevyAmount => taxExclusiveAmount * 0.01;
+  
+  // Taxable Value for VAT = Exclusive + Levies
+  double get taxableValueForVat => taxExclusiveAmount + getFundAmount + nhilAmount + covidLevyAmount;
+  
+  double get vatAmount => taxableValueForVat * 0.15;
+
+  // Verification: taxExclusiveAmount + getFund + nhil + covid + vat should approx totalAmount
+  
+  // Alternative: Flat Rate (3% + 1% COVID) = 4% total on top
+  double get flatRateVatAmount => totalAmount * 0.03;
+  double get flatRateCovidAmount => totalAmount * 0.01;
+
   double get netInvoiceValue => totalAmount;
+
+  // Aliases for backward compatibility
+  double get basicAmount => taxExclusiveAmount;
+  double get getFund => getFundAmount;
+  double get nhil => nhilAmount;
+  double get vat => vatAmount;
+  double get subTotal => totalAmount;
 
   double get amountPaid => payments.fold(0, (sum, p) => sum + p.amount);
   double get balance => totalAmount - amountPaid;

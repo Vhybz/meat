@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../models/sale_model.dart';
 import 'supabase_sale_service.dart';
 import 'user_provider.dart';
 import 'product_service.dart';
+import 'offline_sync_service.dart';
 
 class SaleHistoryNotifier extends StateNotifier<List<SaleRecord>> {
   final SupabaseSaleService _service;
@@ -12,13 +14,47 @@ class SaleHistoryNotifier extends StateNotifier<List<SaleRecord>> {
   StreamSubscription? _subscription;
 
   SaleHistoryNotifier(this._service, this.ref) : super([]) {
-    _initStream();
+    _init();
     
     // Background Heartbeat: Auto-refresh data and check for updates every 3 seconds
     ref.listen(liveHeartbeatProvider, (_, __) {
       // Force a list refresh to ensure all financial calculations are re-computed
       state = [...state];
     });
+  }
+
+  void _init() {
+    _loadFromCache();
+    _initStream();
+  }
+
+  void _loadFromCache() {
+    try {
+      final box = Hive.box(OfflineSyncService.salesBoxName);
+      if (box.isNotEmpty) {
+        final List<SaleRecord> cached = box.values
+            .map((json) => SaleRecord.fromJson(Map<String, dynamic>.from(json)))
+            .toList();
+        state = cached;
+        debugPrint('Sale Engine: ${cached.length} records loaded from local cache.');
+      }
+    } catch (e) {
+      debugPrint('Sale Engine Cache Error: $e');
+    }
+  }
+
+  void _saveToCache(List<SaleRecord> sales) {
+    try {
+      final box = Hive.box(OfflineSyncService.salesBoxName);
+      box.clear();
+      // Keep only last 100 sales offline to save space
+      final toCache = sales.take(100).toList();
+      for (var s in toCache) {
+        box.put(s.id, s.toJson());
+      }
+    } catch (e) {
+      debugPrint('Sale Engine Save Error: $e');
+    }
   }
 
   void _initStream() {
@@ -28,6 +64,9 @@ class SaleHistoryNotifier extends StateNotifier<List<SaleRecord>> {
     _subscription?.cancel();
     _subscription = _service.getSalesStream(user!.branchCode!).listen((sales) {
       state = sales;
+      _saveToCache(sales);
+    }, onError: (e) {
+      debugPrint('Sale Stream Error (Offline?): Using cached data.');
     });
   }
 
@@ -45,16 +84,22 @@ class SaleHistoryNotifier extends StateNotifier<List<SaleRecord>> {
     try {
       final user = ref.read(currentUserProvider);
       final saleWithBranch = sale.copyWith(branchCode: user?.branchCode);
-      await _service.saveSale(saleWithBranch);
       
-      // Subtract items from total stock
+      // 1. Add to Offline Queue (Hive) - This ensures data is safe even if network drops
+      await OfflineSyncService.addToQueue(
+        actionType: 'SALE', 
+        data: saleWithBranch.toJson(),
+      );
+
+      // 2. Optimistic UI update: Add to local state immediately
+      state = [saleWithBranch, ...state];
+      
+      // 3. Subtract items from total stock
       for (final item in sale.items) {
         await ref.read(productsFutureProvider.notifier).updateStock(item.product.id, -item.quantity);
       }
-
-      // State is updated automatically by stream
     } catch (e) {
-      debugPrint('Add Sale Error: $e');
+      debugPrint('Add Sale (Queue) Error: $e');
     }
   }
 
@@ -95,6 +140,16 @@ class SaleHistoryNotifier extends StateNotifier<List<SaleRecord>> {
     } catch (e) {
       debugPrint('Delete Sales Error: $e');
       rethrow;
+    }
+  }
+
+  Future<void> purgeAllRecords() async {
+    try {
+      final ids = state.map((s) => s.id).toList();
+      await _service.deleteSales(ids);
+      state = [];
+    } catch (e) {
+      debugPrint('Purge Sales Error: $e');
     }
   }
 }

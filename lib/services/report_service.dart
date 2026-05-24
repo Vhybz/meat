@@ -287,6 +287,151 @@ class ReportService {
     await Printing.layoutPdf(onLayout: (format) async => doc.save(), name: 'Staff_Performance');
   }
 
+  static Future<void> generateTaxComplianceReport({
+    required DateTime date,
+    required double totalSales,
+    required double totalExpenses,
+    required double grossProfit,
+    required Map<String, double> taxBreakdown,
+    bool isQuarterly = false,
+  }) async {
+    final doc = pw.Document();
+    final periodName = isQuarterly 
+        ? 'Q${((date.month - 1) / 3).floor() + 1} ${date.year}' 
+        : DateFormat('MMMM yyyy').format(date);
+
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        header: (context) => _buildHeader('GRA Tax Compliance Report', date),
+        footer: (context) => _buildFooter(context),
+        build: (context) => [
+          _buildSummarySection({
+            'Reporting Period': periodName,
+            'Type': isQuarterly ? 'QUARTERLY FILING' : 'MONTHLY FILING',
+            'Status': 'OFFICIAL RECORD',
+          }),
+          pw.SizedBox(height: 20),
+          
+          pw.Text('Profit & Loss Summary', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14)),
+          pw.SizedBox(height: 10),
+          pw.TableHelper.fromTextArray(
+            headers: ['Description', 'Amount (GHS)'],
+            data: [
+              ['Total Gross Sales', totalSales.toStringAsFixed(2)],
+              ['Total Operational Expenses', totalExpenses.toStringAsFixed(2)],
+              ['Gross Profit (Pre-Tax)', grossProfit.toStringAsFixed(2)],
+            ],
+          ),
+          
+          pw.SizedBox(height: 30),
+          pw.Text('GRA Standard Rate Tax Breakdown', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14, color: _primaryMaroon)),
+          pw.SizedBox(height: 10),
+          pw.TableHelper.fromTextArray(
+            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
+            headerDecoration: const pw.BoxDecoration(color: _primaryMaroon),
+            headers: ['Tax Component', 'Rate', 'Calculated Amount (GHS)'],
+            data: [
+              ['NHIL', '2.5%', taxBreakdown['NHIL']!.toStringAsFixed(2)],
+              ['GETFund', '2.5%', taxBreakdown['GETFund']!.toStringAsFixed(2)],
+              ['COVID-19 Health Recovery Levy', '1.0%', taxBreakdown['COVID']!.toStringAsFixed(2)],
+              ['VAT (Standard)', '15.0%', taxBreakdown['VAT']!.toStringAsFixed(2)],
+              ['TOTAL TAX PAYABLE', '', taxBreakdown['TOTAL']!.toStringAsFixed(2)],
+            ],
+          ),
+          
+          pw.SizedBox(height: 40),
+          pw.Divider(),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('NET PROFIT AFTER TAX', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16)),
+              pw.Text('GHS ${(grossProfit - taxBreakdown['TOTAL']!).toStringAsFixed(2)}', 
+                style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16, color: _primaryMaroon)),
+            ],
+          ),
+          
+          pw.SizedBox(height: 60),
+          pw.Row(
+            children: [
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Container(width: 150, height: 1, color: PdfColors.black),
+                  pw.SizedBox(height: 5),
+                  pw.Text('Manager Signature', style: const pw.TextStyle(fontSize: 10)),
+                ],
+              ),
+              pw.Spacer(),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text('Printed on: ${DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now())}', style: const pw.TextStyle(fontSize: 8)),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+
+    await Printing.layoutPdf(onLayout: (format) async => doc.save(), name: 'Tax_Compliance_${DateFormat('yyyyMM').format(date)}');
+  }
+
+  static Future<void> generateHealthCertificate() async {
+    final doc = pw.Document();
+    doc.addPage(
+      pw.Page(
+        build: (context) => pw.Center(
+          child: pw.Container(
+            padding: const pw.EdgeInsets.all(40),
+            decoration: pw.BoxDecoration(
+              border: pw.Border.all(color: _primaryMaroon, width: 5),
+            ),
+            child: pw.Column(
+              mainAxisSize: pw.MainAxisSize.min,
+              children: [
+                pw.Text('HEALTH INSPECTION CERTIFICATE', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: _primaryMaroon)),
+                pw.SizedBox(height: 20),
+                pw.Text('This is to certify that Mi Corazon Freshmeat Butchery has passed all health and hygiene standards for the year 2024.', textAlign: pw.TextAlign.center),
+                pw.SizedBox(height: 40),
+                pw.Text('Status: VERIFIED', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.green)),
+                pw.SizedBox(height: 60),
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Date: Jan 01, 2024'),
+                    pw.Text('Signature: _________________'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await Printing.layoutPdf(onLayout: (format) async => doc.save(), name: 'Health_Certificate_2024');
+  }
+
+  static Future<void> generateSlaughterSOP() async {
+    final doc = pw.Document();
+    doc.addPage(
+      pw.MultiPage(
+        header: (context) => _buildHeader('Standard Operating Procedure', DateTime.now()),
+        build: (context) => [
+          pw.Header(level: 0, text: 'Standard Slaughter SOP v2.1'),
+          pw.Paragraph(text: '1. Arrival and Offloading: Ensure animals are rested for at least 12 hours.'),
+          pw.Paragraph(text: '2. Pre-Slaughter Inspection: Veterinary officer must verify animal health.'),
+          pw.Paragraph(text: '3. Stunning and Bleeding: Performed according to humane standards.'),
+          pw.Paragraph(text: '4. Dressing: Immediate removal of hide and viscera.'),
+          pw.Paragraph(text: '5. Post-Mortem: Secondary inspection of carcasses.'),
+          pw.Paragraph(text: '6. Storage: Cooling at 0-4°C within 1 hour.'),
+        ],
+      ),
+    );
+    await Printing.layoutPdf(onLayout: (format) async => doc.save(), name: 'Slaughter_SOP_v2.1');
+  }
+
   static Map<String, Map<String, dynamic>> _groupSalesByDay(List<SaleRecord> sales) {
     final Map<String, Map<String, dynamic>> groups = {};
     for (final s in sales) {

@@ -19,15 +19,40 @@ class MenuService {
       SidebarItem(icon: Icons.receipt_long_rounded, label: 'Business Expenses', route: '/admin/expenses'),
       SidebarItem(icon: Icons.people_outline_rounded, label: 'Customer Directory', route: '/admin/customers'),
       SidebarItem(icon: Icons.account_balance_wallet_rounded, label: 'Debt Tracker', route: '/admin/debts'),
+      SidebarItem(icon: Icons.account_balance_rounded, label: 'GRA Tax Compliance', route: '/admin/tax'),
+      SidebarItem(icon: Icons.folder_open_rounded, label: 'Compliance Documents', route: '/admin/documents'),
       SidebarItem(icon: Icons.inventory_2_rounded, label: 'Master Stock Control', route: '/admin/stock'),
       SidebarItem(icon: Icons.people_alt_rounded, label: 'Staff Management', route: '/admin/users'),
+      SidebarItem(icon: Icons.history_rounded, label: 'Company Recents', route: '/admin/recents'),
+      SidebarItem(icon: Icons.build_circle_rounded, label: 'System Maintenance', route: '/admin/maintenance'),
     ];
 
     // 1. Admin Module
     if (roles.contains(UserRole.superAdmin) || isAdmin) {
       for (final item in adminItems) {
-        final hasSpecificAdminPerms = user.enabledPermissions.any((p) => p.startsWith('/admin'));
-        if (roles.contains(UserRole.superAdmin) || !hasSpecificAdminPerms || user.enabledPermissions.contains(item.route)) {
+        // Super Admins always see everything.
+        if (roles.contains(UserRole.superAdmin)) {
+          items.add(SidebarItem(
+            icon: item.icon,
+            label: item.label,
+            route: item.route,
+            isCatchy: user.newlyAddedPermissions.contains(item.route),
+          ));
+          continue;
+        }
+
+        // Logic for regular Admin:
+        // Always show standard tools, show others if not restricted.
+        final bool isSystemTool = item.route == '/admin' || 
+                                  item.route == '/admin/tax' ||
+                                  item.route == '/admin/documents' ||
+                                  item.route == '/admin/recents' || 
+                                  item.route == '/admin/maintenance';
+        
+        final hasSpecificRestrictions = user.enabledPermissions.isNotEmpty && 
+                                         user.enabledPermissions.any((p) => p.startsWith('/admin'));
+
+        if (isSystemTool || !hasSpecificRestrictions || user.enabledPermissions.contains(item.route)) {
           items.add(SidebarItem(
             icon: item.icon,
             label: item.label,
@@ -36,7 +61,8 @@ class MenuService {
           ));
         }
       }
-    } else {
+    }
+ else {
       // Check if non-admin has been granted specific admin duties
       for (final item in adminItems) {
         if (user.enabledPermissions.contains(item.route)) {
@@ -113,9 +139,12 @@ class MenuService {
       {'route': '/admin/sales', 'label': 'Sales Analytics'},
       {'route': '/admin/expenses', 'label': 'Business Expenses'},
       {'route': '/admin/customers', 'label': 'Customer Directory'},
+      {'route': '/admin/documents', 'label': 'Compliance Documents'},
       {'route': '/admin/debts', 'label': 'Debt Tracker'},
       {'route': '/admin/stock', 'label': 'Master Stock Control'},
       {'route': '/admin/users', 'label': 'Staff Management'},
+      {'route': '/admin/recents', 'label': 'Company Recents'},
+      {'route': '/admin/maintenance', 'label': 'System Maintenance'},
       {'route': '/cashier', 'label': 'Cashier POS Access'},
       {'route': '/butcher', 'label': 'Butcher Operations Access'},
       {'route': '/settings', 'label': 'System Settings'},

@@ -214,7 +214,14 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Account Information', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+              Expanded(
+                child: Text(
+                  'Account Information', 
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.colorScheme.primary),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
               IconButton(
                 onPressed: () => setState(() => _isEditing = !_isEditing),
                 icon: Icon(_isEditing ? Icons.close_rounded : Icons.edit_rounded, size: 20),

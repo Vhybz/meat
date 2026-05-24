@@ -1,10 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../../core/constants.dart';
-import '../../core/utils.dart';
-import '../../widgets/kpi_card.dart';
-import '../../widgets/responsive_layout.dart';
 import '../../services/butcher_service.dart';
 import '../../models/butcher_models.dart';
 

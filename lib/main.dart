@@ -17,6 +17,10 @@ import 'screens/admin/customer_management_screen.dart';
 import 'screens/admin/user_management_screen.dart';
 import 'screens/admin/system_settings_screen.dart';
 import 'screens/admin/butcher_analytics_screen.dart';
+import 'screens/admin/recents_screen.dart';
+import 'screens/admin/system_maintenance_screen.dart';
+import 'screens/admin/tax_compliance_screen.dart';
+import 'screens/butcher/documents_screen.dart';
 import 'screens/cashier/cashier_pos.dart';
 import 'screens/butcher/butcher_shell.dart';
 import 'screens/settings_screen.dart';
@@ -25,6 +29,7 @@ import 'services/theme_provider.dart';
 import 'services/sync_provider.dart';
 import 'core/supabase_config.dart';
 import 'services/push_notification_service.dart';
+import 'services/offline_sync_service.dart';
 
 import 'screens/admin/super_admin_screen.dart';
 
@@ -32,6 +37,9 @@ void main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
     usePathUrlStrategy();
+
+    // Initialize Offline Sync Engine (Hive)
+    await OfflineSyncService.initialize();
 
     // Initialize System Tray Notifications (Graceful failure)
     try {
@@ -52,7 +60,12 @@ void main() async {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     
     // Unified Supabase Initialization
-    await SupabaseConfig.initialize();
+    try {
+      await SupabaseConfig.initialize();
+    } catch (e) {
+      debugPrint('SUPABASE BOOT WARNING: App is likely offline. Proceeding in local mode...');
+      // We don't rethrow here. The app will boot using local cached auth if available.
+    }
 
     runApp(
       const ProviderScope(
@@ -276,10 +289,14 @@ class MeatShopApp extends ConsumerWidget {
         '/admin/sales': (context) => const SalesReportsScreen(),
         '/admin/expenses': (context) => const ExpenseManagementScreen(),
         '/admin/customers': (context) => const CustomerManagementScreen(),
+        '/admin/documents': (context) => const DocumentsScreen(),
         '/admin/debts': (context) => const DebtManagementScreen(),
         '/admin/stock': (context) => const InventoryControlScreen(),
+        '/admin/tax': (context) => const TaxComplianceScreen(),
         '/admin/users': (context) => const UserManagementScreen(),
         '/admin/butcher': (context) => const ButcherAnalyticsScreen(),
+        '/admin/recents': (context) => const RecentsScreen(),
+        '/admin/maintenance': (context) => const SystemMaintenanceScreen(),
         '/admin/settings': (context) => const SystemSettingsScreen(),
         '/settings': (context) => const SettingsScreen(),
         '/profile': (context) => const ProfileScreen(),

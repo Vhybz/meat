@@ -70,19 +70,39 @@ class TransferNotifier extends StateNotifier<List<StockTransfer>> {
       
       if (products == null) throw Exception('Products not loaded yet');
       
-      // Strategy: Extract the cut name (part after ' - ') and look for it in product names
+      // Strategy: Extract the cut name (part after first ' - ') and look for it in product names
       String cutToMatch = transfer.meatType;
+      String animalType = '';
       if (transfer.meatType.contains(' - ')) {
-        cutToMatch = transfer.meatType.split(' - ')[1].trim();
+        final parts = transfer.meatType.split(' - ');
+        animalType = parts[0].trim();
+        cutToMatch = parts.sublist(1).join(' - ').trim();
       }
 
+      // Robust matching logic
       final product = products.firstWhere(
-        (p) => p.name.toLowerCase() == cutToMatch.toLowerCase() || 
-               transfer.meatType.toLowerCase().contains(p.name.toLowerCase()),
+        (p) {
+          final pName = p.name.toLowerCase();
+          final mType = transfer.meatType.toLowerCase();
+          final cut = cutToMatch.toLowerCase();
+          final animal = animalType.toLowerCase();
+
+          return pName == cut || 
+                 pName == mType ||
+                 pName == '$animal $cut' ||
+                 mType.contains(pName) ||
+                 pName.contains(cut);
+        },
         orElse: () => throw Exception('Product not found in retail catalog for: $cutToMatch'),
       );
 
       await ref.read(productsFutureProvider.notifier).updateStock(product.id, transfer.weight);
+
+      // Notify System (Local)
+      ref.read(notificationProvider.notifier).addNotification(
+        'STOCK RECEIVED',
+        'Added ${transfer.weight}kg of ${product.name} to inventory.',
+      );
 
       state = [
         for (final t in state)
@@ -92,6 +112,7 @@ class TransferNotifier extends StateNotifier<List<StockTransfer>> {
             t
       ];
     } catch (e) {
+      debugPrint('Error marking transfer as received: $e');
       rethrow;
     }
   }

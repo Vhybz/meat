@@ -135,8 +135,7 @@ class _DebtManagementScreenState extends ConsumerState<DebtManagementScreen> {
         Expanded(
           flex: isSmall ? 0 : 1,
           child: TextField(
-            controller: TextEditingController(text: _searchQuery),
-            onSubmitted: (v) => setState(() => _searchQuery = v),
+            onChanged: (v) => setState(() => _searchQuery = v),
             decoration: InputDecoration(
               hintText: 'Search Name, Phone or Invoice #',
               prefixIcon: const Icon(Icons.search),

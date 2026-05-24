@@ -1207,16 +1207,24 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
             ).firstOrNull;
 
             if (match != null) {
-              ref.read(transferProvider.notifier).markAsReceived(match.id);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Scanned & Received: ${match.meatType}'),
-                  backgroundColor: Colors.green,
-                ),
-              );
-              scanController.clear();
-              // Refresh dialog state to show item is gone
-              setDialogState(() {});
+              ref.read(transferProvider.notifier).markAsReceived(match.id).then((_) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Scanned & Received: ${match.meatType}'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+                scanController.clear();
+                // Refresh dialog state to show item is gone
+                setDialogState(() {});
+              }).catchError((e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error: ${e.toString().replaceAll('Exception:', '')}'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              });
             } else {
               // Not found feedback
               ScaffoldMessenger.of(context).showSnackBar(
@@ -1297,11 +1305,19 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
                                     icon: const Icon(Icons.add_task, color: Colors.green),
                                     tooltip: 'Verify Manually',
                                     onPressed: () {
-                                      ref.read(transferProvider.notifier).markAsReceived(t.id);
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(content: Text('Manually Received ${t.weight}kg of ${t.meatType}')),
-                                      );
-                                      setDialogState(() {});
+                                      ref.read(transferProvider.notifier).markAsReceived(t.id).then((_) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(content: Text('Manually Received ${t.weight}kg of ${t.meatType}')),
+                                        );
+                                        setDialogState(() {});
+                                      }).catchError((e) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Error: ${e.toString().replaceAll('Exception:', '')}'),
+                                            backgroundColor: Colors.red,
+                                          ),
+                                        );
+                                      });
                                     },
                                   ),
                                 ),
@@ -1417,7 +1433,8 @@ class _ProductWeightDialogState extends State<ProductWeightDialog> {
         return Dialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
           child: Container(
-            width: 360,
+            width: MediaQuery.of(context).size.width * 0.9,
+            constraints: const BoxConstraints(maxWidth: 360),
             height: 380, // Slightly taller to fit info
             padding: const EdgeInsets.all(AppSpacing.l),
             child: Form(
@@ -1581,7 +1598,8 @@ class _CustomerSelectionDialogState extends ConsumerState<CustomerSelectionDialo
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
       child: Container(
-        width: 380,
+        width: MediaQuery.of(context).size.width * 0.9,
+        constraints: const BoxConstraints(maxWidth: 380),
         height: 480, // Keeping it slightly taller but constrained
         padding: const EdgeInsets.all(AppSpacing.l),
         child: Column(
@@ -1780,7 +1798,8 @@ class _PaymentDialogState extends State<PaymentDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
       child: Container(
-        width: 440,
+        width: MediaQuery.of(context).size.width * 0.95,
+        constraints: const BoxConstraints(maxWidth: 450),
         height: 600, // Balanced height
         padding: const EdgeInsets.all(AppSpacing.l),
         child: Column(
@@ -1966,18 +1985,21 @@ class _PaymentDialogState extends State<PaymentDialog> {
               style: TextStyle(
                 fontSize: isTotal ? 13 : 12, 
                 color: isTotal ? theme.colorScheme.onSurface : theme.colorScheme.onSurfaceVariant,
-                fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
+                fontWeight: (isTotal || isBold) ? FontWeight.bold : FontWeight.normal,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
           ),
           const SizedBox(width: 8),
-          Text(value, style: TextStyle(
-            fontSize: isTotal ? 16 : 14, 
-            fontWeight: (isTotal || isBold) ? FontWeight.bold : FontWeight.w600,
-            color: color ?? theme.colorScheme.onSurface,
-          )),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(value, style: TextStyle(
+              fontSize: isTotal ? 16 : 14, 
+              fontWeight: (isTotal || isBold) ? FontWeight.bold : FontWeight.w600,
+              color: color ?? theme.colorScheme.onSurface,
+            )),
+          ),
         ],
       ),
     );
@@ -2002,7 +2024,8 @@ class _ReceiptSuccessDialogState extends State<ReceiptSuccessDialog> {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
       child: Container(
-        width: 380,
+        width: MediaQuery.of(context).size.width * 0.9,
+        constraints: const BoxConstraints(maxWidth: 400),
         height: 520, // Compact but fits details
         padding: const EdgeInsets.all(AppSpacing.l),
         child: Column(
@@ -2051,7 +2074,15 @@ class _ReceiptSuccessDialogState extends State<ReceiptSuccessDialog> {
                             padding: const EdgeInsets.symmetric(vertical: 2),
                             child: Row(
                               children: [
-                                Expanded(child: Text(item.product.name, style: const TextStyle(fontSize: 11))),
+                                Expanded(
+                                  child: Text(
+                                    item.product.name, 
+                                    style: const TextStyle(fontSize: 11),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
                                 Text('₵${item.total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                               ],
                             ),
@@ -2063,25 +2094,58 @@ class _ReceiptSuccessDialogState extends State<ReceiptSuccessDialog> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('TOTAL', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14)),
-                        Text('₵${widget.sale.totalAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Colors.black)),
+                        const Expanded(
+                          child: Text('TOTAL', 
+                            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('₵${widget.sale.totalAmount.toStringAsFixed(2)}', 
+                            style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Colors.black)),
+                        ),
                       ],
                     ),
-                    if (widget.sale.balance > 0) ...[
+                    if (widget.sale.balance > 0.01) ...[
                       const SizedBox(height: 4),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('AMOUNT PAID', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                          Text('₵${widget.sale.amountPaid.toStringAsFixed(2)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          const Expanded(
+                            child: Text('AMOUNT PAID', 
+                              style: TextStyle(fontSize: 12, color: Colors.grey),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('₵${widget.sale.amountPaid.toStringAsFixed(2)}', 
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 4),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('BALANCE DUE (DEBT)', style: TextStyle(fontSize: 12, color: Colors.red, fontWeight: FontWeight.bold)),
-                          Text('₵${widget.sale.balance.toStringAsFixed(2)}', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.red)),
+                          const Expanded(
+                            child: Text('BALANCE DUE (DEBT)', 
+                              style: TextStyle(fontSize: 11, color: Colors.red, fontWeight: FontWeight.bold),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('₵${widget.sale.balance.toStringAsFixed(2)}', 
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Colors.red)),
+                          ),
                         ],
                       ),
                     ],
@@ -2137,7 +2201,10 @@ class _ReceiptSuccessDialogState extends State<ReceiptSuccessDialog> {
             ),
           ),
           const SizedBox(width: 8),
-          Text(value, style: const TextStyle(fontSize: 10, color: Colors.black, fontWeight: FontWeight.w500)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(value, style: const TextStyle(fontSize: 10, color: Colors.black, fontWeight: FontWeight.w500)),
+          ),
         ],
       ),
     );

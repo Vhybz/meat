@@ -1,11 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import '../models/product.dart';
 import 'supabase_product_service.dart';
 import 'user_provider.dart';
 import 'notification_service.dart';
 import 'sms_service.dart';
+import 'offline_sync_service.dart';
 
 abstract class ProductService {
   Future<List<Product>> getProducts(String branchCode);
@@ -33,6 +35,9 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
   }
 
   void _init() {
+    // 0. Load from local Hive cache immediately for offline support
+    _loadFromCache();
+
     // 1. Watch current user and restart subscription if branch changes
     ref.listen(currentUserProvider, (previous, next) {
       if (next?.branchCode != previous?.branchCode) {
@@ -45,12 +50,38 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
       final products = state.value;
       if (products != null) {
         _checkStockAlerts(products);
-        // We removed the forced rebuild [...products] to prevent UI flickering.
-        // Rebuilds will now only happen when Supabase stream sends real updates.
       }
     });
     
     _startSubscription();
+  }
+
+  void _loadFromCache() {
+    try {
+      final box = Hive.box(OfflineSyncService.productsBoxName);
+      if (box.isNotEmpty) {
+        final List<Product> cached = box.values
+            .map((json) => Product.fromJson(Map<String, dynamic>.from(json)))
+            .toList();
+        state = AsyncValue.data(cached);
+        debugPrint('Product Engine: ${cached.length} products loaded from local cache.');
+      }
+    } catch (e) {
+      debugPrint('Product Engine Cache Error: $e');
+    }
+  }
+
+  void _saveToCache(List<Product> products) {
+    try {
+      final box = Hive.box(OfflineSyncService.productsBoxName);
+      // Update with fresh data
+      box.clear();
+      for (var p in products) {
+        box.put(p.id, p.toJson());
+      }
+    } catch (e) {
+      debugPrint('Product Engine Save Error: $e');
+    }
   }
 
   void _startSubscription() {
@@ -60,9 +91,17 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
       _subscription = _service.watchProducts(user.branchCode!).listen(
         (products) {
           state = AsyncValue.data(products);
+          _saveToCache(products); // Persist for next offline session
           _checkStockAlerts(products);
         },
-        onError: (e, st) => state = AsyncValue.error(e, st),
+        onError: (e, st) {
+          // If we have cached data, don't show error, just stay on cached data
+          if (state.hasValue) {
+            debugPrint('Product Stream Error (Offline?): Using cached data.');
+          } else {
+            state = AsyncValue.error(e, st);
+          }
+        },
       );
     } else {
       state = const AsyncValue.data([]);
@@ -242,6 +281,19 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
         }).toList());
       } catch (e) {
         debugPrint('Remove Promotion Error: $e');
+      }
+    });
+  }
+
+  Future<void> clearAllStock() async {
+    state.whenData((products) async {
+      try {
+        for (var p in products) {
+          await _service.updateStock(p.id, 0);
+        }
+        state = AsyncValue.data(products.map((p) => p.copyWith(stockQuantity: 0)).toList());
+      } catch (e) {
+        debugPrint('Clear Stock Error: $e');
       }
     });
   }

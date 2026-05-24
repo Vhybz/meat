@@ -2,8 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/butcher_models.dart';
 import 'supabase_butcher_service.dart';
-
 import 'user_provider.dart';
+import 'offline_sync_service.dart';
 
 class SlaughterLogNotifier extends StateNotifier<AsyncValue<List<SlaughterLog>>> {
   final SupabaseButcherService _service;
@@ -33,13 +33,19 @@ class SlaughterLogNotifier extends StateNotifier<AsyncValue<List<SlaughterLog>>>
       final branchCode = ref.read(currentUserProvider)?.branchCode;
       if (branchCode == null) throw Exception('No branch code assigned to user');
       final logWithBranch = log.copyWith(branchCode: branchCode);
-      await _service.addSlaughterLog(logWithBranch);
+      
+      // 1. Add to Offline Queue (Hive)
+      await OfflineSyncService.addToQueue(
+        actionType: 'INTAKE', 
+        data: logWithBranch.toJson(),
+      );
+
+      // 2. Optimistic UI update
       state.whenData((logs) {
         state = AsyncValue.data([logWithBranch, ...logs]);
       });
     } catch (e) {
-      debugPrint('Error adding slaughter log: $e');
-      rethrow;
+      debugPrint('Error adding slaughter log (Queue): $e');
     }
   }
 
@@ -242,10 +248,25 @@ class ButcherWasteNotifier extends StateNotifier<AsyncValue<List<Map<String, dyn
     try {
       final branchCode = ref.read(currentUserProvider)?.branchCode;
       final code = branchCode ?? 'GLOBAL';
-      await _service.addWaste(code, batchId, reason, weight);
-      loadWaste(silent: true); // Refresh silently
+      
+      final Map<String, dynamic> wasteData = {
+        'branch_code': code,
+        'batch_id': batchId,
+        'reason': reason,
+        'weight': weight,
+        'recorded_at': DateTime.now().toIso8601String(),
+      };
+
+      // 1. Add to Offline Queue (Hive)
+      await OfflineSyncService.addToQueue(
+        actionType: 'WASTE', 
+        data: wasteData,
+      );
+
+      // 2. Optimistic UI update (refresh list)
+      loadWaste(silent: true); 
     } catch (e) {
-      debugPrint('Error adding waste: $e');
+      debugPrint('Error adding waste (Queue): $e');
     }
   }
 }

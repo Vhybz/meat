@@ -891,12 +891,18 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
     final bool isMobile = ResponsiveLayout.isMobile(context);
     final bool isTablet = ResponsiveLayout.isTablet(context);
     
+    final now = DateTime.now();
     final allSales = ref.watch(saleHistoryProvider);
-    final sales = allSales.where((s) => s.status != SaleStatus.cancelled).toList();
+    
+    // Monthly Reset Logic: Filter all core metrics by current month
+    final sales = allSales.where((s) => 
+      s.status != SaleStatus.cancelled && 
+      s.timestamp.month == now.month && 
+      s.timestamp.year == now.year
+    ).toList();
     
     final logsAsync = ref.watch(slaughterLogsProvider);
     final todayLogs = logsAsync.value?.where((l) {
-      final now = DateTime.now();
       final date = l.slaughterTime ?? now;
       return date.day == now.day && date.month == now.month && date.year == now.year;
     }).toList() ?? [];
@@ -907,9 +913,13 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
     final totalWeightSold = sales.fold(0.0, (sum, sale) => sum + sale.totalQty);
     
     final expensesState = ref.watch(expenseProvider);
-    final totalExpenses = expensesState.records.fold(0.0, (sum, e) => sum + e.amount);
+    final totalExpenses = expensesState.records.where((e) => 
+      e.date.month == now.month && e.date.year == now.year
+    ).fold(0.0, (sum, e) => sum + e.amount);
+
     final netProfit = totalRevenue - totalExpenses;
 
+    final theme = Theme.of(context);
     final customers = ref.watch(customerProvider);
     final totalCustomers = customers.length;
 
@@ -917,7 +927,18 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
     double aspectRatio = isMobile ? 1.4 : 1.8;
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8.0),
+          child: Row(
+            children: [
+              Text('MONTHLY PERFORMANCE', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1.2)),
+              const SizedBox(width: 8),
+              Text('(${DateFormat('MMMM').format(now).toUpperCase()})', style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 10)),
+            ],
+          ),
+        ),
         GridView.count(
           crossAxisCount: crossAxisCount,
           shrinkWrap: true,

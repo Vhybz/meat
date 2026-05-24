@@ -56,6 +56,15 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
     } catch (e) {}
   }
 
+  Future<void> purgeAllRecords() async {
+    try {
+      for (final exp in state.records) {
+        await _service.deleteExpense(exp.id);
+      }
+      state = state.copyWith(records: []);
+    } catch (e) {}
+  }
+
   void addCategory(String category) {
     if (!state.categories.contains(category)) {
       state = state.copyWith(categories: [...state.categories, category]);

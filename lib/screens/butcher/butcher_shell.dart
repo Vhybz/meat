@@ -158,7 +158,7 @@ class ButcherShell extends ConsumerWidget {
       case ButcherScreen.orders: return const OrdersScreen();
       case ButcherScreen.wasteManagement: return const WasteManagementScreen();
       case ButcherScreen.expenses: return const ButcherExpenseScreen();
-      case ButcherScreen.documents: return const DocumentsScreen();
+      case ButcherScreen.documents: return const DocumentsScreen(isNested: true);
       case ButcherScreen.reports: return const ReportsScreen();
       case ButcherScreen.settings: return const SettingsScreen();
       case ButcherScreen.profile: return const ProfileView();
