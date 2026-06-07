@@ -12,6 +12,9 @@ import '../../widgets/responsive_layout.dart';
 import '../../widgets/app_sidebar.dart';
 import '../../services/menu_service.dart';
 import '../../services/user_provider.dart';
+import '../../models/user_model.dart';
+
+import '../../services/product_seeder.dart';
 
 import '../../widgets/role_pop_scope.dart';
 
@@ -24,16 +27,31 @@ class InventoryControlScreen extends ConsumerStatefulWidget {
 
 class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen> {
   String _searchQuery = '';
+  String _selectedCategory = 'All';
 
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
     if (user == null) return const Center(child: CircularProgressIndicator());
 
+    final activeRole = user.activePrimaryRole;
+    final isAdmin = activeRole == UserRole.admin || activeRole == UserRole.superAdmin;
+
     final theme = Theme.of(context);
     final productsAsync = ref.watch(productsFutureProvider);
     final isDesktop = ResponsiveLayout.isDesktop(context);
     const currentRoute = '/admin/stock';
+
+    // Safety: Reset selected category if it no longer exists after deletions
+    if (productsAsync.hasValue) {
+      final products = productsAsync.value!;
+      final availableCategories = ['All', ...products.where((p) => !p.isDeleted).map((p) => p.category).toSet()];
+      if (!availableCategories.contains(_selectedCategory)) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _selectedCategory = 'All');
+        });
+      }
+    }
 
     return RolePopScope(
       currentRoute: currentRoute,
@@ -64,102 +82,170 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                 onTap: (route) => MenuService.navigate(context, route, currentRoute),
               ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(AppSpacing.l),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeader(context, ref, productsAsync.value ?? []),
-                    const SizedBox(height: AppSpacing.l),
-                    _buildSearchBar(theme),
-                    const SizedBox(height: AppSpacing.l),
-                    productsAsync.when(
-                      data: (products) {
-                        final activeProducts = products
-                            .where((p) => !p.isDeleted)
-                            .where((p) => p.name.toLowerCase().contains(_searchQuery.toLowerCase()) || 
-                                           p.category.toLowerCase().contains(_searchQuery.toLowerCase()))
-                            .toList();
-                        
-                        if (activeProducts.isEmpty) {
-                          return Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(40.0),
-                              child: Text('No products match "$_searchQuery"', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
-                            ),
-                          );
-                        }
-                        return _buildProductGrid(context, activeProducts, ref);
-                      },
-                      loading: () => const Center(child: CircularProgressIndicator()),
-                      error: (err, _) => Center(child: Text('Error: $err')),
-                    ),
-                  ],
+              child: SafeArea(
+                top: false,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(AppSpacing.l),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(context, ref, productsAsync.value ?? [], isAdmin: isAdmin),
+                      const SizedBox(height: AppSpacing.l),
+                      _buildFilters(theme, productsAsync.value ?? []),
+                      const SizedBox(height: AppSpacing.l),
+                      productsAsync.when(
+                        data: (products) {
+                          final activeProducts = products
+                              .where((p) => !p.isDeleted)
+                              .where((p) => _selectedCategory == 'All' || p.category == _selectedCategory)
+                              .where((p) => p.name.toLowerCase().contains(_searchQuery.toLowerCase()) || 
+                                             p.category.toLowerCase().contains(_searchQuery.toLowerCase()))
+                              .toList();
+                          
+                          if (activeProducts.isEmpty) {
+                            return Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(40.0),
+                                child: Text('No products match criteria', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+                              ),
+                            );
+                          }
+                          return _buildProductGrid(context, activeProducts, ref, isAdmin: isAdmin);
+                        },
+                        loading: () => const Center(child: CircularProgressIndicator()),
+                        error: (err, _) => Center(child: Text('Error: $err')),
+                      ),
+                      // Add padding for bottom navigation bars
+                      const SizedBox(height: AppSpacing.xl),
+                    ],
+                  ),
                 ),
               ),
             ),
           ],
         ),
-        floatingActionButton: SafeArea(
+        floatingActionButton: isAdmin ? SafeArea(
           child: FloatingActionButton.extended(
             onPressed: () => _showAddProductDialog(context, ref),
             backgroundColor: theme.colorScheme.primary,
             icon: const Icon(Icons.add, color: Colors.white),
             label: const Text('Add New Product', style: TextStyle(color: Colors.white)),
           ),
-        ),
+        ) : null,
       ),
     );
   }
 
-  Widget _buildSearchBar(ThemeData theme) {
-    return Container(
-      constraints: const BoxConstraints(maxWidth: 600),
-      child: TextField(
-        onChanged: (v) => setState(() => _searchQuery = v),
-        decoration: InputDecoration(
-          hintText: 'Search stock by name or category...',
-          prefixIcon: const Icon(Icons.search),
-          suffixIcon: _searchQuery.isNotEmpty 
-            ? IconButton(icon: const Icon(Icons.clear), onPressed: () => setState(() => _searchQuery = ''))
-            : null,
-          filled: true,
-          fillColor: theme.cardTheme.color,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AppRadius.m),
-            borderSide: BorderSide(color: theme.dividerColor),
+  Widget _buildFilters(ThemeData theme, List<Product> products) {
+    final categories = ['All', ...products.map((p) => p.category).toSet()];
+    final isMobile = ResponsiveLayout.isMobile(context);
+
+    return Wrap(
+      spacing: AppSpacing.m,
+      runSpacing: AppSpacing.m,
+      crossAxisAlignment: WrapCrossAlignment.end,
+      children: [
+        SizedBox(
+          width: isMobile ? double.infinity : 400,
+          child: TextField(
+            onChanged: (v) => setState(() => _searchQuery = v),
+            decoration: InputDecoration(
+              hintText: 'Search by Name (e.g. Beef), Category (e.g. Pork), or both...',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _searchQuery.isNotEmpty 
+                ? IconButton(icon: const Icon(Icons.clear), onPressed: () => setState(() => _searchQuery = ''))
+                : null,
+              filled: true,
+              fillColor: theme.cardTheme.color,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AppRadius.m),
+                borderSide: BorderSide(color: theme.dividerColor),
+              ),
+            ),
           ),
         ),
-      ),
+        SizedBox(
+          width: isMobile ? double.infinity : 200,
+          child: DropdownButtonFormField<String>(
+            initialValue: _selectedCategory,
+            decoration: InputDecoration(
+              labelText: 'Sort Category',
+              filled: true,
+              fillColor: theme.cardTheme.color,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.m)),
+            ),
+            items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c, overflow: TextOverflow.ellipsis))).toList(),
+            onChanged: (v) => setState(() => _selectedCategory = v!),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildHeader(BuildContext context, WidgetRef ref, List<Product> products) {
+  Widget _buildHeader(BuildContext context, WidgetRef ref, List<Product> products, {required bool isAdmin}) {
     final theme = Theme.of(context);
     final isMobile = ResponsiveLayout.isMobile(context);
+
+    final actionButtons = [
+      if (isAdmin) ...[
+        OutlinedButton.icon(
+          onPressed: () => _showPromotionDialog(context, ref, products),
+          icon: const Icon(Icons.campaign_outlined, size: 18),
+          label: const Text('Promotions', style: TextStyle(fontSize: 12)),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: Colors.orange.shade800,
+            side: BorderSide(color: Colors.orange.shade800),
+          ),
+        ),
+        const SizedBox(width: 8),
+        OutlinedButton.icon(
+          onPressed: () async {
+            final confirm = await showDialog<bool>(
+              context: context,
+              builder: (context) => AlertDialog(
+                title: const Text('Initialize Catalog?'),
+                content: const Text('This will add all default products (Beef, Pork, Chicken, etc.) with 0.0 quantity if they don\'t exist. Continue?'),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('CANCEL')),
+                  ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('INITIALIZE')),
+                ],
+              ),
+            );
+            if (confirm == true) {
+              await ref.read(productSeederProvider).seedProducts();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Catalog initialized successfully!')));
+              }
+            }
+          },
+          icon: const Icon(Icons.refresh, size: 18),
+          label: const Text('Load Defaults', style: TextStyle(fontSize: 12)),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: theme.colorScheme.primary,
+            side: BorderSide(color: theme.colorScheme.primary),
+          ),
+        ),
+      ]
+    ];
 
     if (isMobile) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Master Stock List', 
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
-          Text('Manage products, pricing, and stock levels', 
-            style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12)),
-          const SizedBox(height: AppSpacing.m),
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: () => _showPromotionDialog(context, ref, products),
-              icon: const Icon(Icons.campaign_outlined, size: 18),
-              label: const Text('Manage Promotions', style: TextStyle(fontSize: 13)),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.orange.shade800,
-                side: BorderSide(color: Colors.orange.shade800),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-            ),
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
           ),
+          Text('Manage products, pricing, and stock levels', 
+            style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+          if (actionButtons.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.m),
+            Row(children: actionButtons.map((w) => w is SizedBox ? w : Expanded(child: w)).toList()),
+          ],
         ],
       );
     }
@@ -170,24 +256,25 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text('Master Stock List', 
-                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
               Text('Manage products, pricing, and stock levels', 
-                style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+                style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
             ],
           ),
         ),
-        const SizedBox(width: 16),
-        OutlinedButton.icon(
-          onPressed: () => _showPromotionDialog(context, ref, products),
-          icon: const Icon(Icons.campaign_outlined),
-          label: const Text('Manage Promotions'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: Colors.orange.shade800,
-            side: BorderSide(color: Colors.orange.shade800),
-          ),
-        ),
+        if (actionButtons.isNotEmpty) ...[
+          const SizedBox(width: 16),
+          ...actionButtons,
+        ],
       ],
     );
   }
@@ -429,6 +516,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
     final nameController = TextEditingController();
     final retailPriceController = TextEditingController();
     final wholesalePriceController = TextEditingController();
+    final costPriceController = TextEditingController();
     final stockController = TextEditingController();
     final otherCategoryController = TextEditingController();
     final customNameController = TextEditingController();
@@ -546,7 +634,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                     const SizedBox(height: AppSpacing.l),
 
                     DropdownButtonFormField<String>(
-                      value: selectedCategory,
+                      initialValue: selectedCategory,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Category'),
                       items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
@@ -573,7 +661,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                     const SizedBox(height: AppSpacing.m),
 
                     DropdownButtonFormField<String>(
-                      value: selectedProductName,
+                      initialValue: selectedProductName,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Product Name'),
                       items: (categoryProductMap[selectedCategory] ?? (products.where((p) => p.category == selectedCategory).map((p) => p.name).toSet().toList()..add('Other'))).map((name) {
@@ -636,6 +724,21 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                             },
                           ),
                         ),
+                        const SizedBox(width: AppSpacing.s),
+                        Expanded(
+                          child: _buildFormTextField(
+                            context: context,
+                            controller: costPriceController,
+                            label: 'Cost',
+                            prefix: '₵ ',
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            validator: (v) {
+                              if (v == null || v.isEmpty) return 'Required';
+                              if (double.tryParse(v) == null) return 'Invalid price';
+                              return null;
+                            },
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: AppSpacing.m),
@@ -659,7 +762,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                         const SizedBox(width: AppSpacing.s),
                         Expanded(
                           child: DropdownButtonFormField<WeightUnit>(
-                            value: selectedUnit,
+                            initialValue: selectedUnit,
                             isExpanded: true,
                             decoration: const InputDecoration(labelText: 'Unit'),
                             items: WeightUnit.values.map((u) => DropdownMenuItem(value: u, child: Text(u == WeightUnit.unit ? 'PCS' : u.name.toUpperCase()))).toList(),
@@ -706,6 +809,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                     name: nameController.text,
                     retailPrice: double.tryParse(retailPriceController.text) ?? 0.0,
                     wholesalePrice: double.tryParse(wholesalePriceController.text) ?? 0.0,
+                    costPrice: double.tryParse(costPriceController.text) ?? 0.0,
                     category: selectedCategory == 'Other' ? otherCategoryController.text : selectedCategory,
                     imageUrl: finalImageUrl,
                     stockQuantity: double.tryParse(stockController.text) ?? 0.0,
@@ -735,6 +839,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
     final nameController = TextEditingController(text: product.name);
     final retailPriceController = TextEditingController(text: product.retailPrice.toString());
     final wholesalePriceController = TextEditingController(text: product.wholesalePrice.toString());
+    final costPriceController = TextEditingController(text: product.costPrice.toString());
     final otherCategoryController = TextEditingController();
     final theme = Theme.of(context);
     String selectedCategory = product.category;
@@ -807,7 +912,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
-                      value: selectedCategory,
+                      initialValue: selectedCategory,
                       decoration: const InputDecoration(labelText: 'Category'),
                       items: categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
                       onChanged: (v) => setState(() => selectedCategory = v!),
@@ -854,6 +959,21 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                             },
                           ),
                         ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _buildFormTextField(
+                            context: context,
+                            controller: costPriceController, 
+                            label: 'Cost Price', 
+                            prefix: '₵ ',
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            validator: (v) {
+                              if (v == null || v.isEmpty) return 'Required';
+                              if (double.tryParse(v) == null) return 'Invalid price';
+                              return null;
+                            },
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -888,6 +1008,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                     name: nameController.text,
                     retailPrice: double.tryParse(retailPriceController.text),
                     wholesalePrice: double.tryParse(wholesalePriceController.text),
+                    costPrice: double.tryParse(costPriceController.text),
                     category: selectedCategory == 'Other' ? otherCategoryController.text : selectedCategory,
                     imageUrl: finalImageUrl,
                   );
@@ -939,7 +1060,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
     );
   }
 
-  Widget _buildProductGrid(BuildContext context, List<Product> products, WidgetRef ref) {
+  Widget _buildProductGrid(BuildContext context, List<Product> products, WidgetRef ref, {required bool isAdmin}) {
     return LayoutBuilder(builder: (context, constraints) {
       final isMobile = constraints.maxWidth < 600;
       final crossAxisCount = constraints.maxWidth > 1200 ? 4 : (constraints.maxWidth > 800 ? 3 : (constraints.maxWidth > 500 ? 2 : 1));
@@ -965,7 +1086,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.m)),
             child: isMobile 
               ? InkWell(
-                  onTap: () => _showUpdateStockDialog(context, ref, product),
+                  onTap: isAdmin ? () => _showUpdateStockDialog(context, ref, product) : null,
                   child: Padding(
                     padding: const EdgeInsets.all(AppSpacing.m),
                     child: Row(
@@ -983,7 +1104,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                                 ? const Icon(Icons.image)
                                 : product.imageUrl.startsWith('assets/')
                                     ? Image.asset(product.imageUrl, fit: BoxFit.cover)
-                                    : Image.network(product.imageUrl, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.image)),
+                                    : Image.network(product.imageUrl, fit: BoxFit.cover, errorBuilder: (_, _, _) => const Icon(Icons.image)),
                           ),
                         ),
                         const SizedBox(width: AppSpacing.m),
@@ -997,7 +1118,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                                   Expanded(
                                     child: Text(product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15), maxLines: 1, overflow: TextOverflow.ellipsis),
                                   ),
-                                  _buildItemMenu(context, ref, product),
+                                  if (isAdmin) _buildItemMenu(context, ref, product),
                                 ],
                               ),
                               Text(product.category, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
@@ -1117,7 +1238,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               Expanded(child: Text(product.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                              _buildItemMenu(context, ref, product),
+                              if (isAdmin) _buildItemMenu(context, ref, product),
                             ],
                           ),
                           Text(product.category, style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant, fontSize: 11)),
@@ -1173,18 +1294,19 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                             ],
                           ),
                           const SizedBox(height: 12),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton(
-                              onPressed: () => _showUpdateStockDialog(context, ref, product),
-                              style: OutlinedButton.styleFrom(
-                                side: BorderSide(color: Theme.of(context).colorScheme.primary),
-                                foregroundColor: Theme.of(context).colorScheme.primary,
-                                padding: const EdgeInsets.symmetric(vertical: 8),
+                          if (isAdmin)
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton(
+                                onPressed: () => _showUpdateStockDialog(context, ref, product),
+                                style: OutlinedButton.styleFrom(
+                                  side: BorderSide(color: Theme.of(context).colorScheme.primary),
+                                  foregroundColor: Theme.of(context).colorScheme.primary,
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                ),
+                                child: const Text('Update Stock', style: TextStyle(fontSize: 12)),
                               ),
-                              child: const Text('Update Stock', style: TextStyle(fontSize: 12)),
                             ),
-                          ),
                         ],
                       ),
                     ),
@@ -1319,6 +1441,7 @@ class _InventoryControlScreenState extends ConsumerState<InventoryControlScreen>
                     controller: stockController,
                     decoration: InputDecoration(
                       labelText: 'Add/Remove Quantity',
+                      hintText: 'e.g. 50.0 or -10.5',
                       helperText: 'Use negative value to reduce stock',
                       suffixText: product.unit,
                       border: const OutlineInputBorder(),

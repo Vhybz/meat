@@ -88,8 +88,11 @@ class _ButcherAnalyticsScreenState extends ConsumerState<ButcherAnalyticsScreen>
 
   Widget _buildSummaryKPIs(List<SlaughterLog> logs) {
     final totalAnimals = logs.length;
-    final totalWeight = logs.fold(0.0, (sum, l) => sum + l.weight);
-    final completedSlaughters = logs.where((l) => l.status == SlaughterStatus.completed).length;
+    final totalWeight = logs.fold(0.0, (sum, l) => sum + l.liveWeight);
+    final completedSlaughters = logs.where((l) => 
+      l.status == SlaughterStatus.completed || 
+      l.status == SlaughterStatus.processed
+    ).length;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -246,18 +249,25 @@ class _ButcherAnalyticsScreenState extends ConsumerState<ButcherAnalyticsScreen>
                 child: DataTable(
                   columns: const [
                     DataColumn(label: Text('Batch ID')),
-                    DataColumn(label: Text('Animal ID')),
+                    DataColumn(label: Text('Farm Tag')),
                     DataColumn(label: Text('Type')),
-                    DataColumn(label: Text('Intake Wt')),
+                    DataColumn(label: Text('Purchase Cost')),
+                    DataColumn(label: Text('Selling Price')),
+                    DataColumn(label: Text('Est. Profit')),
                     DataColumn(label: Text('Time')),
                     DataColumn(label: Text('Status')),
                   ],
                   rows: logs.map((log) {
+                    final profit = log.estimatedProfit;
                     return DataRow(cells: [
                       DataCell(Text(log.id.substring(log.id.length - 8).toUpperCase(), style: const TextStyle(fontSize: 11, fontFamily: 'monospace'))),
-                      DataCell(Text(log.animalId.substring(log.animalId.length - 8).toUpperCase(), style: const TextStyle(fontSize: 11))),
+                      DataCell(Text(log.manualFarmTag ?? 'N/A', style: const TextStyle(fontSize: 11, color: Colors.blue))),
                       DataCell(Text(log.type.displayName, style: const TextStyle(fontSize: 11))),
-                      DataCell(Text('${log.weight}kg', style: const TextStyle(fontSize: 11))),
+                      DataCell(Text(log.farmPrice != null ? '₵${log.farmPrice!.toStringAsFixed(2)}' : '₵0.00', 
+                        style: const TextStyle(fontSize: 11))),
+                      DataCell(Text('₵${log.price.toStringAsFixed(2)}', style: const TextStyle(fontSize: 11))),
+                      DataCell(Text('₵${profit.toStringAsFixed(2)}', 
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: profit >= 0 ? Colors.green : Colors.red))),
                       DataCell(Text(
                         log.slaughterTime != null 
                           ? DateFormat('MMM dd, HH:mm').format(log.slaughterTime!) 
@@ -266,7 +276,7 @@ class _ButcherAnalyticsScreenState extends ConsumerState<ButcherAnalyticsScreen>
                       )),
                       DataCell(StatusChip(
                         label: log.status.name.toUpperCase(), 
-                        color: log.status == SlaughterStatus.completed ? Colors.green : Colors.orange,
+                        color: (log.status == SlaughterStatus.completed || log.status == SlaughterStatus.processed) ? Colors.green : Colors.orange,
                       )),
                     ]);
                   }).toList(),

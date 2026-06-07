@@ -6,7 +6,7 @@ import '../models/user_model.dart';
 
 class SmsService {
   static String get _apiKey => dotenv.env['ARKESEL_API_KEY'] ?? 'ZGhHekhSWnpHbmF1VWlGR0ZqemI';
-  static String get _senderId => dotenv.env['ARKESEL_SENDER_ID'] ?? 'MiCorazon';
+  static String get _senderId => dotenv.env['ARKESEL_SENDER_ID'] ?? 'Mi~Corazon';
   static String get _adminPhone => dotenv.env['ADMIN_PHONE'] ?? '0209276200';
 
   static Future<bool> _sendSms(String to, String message) async {
@@ -103,10 +103,10 @@ class SmsService {
         ? 'Your account has been approved. You can now log in.' 
         : 'Your application is pending administrator approval. You will be notified once approved.';
 
-    String message = 'Hello ${user.firstName}, thank you for registering with Mi Corazon Freshmeat Butchery. $statusMessage';
+    String message = 'Hello ${user.firstName}, thank you for registering with Mi~Corazon Freshmeat Butchery. $statusMessage';
     
     if (user.role == UserRole.admin && user.branchCode != null) {
-      message += ' Your Branch Code is: ${user.branchCode}. Please share this with your staff.';
+      message += ' Your Shop Registration Code is: ${user.branchCode}. Please share this with your staff to link them to your branch.';
     }
     
     await _sendSms(user.phone!, message);
@@ -116,7 +116,7 @@ class SmsService {
     if (user.phone == null || user.phone!.isEmpty) return;
 
     final String roleName = user.role.name.toUpperCase();
-    final String message = 'Welcome to the team, ${user.firstName}! Your account has been linked to your staff profile as a $roleName at Mi Corazon. You can now log in and start working. We are glad to have you!';
+    final String message = 'Welcome to the team, ${user.firstName}! Your account has been linked to your staff profile as a $roleName at Mi~Corazon. You can now log in and start working. We are glad to have you!';
 
     await _sendSms(user.phone!, message);
   }
@@ -124,7 +124,7 @@ class SmsService {
   static Future<void> sendApprovalSms(UserAccount user) async {
     if (user.phone == null || user.phone!.isEmpty) return;
 
-    final String message = 'Congratulations ${user.firstName}! Your Mi Corazon account has been approved by the administrator. You can now log in instantly and start using the system.';
+    final String message = 'Congratulations ${user.firstName}! Your Mi~Corazon account has been approved by the administrator. You can now log in instantly and start using the system.';
 
     await _sendSms(user.phone!, message);
   }
@@ -133,7 +133,7 @@ class SmsService {
     if (phone.isEmpty) return;
 
     final String branchText = branchName != null ? '($branchName Branch)' : '';
-    final String message = 'Hello $name, thank you for being part of our favorite customers at Mi Corazon Freshmeat Butchery $branchText. We value your patronage!';
+    final String message = 'Hello $name, thank you for being part of our favorite customers at Mi~Corazon Freshmeat Butchery $branchText. We value your patronage!';
 
     await _sendSms(phone, message);
   }
@@ -141,13 +141,33 @@ class SmsService {
   static Future<void> sendDebtReminderSms(SaleRecord sale) async {
     if (sale.customerPhone == null || sale.customerPhone!.isEmpty) return;
 
-    final String message = 'DEBT REMINDER: Hello ${sale.customerName}, this is a reminder regarding your outstanding balance of GHC${sale.balance.toStringAsFixed(2)} for invoice ${sale.id} at Mi Corazon Butchery. Please settle as soon as possible. Thank you.';
+    final String message = 'DEBT REMINDER: Hello ${sale.customerName}, this is a reminder regarding your outstanding balance of GHC${sale.balance.toStringAsFixed(2)} for invoice ${sale.id} at Mi~Corazon Butchery. Please settle as soon as possible. Thank you.';
 
     await _sendSms(sale.customerPhone!, message);
+  }
+
+  static Future<void> sendDispatchSms({
+    required String name,
+    required String phone,
+    required String item,
+    required double weight,
+    String? location,
+  }) async {
+    if (phone.isEmpty) return;
+
+    final String locText = location != null && location.isNotEmpty ? ' to be delivered to $location' : '';
+    final String message = 'Hello $name, your order for ${weight.toStringAsFixed(1)}kg of $item has been processed and is ready for dispatch from Mi~Corazon Butchery$locText. Thank you for your order!';
+
+    await _sendSms(phone, message);
   }
 
   static Future<void> notifyAdmin({required String title, required String message}) async {
     final fullMessage = '$title: $message';
     await _sendSms(_adminPhone, fullMessage);
+  }
+
+  static Future<bool> sendCustomSms(String phone, String message) async {
+    if (phone.isEmpty) return false;
+    return await _sendSms(phone, message);
   }
 }

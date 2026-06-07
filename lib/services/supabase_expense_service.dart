@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/expense_model.dart';
 import '../core/supabase_config.dart';
 
@@ -20,5 +22,19 @@ class SupabaseExpenseService {
 
   Future<void> deleteExpense(String id) async {
     await _client.from('expenses').delete().eq('id', id);
+  }
+
+  Future<String?> uploadReceipt(Uint8List bytes, String fileName) async {
+    try {
+      final storage = _client.storage.from('receipts');
+      await storage.uploadBinary(
+        fileName, 
+        bytes,
+        fileOptions: const FileOptions(cacheControl: '3600', upsert: true),
+      );
+      return storage.getPublicUrl(fileName);
+    } catch (e) {
+      return null;
+    }
   }
 }

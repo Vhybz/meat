@@ -64,21 +64,16 @@ class _TaxComplianceScreenState extends ConsumerState<TaxComplianceScreen> {
 
     final totalSales = monthlySales.fold(0.0, (sum, s) => sum + s.totalAmount);
     final totalExpenses = monthlyExpenses.fold(0.0, (sum, e) => sum + e.amount);
-    final grossProfit = totalSales - totalExpenses;
+    final monthlyProfit = totalSales - totalExpenses;
 
-    // GRA Tax Breakdown Calculation
-    // Total Amount = Base + 2.5% NHIL + 2.5% GETFund + 1.0% COVID + (15% VAT on (Base+NHIL+GET+COVID))
-    // We reverse engineer this from the total sales to show how much tax IS INCLUDED or EXPECTED.
-    // For meat shops, often they calculate tax on TOP of gross profit or per receipt.
+    // GRA Tax Module Calculations (Updated as per request)
+    // 1. VAT: 20% of total monthly sales
+    final double vat = totalSales * 0.20;
     
-    // We'll calculate it based on the Standard Rate formula for the whole month
-    final double taxExclusiveBase = totalSales / 1.219;
-    final double nhil = taxExclusiveBase * 0.025;
-    final double getFund = taxExclusiveBase * 0.025;
-    final double covid = taxExclusiveBase * 0.01;
-    final double taxableValueForVat = taxExclusiveBase + nhil + getFund + covid;
-    final double vat = taxableValueForVat * 0.15;
-    final double totalTax = nhil + getFund + covid + vat;
+    // 2. Income Tax: 20% of monthly profit
+    final double incomeTax = (monthlyProfit > 0) ? (monthlyProfit * 0.20) : 0.0;
+    
+    final double totalTaxPayable = vat + incomeTax;
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -105,27 +100,30 @@ class _TaxComplianceScreenState extends ConsumerState<TaxComplianceScreen> {
               onTap: (route) => MenuService.navigate(context, route, currentRoute),
             ),
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSpacing.l),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(theme),
-                  const SizedBox(height: AppSpacing.xl),
-                  _buildProfitSummary(theme, totalSales, totalExpenses, grossProfit),
-                  const SizedBox(height: AppSpacing.xl),
-                  _buildTaxBreakdown(theme, nhil, getFund, covid, vat, totalTax),
-                  const SizedBox(height: AppSpacing.xl),
-                  _buildNetProfitCard(theme, grossProfit, totalTax),
-                  const SizedBox(height: AppSpacing.xl),
-                  _buildActions(theme, totalSales, totalExpenses, grossProfit, {
-                    'NHIL': nhil,
-                    'GETFund': getFund,
-                    'COVID': covid,
-                    'VAT': vat,
-                    'TOTAL': totalTax,
-                  }),
-                ],
+            child: SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(AppSpacing.l),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildHeader(theme),
+                    const SizedBox(height: AppSpacing.xl),
+                    _buildProfitSummary(theme, totalSales, totalExpenses, monthlyProfit),
+                    const SizedBox(height: AppSpacing.xl),
+                    _buildTaxBreakdown(theme, vat, incomeTax, totalTaxPayable),
+                    const SizedBox(height: AppSpacing.xl),
+                    _buildNetProfitCard(theme, monthlyProfit, incomeTax),
+                    const SizedBox(height: AppSpacing.xl),
+                    _buildActions(theme, totalSales, totalExpenses, monthlyProfit, {
+                      'VAT (20% Sales)': vat,
+                      'Income Tax (20% Profit)': incomeTax,
+                      'TOTAL': totalTaxPayable,
+                    }),
+                    // Bottom padding for navigation bars
+                    const SizedBox(height: AppSpacing.xl),
+                  ],
+                ),
               ),
             ),
           ),
@@ -153,7 +151,7 @@ class _TaxComplianceScreenState extends ConsumerState<TaxComplianceScreen> {
                     style: TextStyle(fontSize: isMobile ? 20 : 24, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
                     overflow: TextOverflow.ellipsis,
                   ),
-                  Text('Automated analysis for quarterly tax filing', 
+                  Text('Automated analysis for ${_isQuarterly ? "quarterly" : "monthly"} tax filing', 
                     style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -164,16 +162,27 @@ class _TaxComplianceScreenState extends ConsumerState<TaxComplianceScreen> {
           ],
         ),
         const SizedBox(height: AppSpacing.m),
-        Row(
-          children: [
-            if (isMobile) _buildFrequencyToggle(theme),
-            if (isMobile) const Spacer(),
-            OutlinedButton.icon(
-              onPressed: () => _selectMonth(context),
-              icon: const Icon(Icons.calendar_month, size: 18),
-              label: Text(_isQuarterly ? quarterLabel : monthLabel, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-            ),
-          ],
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const NeverScrollableScrollPhysics(),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isMobile) ...[
+                _buildFrequencyToggle(theme),
+                const SizedBox(width: 8),
+              ],
+              OutlinedButton.icon(
+                onPressed: () => _selectMonth(context),
+                icon: const Icon(Icons.calendar_month, size: 18),
+                label: Text(_isQuarterly ? quarterLabel : monthLabel, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.s)),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -185,7 +194,7 @@ class _TaxComplianceScreenState extends ConsumerState<TaxComplianceScreen> {
         color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(AppRadius.s),
       ),
-      padding: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(2),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -200,7 +209,7 @@ class _TaxComplianceScreenState extends ConsumerState<TaxComplianceScreen> {
     return InkWell(
       onTap: () => setState(() => _isQuarterly = label == 'Quarterly'),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
           color: active ? theme.colorScheme.primary : Colors.transparent,
           borderRadius: BorderRadius.circular(AppRadius.s - 2),
@@ -227,9 +236,9 @@ class _TaxComplianceScreenState extends ConsumerState<TaxComplianceScreen> {
         if (isMobile)
           Column(
             children: [
-              _statBox('Monthly Sales', '₵${sales.toStringAsFixed(2)}', Colors.blue, theme),
+              _statBox('Sales (${_isQuarterly ? "Q" : "Month"})', '₵${sales.toStringAsFixed(2)}', Colors.blue, theme),
               const SizedBox(height: AppSpacing.s),
-              _statBox('Monthly Expenses', '₵${expenses.toStringAsFixed(2)}', Colors.red, theme),
+              _statBox('Expenses', '₵${expenses.toStringAsFixed(2)}', Colors.red, theme),
               const SizedBox(height: AppSpacing.s),
               _statBox('Gross Profit', '₵${profit.toStringAsFixed(2)}', Colors.green, theme),
             ],
@@ -237,11 +246,11 @@ class _TaxComplianceScreenState extends ConsumerState<TaxComplianceScreen> {
         else
           Row(
             children: [
-              _statBox('Monthly Sales', '₵${sales.toStringAsFixed(2)}', Colors.blue, theme),
+              Expanded(child: _statBox('Sales (${_isQuarterly ? "Q" : "Month"})', '₵${sales.toStringAsFixed(2)}', Colors.blue, theme)),
               const SizedBox(width: AppSpacing.m),
-              _statBox('Monthly Expenses', '₵${expenses.toStringAsFixed(2)}', Colors.red, theme),
+              Expanded(child: _statBox('Expenses', '₵${expenses.toStringAsFixed(2)}', Colors.red, theme)),
               const SizedBox(width: AppSpacing.m),
-              _statBox('Gross Profit', '₵${profit.toStringAsFixed(2)}', Colors.green, theme),
+              Expanded(child: _statBox('Gross Profit', '₵${profit.toStringAsFixed(2)}', Colors.green, theme)),
             ],
           ),
       ],
@@ -249,49 +258,46 @@ class _TaxComplianceScreenState extends ConsumerState<TaxComplianceScreen> {
   }
 
   Widget _statBox(String label, String value, Color color, ThemeData theme) {
-    return Expanded(
-      flex: ResponsiveLayout.isMobile(context) ? 0 : 1,
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(AppSpacing.l),
-        decoration: BoxDecoration(
-          color: theme.cardTheme.color,
-          borderRadius: BorderRadius.circular(AppRadius.m),
-          border: Border.all(color: color.withValues(alpha: 0.1)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 4),
-            FittedBox(
-              fit: BoxFit.scaleDown, 
-              child: Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color))
-            ),
-          ],
-        ),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.l),
+      decoration: BoxDecoration(
+        color: theme.cardTheme.color,
+        borderRadius: BorderRadius.circular(AppRadius.m),
+        border: Border.all(color: color.withValues(alpha: 0.1)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown, 
+            child: Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color))
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildTaxBreakdown(ThemeData theme, double nhil, double getFund, double covid, double vat, double total) {
+  Widget _buildTaxBreakdown(ThemeData theme, double vat, double incomeTax, double total) {
     final isMobile = ResponsiveLayout.isMobile(context);
     return Container(
       padding: EdgeInsets.all(isMobile ? AppSpacing.l : AppSpacing.xl),
       decoration: BoxDecoration(
-        color: AppColors.primaryMaroon.withValues(alpha: 0.05),
+        color: theme.colorScheme.primary.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(AppRadius.l),
-        border: Border.all(color: AppColors.primaryMaroon.withValues(alpha: 0.1)),
+        border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.1)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.account_balance_rounded, color: AppColors.primaryMaroon, size: 20),
+              Icon(Icons.account_balance_rounded, color: theme.colorScheme.primary, size: 20),
               const SizedBox(width: 12),
               Expanded(
-                child: Text('GRA STANDARD RATE CALCULATION', 
+                child: Text('GRA TAX MODULE', 
                   style: TextStyle(
                     color: theme.colorScheme.primary, 
                     fontWeight: FontWeight.bold, 
@@ -304,11 +310,9 @@ class _TaxComplianceScreenState extends ConsumerState<TaxComplianceScreen> {
             ],
           ),
           const Divider(height: 32),
-          _taxRow('National Health Insurance Levy (NHIL)', '2.5%', nhil, theme),
-          _taxRow('Ghana Education Trust Fund (GETFund)', '2.5%', getFund, theme),
-          _taxRow('COVID-19 Health Recovery Levy', '1.0%', covid, theme),
+          _taxRow('VAT (20% of Monthly Sales)', '20%', vat, theme),
           const SizedBox(height: 8),
-          _taxRow('VAT (Standard Rate)', '15.0%', vat, theme),
+          _taxRow('Income Tax (20% of Monthly Profit)', '20%', incomeTax, theme),
           const Divider(height: 32),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -323,7 +327,7 @@ class _TaxComplianceScreenState extends ConsumerState<TaxComplianceScreen> {
               FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Text('₵${total.toStringAsFixed(2)}', 
-                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: AppColors.primaryMaroon)),
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: theme.colorScheme.primary)),
               ),
             ],
           ),

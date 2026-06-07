@@ -14,11 +14,25 @@ import '../../services/user_provider.dart';
 import '../../models/customer_metrics.dart';
 import '../../services/customer_metrics_provider.dart';
 
-class CustomerManagementScreen extends ConsumerWidget {
+class CustomerManagementScreen extends ConsumerStatefulWidget {
   const CustomerManagementScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CustomerManagementScreen> createState() => _CustomerManagementScreenState();
+}
+
+class _CustomerManagementScreenState extends ConsumerState<CustomerManagementScreen> {
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
     if (user == null) return const Center(child: CircularProgressIndicator());
 
@@ -27,6 +41,14 @@ class CustomerManagementScreen extends ConsumerWidget {
     final metrics = ref.watch(customerMetricsProvider);
     final isDesktop = ResponsiveLayout.isDesktop(context);
     const currentRoute = '/admin/customers';
+
+    // Filter and sort customers
+    final filteredCustomers = customers.where((c) {
+      final query = _searchQuery.toLowerCase();
+      return c.name.toLowerCase().contains(query) || 
+             c.phone.contains(query) || 
+             (c.location?.toLowerCase().contains(query) ?? false);
+    }).toList()..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
     return RolePopScope(
       currentRoute: currentRoute,
@@ -61,15 +83,47 @@ class CustomerManagementScreen extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     _buildHeader(context, ref),
+                    const SizedBox(height: AppSpacing.m),
+                    _buildSearchBar(context),
                     const SizedBox(height: AppSpacing.xl),
                     _buildMetricsSummary(context, metrics),
                     const SizedBox(height: AppSpacing.xl),
-                    _buildCustomerGrid(context, ref, customers),
+                    _buildCustomerGrid(context, ref, filteredCustomers),
                   ],
                 ),
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSearchBar(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 600),
+      child: TextField(
+        controller: _searchController,
+        onChanged: (value) => setState(() => _searchQuery = value),
+        decoration: InputDecoration(
+          hintText: 'Search by Name (e.g. John), Phone (e.g. 020) or Location...',
+          prefixIcon: const Icon(Icons.search),
+          suffixIcon: _searchQuery.isNotEmpty 
+            ? IconButton(
+                icon: const Icon(Icons.clear), 
+                onPressed: () {
+                  _searchController.clear();
+                  setState(() => _searchQuery = '');
+                }
+              ) 
+            : null,
+          filled: true,
+          fillColor: theme.cardTheme.color,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppRadius.m),
+            borderSide: BorderSide.none,
+          ),
         ),
       ),
     );
@@ -146,7 +200,7 @@ class CustomerManagementScreen extends ConsumerWidget {
     final metrics = ref.watch(customerMetricsProvider);
     
     if (customers.isEmpty) {
-      return Center(child: Padding(padding: const EdgeInsets.all(40), child: Text('No customers in directory yet.', style: TextStyle(color: theme.colorScheme.onSurfaceVariant))));
+      return Center(child: Padding(padding: const EdgeInsets.all(40), child: Text(_searchQuery.isEmpty ? 'No customers in directory yet.' : 'No customers match your search.', style: TextStyle(color: theme.colorScheme.onSurfaceVariant))));
     }
 
     return LayoutBuilder(builder: (context, constraints) {
@@ -361,11 +415,12 @@ class CustomerManagementScreen extends ConsumerWidget {
             ElevatedButton(
               onPressed: () async {
                 if (formKey.currentState!.validate()) {
-                  // Temporary ID, service will replace it with a real UUID
-                  const String validUuid = '00000000-0000-0000-0000-000000000000';
+                  final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
+                  final String suffix = timestamp.substring(timestamp.length - 12);
+                  final String uniqueUuid = 'cccccccc-cccc-cccc-cccc-$suffix';
 
                   final newCustomer = Customer(
-                    id: validUuid,
+                    id: uniqueUuid,
                     name: nameController.text.trim(),
                     phone: phoneController.text.trim(),
                     location: locationController.text.trim().isEmpty ? null : locationController.text.trim(),

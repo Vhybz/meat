@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
@@ -11,6 +12,7 @@ import '../widgets/app_sidebar.dart';
 import '../services/menu_service.dart';
 import '../services/auth_provider.dart';
 import '../widgets/role_pop_scope.dart';
+import '../services/branch_provider.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
@@ -75,6 +77,8 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
   String? _selectedGender;
   DateTime? _selectedDob;
   bool _isEditing = false;
+  bool _isUploading = false;
+  Uint8List? _localImageBytes;
 
   @override
   void initState() {
@@ -93,6 +97,8 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
     if (user == null) return const Center(child: Text('No user logged in.'));
 
     final theme = Theme.of(context);
+    final currentBranch = ref.watch(currentBranchProvider);
+    final branchDisplay = currentBranch != null ? '${currentBranch.name} (${currentBranch.location})' : (user.branchCode ?? 'Global Admin');
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.l),
@@ -104,7 +110,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
             children: [
               _buildModernHeader(theme, user),
               const SizedBox(height: AppSpacing.xl),
-              _buildProfileContent(theme, user),
+              _buildProfileContent(theme, user, branchDisplay),
             ],
           ),
         ),
@@ -156,7 +162,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
   Widget _buildAvatarWithPicker(UserAccount user) {
     final theme = Theme.of(context);
     return InkWell(
-      onTap: _updatePhoto,
+      onTap: _isUploading ? null : _updatePhoto,
       borderRadius: BorderRadius.circular(60),
       child: Stack(
         children: [
@@ -166,40 +172,45 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
             decoration: BoxDecoration(
               color: theme.colorScheme.surfaceContainerHighest,
               shape: BoxShape.circle,
-              border: Border.all(color: theme.colorScheme.primary, width: 3),
+              border: Border.all(color: _isUploading ? Colors.orange : theme.colorScheme.primary, width: 3),
               boxShadow: [
                 BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 4)),
               ],
             ),
             child: ClipOval(
-              child: user.photoUrl != null
-                  ? Image.network(
-                      user.photoUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Icon(Icons.person_rounded, size: 60, color: theme.colorScheme.primary),
-                    )
-                  : Icon(Icons.person_rounded, size: 60, color: theme.colorScheme.primary),
+              child: _localImageBytes != null
+                ? Image.memory(_localImageBytes!, fit: BoxFit.cover)
+                : (_isUploading 
+                  ? const Center(child: CircularProgressIndicator())
+                  : (user.photoUrl != null
+                    ? Image.network(
+                        user.photoUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, _, _) => Icon(Icons.person_rounded, size: 60, color: theme.colorScheme.primary),
+                      )
+                    : Icon(Icons.person_rounded, size: 60, color: theme.colorScheme.primary))),
             ),
           ),
-          Positioned(
-            bottom: 4,
-            right: 4,
-            child: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: theme.colorScheme.primary,
-                shape: BoxShape.circle,
-                border: Border.all(color: theme.cardTheme.color!, width: 2),
+          if (!_isUploading)
+            Positioned(
+              bottom: 4,
+              right: 4,
+              child: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.primary,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: theme.cardTheme.color ?? Colors.transparent, width: 2),
+                ),
+                child: const Icon(Icons.camera_alt_rounded, size: 16, color: Colors.white),
               ),
-              child: const Icon(Icons.camera_alt_rounded, size: 16, color: Colors.white),
             ),
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildProfileContent(ThemeData theme, UserAccount user) {
+  Widget _buildProfileContent(ThemeData theme, UserAccount user, String branchDisplay) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppSpacing.xl),
@@ -215,10 +226,18 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
-                child: Text(
-                  'Account Information', 
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.colorScheme.primary),
-                  overflow: TextOverflow.ellipsis,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Account Information', 
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.colorScheme.primary),
+                    ),
+                    Text(
+                      'System & Security Profile',
+                      style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(width: 8),
@@ -238,17 +257,19 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
             _modernInfoRow(Icons.wc_rounded, 'Gender', user.gender ?? 'Not provided'),
             _modernInfoRow(Icons.cake_rounded, 'Date of Birth', user.dob != null ? DateFormat('MMMM d, yyyy').format(user.dob!) : 'Not provided'),
             _modernInfoRow(Icons.calendar_today_rounded, 'Joined System', DateFormat('MMMM d, yyyy').format(user.createdAt)),
-            _modernInfoRow(Icons.location_city_rounded, 'Current Branch', user.branchCode ?? 'Global Admin'),
+            _modernInfoRow(Icons.location_city_rounded, 'Current Branch', branchDisplay),
             const SizedBox(height: 32),
             SizedBox(
               width: double.infinity,
               height: 50,
               child: OutlinedButton.icon(
-                onPressed: () async {
-                  await GlobalLogout.perform(ref);
-                  if (context.mounted) {
-                    Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-                  }
+                onPressed: () {
+                  final messenger = ScaffoldMessenger.of(context);
+                  final navigator = Navigator.of(context);
+                  GlobalLogout.perform(ref).then((_) {
+                    navigator.pushNamedAndRemoveUntil('/login', (route) => false);
+                    messenger.showSnackBar(const SnackBar(content: Text('Signed out successfully.')));
+                  });
                 },
                 icon: const Icon(Icons.logout_rounded, color: Colors.red),
                 label: const Text('Sign Out Securely', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
@@ -266,7 +287,7 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
             _buildEditField(_phoneController, 'Phone Number', Icons.phone_android_rounded),
             const SizedBox(height: 16),
             DropdownButtonFormField<String>(
-              value: _selectedGender,
+              initialValue: _selectedGender,
               decoration: const InputDecoration(labelText: 'Gender', border: OutlineInputBorder(), prefixIcon: Icon(Icons.wc_rounded)),
               items: ['Male', 'Female', 'Other'].map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
               onChanged: (v) => setState(() => _selectedGender = v),
@@ -367,26 +388,58 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
     final user = ref.read(currentUserProvider);
     if (user == null) return;
 
+    final messenger = ScaffoldMessenger.of(context);
     final picker = ImagePicker();
-    final XFile? image = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 512,
-      maxHeight: 512,
-      imageQuality: 75,
-    );
+    try {
+      final XFile? image = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 80,
+      );
 
-    if (image != null) {
-      final bytes = await image.readAsBytes();
-      await ref.read(userProvider.notifier).updatePhoto(user.id, bytes);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile picture updated successfully.')));
+      if (image != null) {
+        final bytes = await image.readAsBytes();
+        if (!mounted) return;
+        setState(() {
+          _localImageBytes = bytes;
+          _isUploading = true;
+        });
+
+        final url = await ref.read(userProvider.notifier).updatePhoto(user.id, bytes);
+        
+        if (!mounted) return;
+        setState(() => _isUploading = false);
+        
+        if (url != null) {
+          // Upload success, we can clear local bytes and use the URL
+          setState(() => _localImageBytes = null);
+          messenger.showSnackBar(
+            const SnackBar(content: Text('Profile picture updated successfully!'), backgroundColor: Colors.green),
+          );
+        } else {
+          // Upload failed (offline), but we keep showing the local image for "seamlessness"
+          messenger.showSnackBar(
+            const SnackBar(
+              content: Text('Working offline. Image will sync when connection returns.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
       }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isUploading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+      );
     }
   }
 
   void _saveProfile() {
     final user = ref.read(currentUserProvider);
     if (user != null) {
+      final messenger = ScaffoldMessenger.of(context);
       ref.read(userProvider.notifier).updateProfile(
         user.id,
         firstName: _firstNameController.text.trim(),
@@ -394,10 +447,11 @@ class _ProfileViewState extends ConsumerState<ProfileView> {
         phone: _phoneController.text.trim(),
         gender: _selectedGender,
         dob: _selectedDob,
-      );
-      
-      setState(() => _isEditing = false);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: Colors.green));
+      ).then((_) {
+        if (!mounted) return;
+        setState(() => _isEditing = false);
+        messenger.showSnackBar(const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: Colors.green));
+      });
     }
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'transfer_provider.dart';
 import 'customer_provider.dart';
@@ -22,24 +23,44 @@ class SyncNotifier extends StateNotifier<DateTime> {
   }
 
   Future<void> _syncAll() async {
-    // Only sync if user is logged in
-    final user = ref.read(currentUserProvider);
-    if (user == null) return;
+    // If the notifier is already being disposed, don't attempt another sync
+    if (!mounted) return;
 
-    // Refresh non-stream providers (Silent reloads to prevent UI flickering)
-    ref.read(transferProvider.notifier).loadTransfers();
-    ref.read(customerProvider.notifier).loadCustomers();
-    ref.read(expenseProvider.notifier).loadExpenses();
-    ref.read(userProvider.notifier).loadUsers(silent: true);
-    
-    // Refresh butcher-specific data (Silent reloads to prevent UI flickering)
-    ref.read(slaughterLogsProvider.notifier).loadLogs(silent: true);
-    ref.read(meatBatchesProvider.notifier).loadBatches(silent: true);
-    ref.read(recentCutsProvider.notifier).loadCuts(silent: true);
-    ref.read(butcherWasteProvider.notifier).loadWaste(silent: true);
-    ref.read(butcherOrdersProvider.notifier).loadOrders(silent: true);
+    try {
+      // Only sync if user is logged in
+      final user = ref.read(currentUserProvider);
+      if (user == null) return;
 
-    state = DateTime.now(); // Update timestamp to show last sync
+      // Check if providers are still alive before calling them
+      // This prevents the 'Tried to use X after dispose' error
+      _safeRefresh(transferProvider.notifier, (n) => n.loadTransfers());
+      _safeRefresh(customerProvider.notifier, (n) => n.loadCustomers());
+      _safeRefresh(expenseProvider.notifier, (n) => n.loadExpenses());
+      _safeRefresh(userProvider.notifier, (n) => n.loadUsers(silent: true));
+      
+      _safeRefresh(slaughterLogsProvider.notifier, (n) => n.loadLogs(silent: true));
+      _safeRefresh(meatBatchesProvider.notifier, (n) => n.loadBatches(silent: true));
+      _safeRefresh(recentCutsProvider.notifier, (n) => n.loadCuts(silent: true));
+      _safeRefresh(butcherWasteProvider.notifier, (n) => n.loadWaste(silent: true));
+      _safeRefresh(butcherOrdersProvider.notifier, (n) => n.loadOrders(silent: true));
+
+      if (mounted) {
+        state = DateTime.now(); // Update timestamp to show last sync
+      }
+    } catch (e) {
+      if (!e.toString().contains('disposed')) {
+        debugPrint('Sync Heartbeat Warning: $e');
+      }
+    }
+  }
+
+  void _safeRefresh<T>(ProviderListenable<T> provider, Function(T) action) {
+    try {
+      final notifier = ref.read(provider);
+      action(notifier);
+    } catch (e) {
+      // Silently ignore if provider is disposed or not found
+    }
   }
 
   @override

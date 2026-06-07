@@ -203,7 +203,7 @@ class _RecentsScreenState extends ConsumerState<RecentsScreen> {
           title: Row(
             children: [
               Expanded(child: Text('Butcher Log: ${item.type.displayName}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis)),
-              Text('${item.weight}kg', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+              Text('${item.liveWeight}kg', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             ],
           ),
           subtitle: Text(
@@ -228,9 +228,15 @@ class _RecentsScreenState extends ConsumerState<RecentsScreen> {
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
       combined = combined.where((item) {
-        if (item is SaleRecord) return item.id.toLowerCase().contains(q) || item.cashierName.toLowerCase().contains(q);
-        if (item is ExpenseRecord) return item.title.toLowerCase().contains(q) || item.category.toLowerCase().contains(q);
-        if (item is SlaughterLog) return item.animalId.toLowerCase().contains(q) || item.type.displayName.toLowerCase().contains(q);
+        if (item is SaleRecord) {
+          return item.id.toLowerCase().contains(q) || item.cashierName.toLowerCase().contains(q);
+        }
+        if (item is ExpenseRecord) {
+          return item.title.toLowerCase().contains(q) || item.category.toLowerCase().contains(q);
+        }
+        if (item is SlaughterLog) {
+          return item.animalId.toLowerCase().contains(q) || item.type.displayName.toLowerCase().contains(q);
+        }
         return false;
       }).toList();
     }
@@ -239,10 +245,15 @@ class _RecentsScreenState extends ConsumerState<RecentsScreen> {
     if (_selectedDateRange != null) {
       combined = combined.where((item) {
         DateTime date;
-        if (item is SaleRecord) date = item.timestamp;
-        else if (item is ExpenseRecord) date = item.date;
-        else if (item is SlaughterLog) date = item.slaughterTime ?? DateTime.now();
-        else return false;
+        if (item is SaleRecord) {
+          date = item.timestamp;
+        } else if (item is ExpenseRecord) {
+          date = item.date;
+        } else if (item is SlaughterLog) {
+          date = item.slaughterTime ?? DateTime.now();
+        } else {
+          return false;
+        }
 
         return date.isAfter(_selectedDateRange!.start) && date.isBefore(_selectedDateRange!.end.add(const Duration(days: 1)));
       }).toList();
@@ -251,14 +262,22 @@ class _RecentsScreenState extends ConsumerState<RecentsScreen> {
     // Sort by Date Descending
     combined.sort((a, b) {
       DateTime dateA;
-      if (a is SaleRecord) dateA = a.timestamp;
-      else if (a is ExpenseRecord) dateA = a.date;
-      else dateA = (a as SlaughterLog).slaughterTime ?? DateTime.now();
+      if (a is SaleRecord) {
+        dateA = a.timestamp;
+      } else if (a is ExpenseRecord) {
+        dateA = a.date;
+      } else {
+        dateA = (a as SlaughterLog).slaughterTime ?? DateTime.now();
+      }
 
       DateTime dateB;
-      if (b is SaleRecord) dateB = b.timestamp;
-      else if (b is ExpenseRecord) dateB = b.date;
-      else dateB = (b as SlaughterLog).slaughterTime ?? DateTime.now();
+      if (b is SaleRecord) {
+        dateB = b.timestamp;
+      } else if (b is ExpenseRecord) {
+        dateB = b.date;
+      } else {
+        dateB = (b as SlaughterLog).slaughterTime ?? DateTime.now();
+      }
 
       return dateB.compareTo(dateA);
     });

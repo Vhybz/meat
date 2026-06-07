@@ -1,8 +1,8 @@
 import 'product.dart';
 
-enum PaymentMethod { cash, mobileMoney }
+enum PaymentMethod { cash, mobileMoney, bankDeposit }
 
-enum SaleStatus { completed, pendingCorrection, rectified, cancelled }
+enum SaleStatus { completed, pendingCorrection, rectified, cancelled, awaitingDeposit }
 
 class PaymentDetail {
   final PaymentMethod method;
@@ -69,6 +69,7 @@ class SaleRecord {
   final List<SaleItem> items;
   final double totalAmount; // This is the Net Invoice Value (After Discount)
   final double totalDiscount; // Total revenue loss from promotions
+  final double totalCost; // Total cost for profit analytics
   final String? appliedPromo; // Description of applied promo
   final List<PaymentDetail> payments;
   final DateTime timestamp;
@@ -78,6 +79,9 @@ class SaleRecord {
   final String? customerPhone;
   final SaleStatus status;
   final String? correctionReason;
+  final String? bankReceiptUrl;
+  final String? bankReceiptId;
+  final bool isVerified;
 
   SaleRecord({
     required this.id,
@@ -85,6 +89,7 @@ class SaleRecord {
     required this.items,
     required this.totalAmount,
     this.totalDiscount = 0.0,
+    this.totalCost = 0.0,
     this.appliedPromo,
     required this.payments,
     required this.timestamp,
@@ -94,6 +99,9 @@ class SaleRecord {
     this.customerPhone,
     this.status = SaleStatus.completed,
     this.correctionReason,
+    this.bankReceiptUrl,
+    this.bankReceiptId,
+    this.isVerified = false,
   });
 
   factory SaleRecord.fromJson(Map<String, dynamic> json) {
@@ -103,6 +111,7 @@ class SaleRecord {
       items: (json['items'] as List).map((e) => SaleItem.fromJson(e)).toList(),
       totalAmount: (json['total_amount'] as num).toDouble(),
       totalDiscount: (json['total_discount'] as num? ?? 0.0).toDouble(),
+      totalCost: (json['total_cost'] as num? ?? 0.0).toDouble(),
       appliedPromo: json['applied_promo'],
       payments: (json['payments'] as List).map((e) => PaymentDetail.fromJson(e)).toList(),
       timestamp: DateTime.parse(json['timestamp']),
@@ -112,6 +121,9 @@ class SaleRecord {
       customerPhone: json['customer_phone'],
       status: SaleStatus.values.byName(json['status'] ?? 'completed'),
       correctionReason: json['correction_reason'],
+      bankReceiptUrl: json['bank_receipt_url'],
+      bankReceiptId: json['bank_receipt_id'],
+      isVerified: json['is_verified'] ?? false,
     );
   }
 
@@ -122,6 +134,7 @@ class SaleRecord {
       'items': items.map((e) => e.toJson()).toList(),
       'total_amount': totalAmount,
       'total_discount': totalDiscount,
+      'total_cost': totalCost,
       'applied_promo': appliedPromo,
       'payments': payments.map((e) => e.toJson()).toList(),
       'timestamp': timestamp.toIso8601String(),
@@ -131,6 +144,9 @@ class SaleRecord {
       'customer_phone': customerPhone,
       'status': status.name,
       'correction_reason': correctionReason,
+      'bank_receipt_url': bankReceiptUrl,
+      'bank_receipt_id': bankReceiptId,
+      'is_verified': isVerified,
     };
   }
 
@@ -177,10 +193,14 @@ class SaleRecord {
     List<SaleItem>? items,
     double? totalAmount,
     double? totalDiscount,
+    double? totalCost,
     String? appliedPromo,
     List<PaymentDetail>? payments,
     SaleStatus? status,
     String? correctionReason,
+    String? bankReceiptUrl,
+    String? bankReceiptId,
+    bool? isVerified,
     String? customerName,
     String? customerPhone,
   }) {
@@ -190,6 +210,7 @@ class SaleRecord {
       items: items ?? this.items,
       totalAmount: totalAmount ?? this.totalAmount,
       totalDiscount: totalDiscount ?? this.totalDiscount,
+      totalCost: totalCost ?? this.totalCost,
       appliedPromo: appliedPromo ?? this.appliedPromo,
       payments: payments ?? this.payments,
       timestamp: timestamp,
@@ -199,6 +220,9 @@ class SaleRecord {
       customerPhone: customerPhone ?? this.customerPhone,
       status: status ?? this.status,
       correctionReason: correctionReason ?? this.correctionReason,
+      bankReceiptUrl: bankReceiptUrl ?? this.bankReceiptUrl,
+      bankReceiptId: bankReceiptId ?? this.bankReceiptId,
+      isVerified: isVerified ?? this.isVerified,
     );
   }
 }

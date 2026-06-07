@@ -102,21 +102,29 @@ class _DebtManagementScreenState extends ConsumerState<DebtManagementScreen> {
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(AppSpacing.l),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildDebtSummary(context, totalDebt, salesHistory.where((s) => s.balance > 0).length),
-                    const SizedBox(height: AppSpacing.xl),
-                    _buildControls(theme),
-                    const SizedBox(height: AppSpacing.m),
-                    Expanded(
-                      child: filteredSales.isEmpty
-                          ? _buildEmptyState(context)
-                          : ListView.builder(
-                              itemCount: filteredSales.length,
-                              itemBuilder: (context, index) => _buildDebtTile(context, filteredSales[index]),
-                            ),
+                child: CustomScrollView(
+                  slivers: [
+                    SliverToBoxAdapter(
+                      child: _buildDebtSummary(context, totalDebt, salesHistory.where((s) => s.balance > 0).length),
                     ),
+                    const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.xl)),
+                    SliverToBoxAdapter(child: _buildControls(theme)),
+                    const SliverToBoxAdapter(child: SizedBox(height: AppSpacing.m)),
+                    if (filteredSales.isEmpty)
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: _buildEmptyState(context),
+                      )
+                    else
+                      SliverPadding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+                        sliver: SliverList(
+                          delegate: SliverChildBuilderDelegate(
+                            (context, index) => _buildDebtTile(context, filteredSales[index]),
+                            childCount: filteredSales.length,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),

@@ -48,7 +48,7 @@ class AppSidebar extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final sidebarColor = isDark ? theme.colorScheme.surface : AppColors.primaryMaroon;
+    final sidebarColor = isDark ? theme.colorScheme.surface : theme.colorScheme.primary;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
@@ -133,7 +133,7 @@ class AppSidebar extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Mi CORAZON',
+                  'Mi~CORAZON',
                   style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -328,17 +328,18 @@ class AppSidebar extends ConsumerWidget {
 
   void _handleRefresh(BuildContext context, WidgetRef ref) async {
     try {
+      final theme = Theme.of(context);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Row(
+        SnackBar(
+          content: const Row(
             children: [
               SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
               SizedBox(width: 16),
               Text('Refreshing system data...'),
             ],
           ),
-          duration: Duration(seconds: 1),
-          backgroundColor: AppColors.primaryMaroon,
+          duration: const Duration(seconds: 1),
+          backgroundColor: theme.colorScheme.primary,
         ),
       );
 

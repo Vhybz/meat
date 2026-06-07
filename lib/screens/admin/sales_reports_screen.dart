@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../../core/constants.dart';
 import '../../widgets/main_app_bar.dart';
 import '../../services/sale_provider.dart';
 import '../../services/expense_provider.dart';
 import '../../models/sale_model.dart';
+import '../../models/user_model.dart';
 import '../../services/receipt_service.dart';
 import '../../services/notification_service.dart';
 import '../../core/utils.dart';
@@ -23,7 +25,8 @@ class SalesReportsScreen extends ConsumerStatefulWidget {
   ConsumerState<SalesReportsScreen> createState() => _SalesReportsScreenState();
 }
 
-class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
+class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
   String _searchQuery = '';
   DateTime? _startDate;
   DateTime? _endDate;
@@ -33,6 +36,18 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
   bool _isDeletingSelected = false;
 
   @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
     if (user == null) return const Center(child: CircularProgressIndicator());
@@ -40,15 +55,36 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
     final theme = Theme.of(context);
     final salesHistory = ref.watch(saleHistoryProvider);
     
+    final isCashier = user.activePrimaryRole == UserRole.cashier;
+    final now = DateTime.now();
+
     final filteredSales = salesHistory.where((sale) {
       final matchesSearch = sale.id.toLowerCase().contains(_searchQuery.toLowerCase()) ||
                            sale.cashierName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-                           (sale.customerName?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false);
+                           (sale.customerName?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false) ||
+                           sale.items.any((item) => 
+                             item.product.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+                             item.product.category.toLowerCase().contains(_searchQuery.toLowerCase())
+                           );
+
       final matchesStatus = _statusFilter == null || sale.status == _statusFilter;
-      final matchesDate = (_startDate == null || sale.timestamp.isAfter(_startDate!)) &&
-                         (_endDate == null || sale.timestamp.isBefore(_endDate!.add(const Duration(days: 1))));
+      
+      final effectiveStart = (isCashier && _startDate == null) ? DateTime(now.year, now.month, now.day) : _startDate;
+      final effectiveEnd = (isCashier && _endDate == null) ? now : _endDate;
+
+      final matchesDate = (effectiveStart == null || sale.timestamp.isAfter(effectiveStart)) &&
+                         (effectiveEnd == null || sale.timestamp.isBefore(effectiveEnd.add(const Duration(days: 1))));
+      
       return matchesSearch && matchesStatus && matchesDate;
     }).toList();
+
+    final expensesState = ref.watch(expenseProvider);
+    final filteredExpenses = expensesState.records.where((e) {
+      final matchesDate = (_startDate == null || e.date.isAfter(_startDate!)) &&
+                         (_endDate == null || e.date.isBefore(_endDate!.add(const Duration(days: 1))));
+      return matchesDate;
+    }).toList();
+    final totalExpenses = filteredExpenses.fold(0.0, (sum, e) => sum + e.amount);
 
     final isDesktop = ResponsiveLayout.isDesktop(context);
     const currentRoute = '/admin/sales';
@@ -82,24 +118,383 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
                 onTap: (route) => MenuService.navigate(context, route, currentRoute),
               ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(AppSpacing.l),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeader(context, filteredSales),
-                    const SizedBox(height: AppSpacing.xl),
-                    _buildFilters(),
-                    const SizedBox(height: AppSpacing.l),
-                    _buildSummaryCards(context, filteredSales),
-                    const SizedBox(height: AppSpacing.xl),
-                    _buildSalesTable(filteredSales),
-                  ],
-                ),
+              child: Column(
+                children: [
+                  Container(
+                    color: theme.cardTheme.color,
+                    child: TabBar(
+                      controller: _tabController,
+                      labelColor: theme.colorScheme.primary,
+                      unselectedLabelColor: theme.colorScheme.onSurfaceVariant,
+                      indicatorColor: theme.colorScheme.primary,
+                      tabs: const [
+                        Tab(text: 'Analytics Overview', icon: Icon(Icons.analytics_outlined)),
+                        Tab(text: 'Transaction Logs', icon: Icon(Icons.list_alt_rounded)),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildAnalyticsTab(context, filteredSales, totalExpenses),
+                        _buildLogsTab(context, filteredSales, totalExpenses),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildAnalyticsTab(BuildContext context, List<SaleRecord> sales, double totalExpenses) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppSpacing.l),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSummaryCards(context, sales, totalExpenses),
+          const SizedBox(height: AppSpacing.xl),
+          if (sales.isNotEmpty) ...[
+            _buildChartsRow(context, sales),
+            const SizedBox(height: AppSpacing.xl),
+            _buildTopPerformanceRow(context, sales),
+          ] else
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(AppSpacing.xl),
+                child: Text('No data available for the selected period.'),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLogsTab(BuildContext context, List<SaleRecord> sales, double totalExpenses) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppSpacing.l),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildHeader(context, sales, totalExpenses),
+          const SizedBox(height: AppSpacing.xl),
+          _buildFilters(),
+          const SizedBox(height: AppSpacing.l),
+          _buildSalesTable(sales),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChartsRow(BuildContext context, List<SaleRecord> sales) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final isMobile = constraints.maxWidth < 900;
+      if (isMobile) {
+        return Column(
+          children: [
+            _buildRevenueTrendCard(context, sales),
+            const SizedBox(height: AppSpacing.l),
+            _buildCategoryDistributionCard(context, sales),
+          ],
+        );
+      }
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(flex: 2, child: _buildRevenueTrendCard(context, sales)),
+          const SizedBox(width: AppSpacing.l),
+          Expanded(flex: 1, child: _buildCategoryDistributionCard(context, sales)),
+        ],
+      );
+    });
+  }
+
+  Widget _buildTopPerformanceRow(BuildContext context, List<SaleRecord> sales) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final isMobile = constraints.maxWidth < 900;
+      if (isMobile) {
+        return Column(
+          children: [
+            _buildTopProductsCard(context, sales),
+            const SizedBox(height: AppSpacing.l),
+            _buildStaffPerformanceCard(context, sales),
+          ],
+        );
+      }
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: _buildTopProductsCard(context, sales)),
+          const SizedBox(width: AppSpacing.l),
+          Expanded(child: _buildStaffPerformanceCard(context, sales)),
+        ],
+      );
+    });
+  }
+
+  Widget _buildRevenueTrendCard(BuildContext context, List<SaleRecord> sales) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    // Group revenue by date
+    final dailyRevenue = <DateTime, double>{};
+    for (final sale in sales) {
+      if (sale.status == SaleStatus.cancelled) continue;
+      final date = DateTime(sale.timestamp.year, sale.timestamp.month, sale.timestamp.day);
+      dailyRevenue[date] = (dailyRevenue[date] ?? 0.0) + sale.totalAmount;
+    }
+
+    final sortedDates = dailyRevenue.keys.toList()..sort();
+    if (sortedDates.isEmpty) return const SizedBox.shrink();
+
+    final spots = sortedDates.asMap().entries.map((e) {
+      return FlSpot(e.key.toDouble(), dailyRevenue[e.value]!);
+    }).toList();
+
+    return Container(
+      height: 350,
+      padding: const EdgeInsets.all(AppSpacing.l),
+      decoration: BoxDecoration(
+        color: theme.cardTheme.color,
+        borderRadius: BorderRadius.circular(AppRadius.m),
+        border: isDark ? Border.all(color: theme.dividerColor) : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Revenue Trend', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: theme.colorScheme.onSurface)),
+          const SizedBox(height: AppSpacing.xl),
+          Expanded(
+            child: LineChart(
+              LineChartData(
+                gridData: const FlGridData(show: false),
+                titlesData: FlTitlesData(
+                  leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  bottomTitles: AxisTitles(
+                    sideTitles: SideTitles(
+                      showTitles: true,
+                      getTitlesWidget: (val, meta) {
+                        final index = val.toInt();
+                        if (index % (spots.length > 5 ? (spots.length / 5).ceil() : 1) != 0) return const SizedBox.shrink();
+                        if (index >= 0 && index < sortedDates.length) {
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 8.0),
+                            child: Text(DateFormat('MM/dd').format(sortedDates[index]), style: const TextStyle(fontSize: 10)),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                  ),
+                ),
+                borderData: FlBorderData(show: false),
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: spots,
+                    isCurved: true,
+                    color: theme.colorScheme.primary,
+                    barWidth: 3,
+                    isStrokeCapRound: true,
+                    dotData: const FlDotData(show: false),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategoryDistributionCard(BuildContext context, List<SaleRecord> sales) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final categoryTotals = <String, double>{};
+    for (final sale in sales) {
+      if (sale.status == SaleStatus.cancelled) continue;
+      for (final item in sale.items) {
+        categoryTotals[item.product.category] = (categoryTotals[item.product.category] ?? 0.0) + item.total;
+      }
+    }
+
+    final sections = categoryTotals.entries.map((e) {
+      final colors = [Colors.blue, Colors.green, Colors.orange, Colors.purple, Colors.red, Colors.teal];
+      final index = categoryTotals.keys.toList().indexOf(e.key);
+      return PieChartSectionData(
+        color: colors[index % colors.length],
+        value: e.value,
+        title: '${(e.value / categoryTotals.values.fold(0.0, (a, b) => a + b) * 100).toStringAsFixed(0)}%',
+        radius: 50,
+        titleStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+      );
+    }).toList();
+
+    return Container(
+      height: 350,
+      padding: const EdgeInsets.all(AppSpacing.l),
+      decoration: BoxDecoration(
+        color: theme.cardTheme.color,
+        borderRadius: BorderRadius.circular(AppRadius.m),
+        border: isDark ? Border.all(color: theme.dividerColor) : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Category Mix', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: theme.colorScheme.onSurface)),
+          Expanded(
+            child: PieChart(
+              PieChartData(
+                sections: sections,
+                sectionsSpace: 2,
+                centerSpaceRadius: 40,
+              ),
+            ),
+          ),
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: categoryTotals.keys.map((cat) {
+              final index = categoryTotals.keys.toList().indexOf(cat);
+              final colors = [Colors.blue, Colors.green, Colors.orange, Colors.purple, Colors.red, Colors.teal];
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(width: 8, height: 8, color: colors[index % colors.length]),
+                  const SizedBox(width: 4),
+                  Text(cat, style: const TextStyle(fontSize: 10)),
+                ],
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopProductsCard(BuildContext context, List<SaleRecord> sales) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final productStats = <String, Map<String, dynamic>>{};
+    for (final sale in sales) {
+      if (sale.status == SaleStatus.cancelled) continue;
+      for (final item in sale.items) {
+        final name = item.product.name;
+        productStats.putIfAbsent(name, () => {'revenue': 0.0, 'weight': 0.0});
+        productStats[name]!['revenue'] += item.total;
+        productStats[name]!['weight'] += item.quantity;
+      }
+    }
+
+    final sortedProducts = productStats.entries.toList()..sort((a, b) => b.value['revenue'].compareTo(a.value['revenue']));
+    final top5 = sortedProducts.take(5).toList();
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.l),
+      decoration: BoxDecoration(
+        color: theme.cardTheme.color,
+        borderRadius: BorderRadius.circular(AppRadius.m),
+        border: isDark ? Border.all(color: theme.dividerColor) : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Top Selling Products', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: theme.colorScheme.onSurface)),
+          const SizedBox(height: AppSpacing.m),
+          ...top5.map((e) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8.0),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: theme.colorScheme.primary.withValues(alpha: 0.1), shape: BoxShape.circle),
+                  child: Text('${top5.indexOf(e) + 1}', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 12)),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(e.key, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      Text('${WeightConverter.formatShort(e.value['weight'])} sold', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant)),
+                    ],
+                  ),
+                ),
+                Text('₵${e.value['revenue'].toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              ],
+            ),
+          )),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStaffPerformanceCard(BuildContext context, List<SaleRecord> sales) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    final staffStats = <String, Map<String, dynamic>>{};
+    for (final sale in sales) {
+      if (sale.status == SaleStatus.cancelled) continue;
+      final name = sale.cashierName;
+      staffStats.putIfAbsent(name, () => {'revenue': 0.0, 'count': 0});
+      staffStats[name]!['revenue'] += sale.totalAmount;
+      staffStats[name]!['count'] += 1;
+    }
+
+    final sortedStaff = staffStats.entries.toList()..sort((a, b) => b.value['revenue'].compareTo(a.value['revenue']));
+
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.l),
+      decoration: BoxDecoration(
+        color: theme.cardTheme.color,
+        borderRadius: BorderRadius.circular(AppRadius.m),
+        border: isDark ? Border.all(color: theme.dividerColor) : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Cashier Performance', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: theme.colorScheme.onSurface)),
+          const SizedBox(height: AppSpacing.m),
+          if (sortedStaff.isEmpty)
+             const Text('No data available', style: TextStyle(fontSize: 12))
+          else
+            ...sortedStaff.map((e) => Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
+                    child: Text(e.key.substring(0, 1).toUpperCase(), style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 12)),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(e.key, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        Text('${e.value['count']} transactions', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant)),
+                      ],
+                    ),
+                  ),
+                  Text('₵${e.value['revenue'].toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                ],
+              ),
+            )),
+        ],
       ),
     );
   }
@@ -188,28 +583,34 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, List<SaleRecord> filteredSales) {
+  Widget _buildHeader(BuildContext context, List<SaleRecord> filteredSales, double totalExpenses) {
     final theme = Theme.of(context);
     return LayoutBuilder(builder: (context, constraints) {
       final isMobile = constraints.maxWidth < 600;
       
-      final headerText = Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text(
-            'Transaction History',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-          ),
-          Text(
-            'Detailed breakdown of all shop revenue (${filteredSales.length} items)',
-            style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12),
-          ),
-        ],
+      final headerText = Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Transaction History',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+            Text(
+              'Detailed breakdown of all shop revenue (${filteredSales.length} items)',
+              style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          ],
+        ),
       );
 
       final exportButton = ElevatedButton.icon(
-        onPressed: () => ReceiptService.printSalesReport(filteredSales),
+        onPressed: () => ReceiptService.printSalesReport(filteredSales, totalExpenses: totalExpenses),
         icon: const Icon(Icons.picture_as_pdf),
         label: const Text('Export to PDF'),
         style: ElevatedButton.styleFrom(
@@ -295,37 +696,25 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
     });
   }
 
-  Widget _buildSummaryCards(BuildContext context, List<SaleRecord> sales) {
-    // Only include non-cancelled sales in financial totals
+  Widget _buildSummaryCards(BuildContext context, List<SaleRecord> sales, double totalExpenses) {
     final activeSales = sales.where((s) => s.status != SaleStatus.cancelled).toList();
-    
     final totalRevenue = activeSales.fold(0.0, (sum, sale) => sum + sale.totalAmount);
-    final expensesState = ref.watch(expenseProvider);
-    final totalExpenses = expensesState.records.fold(0.0, (sum, e) => sum + e.amount);
     final netProfit = totalRevenue - totalExpenses;
 
     return LayoutBuilder(builder: (context, constraints) {
-      final bool useColumn = constraints.maxWidth < 900;
-      
-      if (useColumn) {
-        return Column(
-          children: [
-            _reportCard(context, 'Gross Volume', '₵ ${totalRevenue.toStringAsFixed(2)}', Icons.payments, Colors.blue),
-            const SizedBox(height: AppSpacing.m),
-            _reportCard(context, 'Total Expenses', '₵ ${totalExpenses.toStringAsFixed(2)}', Icons.trending_down, Colors.red),
-            const SizedBox(height: AppSpacing.m),
-            _reportCard(context, 'Net Profit', '₵ ${netProfit.toStringAsFixed(2)}', Icons.account_balance_wallet, Colors.green),
-          ],
-        );
-      }
-      
-      return Row(
+      final double width = constraints.maxWidth;
+      // 1 column on small phones, 3 columns on desktop/tablets
+      final int crossAxisCount = width > 600 ? 3 : 1;
+      final double spacing = AppSpacing.m;
+      final double itemWidth = (width - (spacing * (crossAxisCount - 1))) / crossAxisCount;
+
+      return Wrap(
+        spacing: spacing,
+        runSpacing: spacing,
         children: [
-          Expanded(child: _reportCard(context, 'Gross Volume', '₵ ${totalRevenue.toStringAsFixed(2)}', Icons.payments, Colors.blue)),
-          const SizedBox(width: AppSpacing.m),
-          Expanded(child: _reportCard(context, 'Total Expenses', '₵ ${totalExpenses.toStringAsFixed(2)}', Icons.trending_down, Colors.red)),
-          const SizedBox(width: AppSpacing.m),
-          Expanded(child: _reportCard(context, 'Net Profit', '₵ ${netProfit.toStringAsFixed(2)}', Icons.account_balance_wallet, Colors.green)),
+          SizedBox(width: itemWidth, child: _reportCard(context, 'Gross Volume', '₵ ${totalRevenue.toStringAsFixed(2)}', Icons.payments, Colors.blue)),
+          SizedBox(width: itemWidth, child: _reportCard(context, 'Total Expenses', '₵ ${totalExpenses.toStringAsFixed(2)}', Icons.trending_down, Colors.red)),
+          SizedBox(width: itemWidth, child: _reportCard(context, 'Net Profit', '₵ ${netProfit.toStringAsFixed(2)}', Icons.account_balance_wallet, Colors.green)),
         ],
       );
     });
@@ -341,29 +730,42 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
         color: theme.cardTheme.color,
         borderRadius: BorderRadius.circular(AppRadius.m),
         boxShadow: [
-          if (!isDark) BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10)
+          if (!isDark) BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))
         ],
-        border: isDark ? Border.all(color: theme.dividerColor) : null,
+        border: Border.all(color: isDark ? theme.dividerColor : Colors.grey.shade200),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
         children: [
-          Icon(icon, color: color, size: 28),
-          const SizedBox(height: AppSpacing.m),
-          Text(
-            title,
-            style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 11),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(AppRadius.s),
+            ),
+            child: Icon(icon, color: color, size: 24),
           ),
-          const SizedBox(height: 4),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              value,
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+          const SizedBox(width: AppSpacing.m),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  title.toUpperCase(),
+                  style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 4),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    value,
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -373,6 +775,8 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
 
   Widget _buildSalesTable(List<SaleRecord> sales) {
     final theme = Theme.of(context);
+    final user = ref.read(currentUserProvider);
+    if (user == null) return const SizedBox.shrink();
     final isDark = theme.brightness == Brightness.dark;
 
     return Container(
@@ -439,7 +843,16 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
                         DataCell(
                           InkWell(
                             onTap: () => _showSaleDetails(context, sale),
-                            child: Text(sale.id, style: const TextStyle(fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (sale.isVerified)
+                                   const Icon(Icons.verified, color: Colors.blue, size: 14),
+                                if (sale.isVerified)
+                                   const SizedBox(width: 4),
+                                Text(sale.id, style: const TextStyle(fontWeight: FontWeight.bold, decoration: TextDecoration.underline)),
+                              ],
+                            ),
                           ),
                         ),
                         DataCell(Text(DateFormat('MMM dd, HH:mm:ss').format(sale.timestamp))),
@@ -490,6 +903,8 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
   }
 
   void _showSaleDetails(BuildContext context, SaleRecord sale) {
+    final user = ref.read(currentUserProvider);
+    if (user == null) return;
     bool isPrinting = false;
     showDialog(
       context: context,
@@ -608,6 +1023,50 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
                               ],
                             ),
                           )),
+                          if (sale.bankReceiptUrl != null) ...[
+                            const Divider(height: 32),
+                            Text('BANK DEPOSIT SLIP', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.bold)),
+                            if (sale.bankReceiptId != null)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 4),
+                                child: Text('Reference ID: ${sale.bankReceiptId}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.purple)),
+                              ),
+                            const SizedBox(height: 8),
+                            InkWell(
+                              onTap: () => showDialog(
+                                context: context,
+                                builder: (context) => Dialog(
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      AppBar(
+                                        title: Text(sale.bankReceiptId ?? 'Deposit Slip', style: const TextStyle(fontSize: 14)),
+                                        backgroundColor: Colors.purple,
+                                        foregroundColor: Colors.white,
+                                        leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                                      ),
+                                      Flexible(child: Image.network(sale.bankReceiptUrl!)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              child: Container(
+                                height: 100,
+                                width: double.infinity,
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: theme.dividerColor),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.network(sale.bankReceiptUrl!, fit: BoxFit.cover, errorBuilder: (_, _, _) => const Center(child: Text('Image Error'))),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            const Center(child: Text('Tap to enlarge', style: TextStyle(fontSize: 9, fontStyle: FontStyle.italic))),
+                          ],
                         ],
                       ),
                     ),
@@ -622,6 +1081,24 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
                       spacing: 8,
                       overflowSpacing: 8,
                       children: [
+                        if (!sale.isVerified && (user.activePrimaryRole == UserRole.cashier || user.activePrimaryRole == UserRole.admin || user.activePrimaryRole == UserRole.superAdmin))
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              ref.read(saleHistoryProvider.notifier).verifySale(sale.id);
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Transaction Verified. Inventory updated.'), backgroundColor: Colors.green),
+                              );
+                            },
+                            icon: const Icon(Icons.check_circle_outline, size: 16),
+                            label: const Text('VERIFY', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              minimumSize: Size.zero,
+                            ),
+                          ),
                         if (sale.status != SaleStatus.cancelled)
                           TextButton.icon(
                             onPressed: () {
@@ -823,39 +1300,40 @@ class _SalesReportsScreenState extends ConsumerState<SalesReportsScreen> {
       case SaleStatus.rectified: return Colors.blue;
       case SaleStatus.pendingCorrection: return Colors.orange;
       case SaleStatus.cancelled: return Colors.red;
+      case SaleStatus.awaitingDeposit: return Colors.purple;
     }
   }
 
   void _confirmDeleteSelected(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Delete Transactions?'),
         content: Text('Are you sure you want to permanently delete ${_selectedSaleIds.length} selected transactions? This action cannot be undone.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('CANCEL')),
           ElevatedButton(
             onPressed: () async {
-              Navigator.pop(context);
+              Navigator.pop(dialogContext);
               setState(() => _isDeletingSelected = true);
               try {
                 await ref.read(saleHistoryProvider.notifier).deleteSales(_selectedSaleIds.toList());
+                if (!mounted) return;
                 setState(() {
                   _selectedSaleIds.clear();
                   _isDeletingSelected = false;
                 });
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Transactions deleted successfully.')),
-                  );
-                }
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Transactions deleted successfully.')),
+                );
               } catch (e) {
+                if (!mounted) return;
                 setState(() => _isDeletingSelected = false);
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to delete: $e'), backgroundColor: Colors.red),
-                  );
-                }
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Failed to delete: $e'), backgroundColor: Colors.red),
+                );
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),

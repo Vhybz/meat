@@ -6,6 +6,9 @@ class ProductCard extends StatelessWidget {
   final String category;
   final String price;
   final String? originalPrice;
+  final double? stockQuantity;
+  final double? lowStockThreshold;
+  final String? unit;
   final String imageUrl;
   final String? promoLabel;
   final VoidCallback onTap;
@@ -16,6 +19,9 @@ class ProductCard extends StatelessWidget {
     required this.category,
     required this.price,
     this.originalPrice,
+    this.stockQuantity,
+    this.lowStockThreshold,
+    this.unit,
     this.promoLabel,
     required this.imageUrl,
     required this.onTap,
@@ -33,12 +39,22 @@ class ProductCard extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
+    BorderSide borderSide = isDark ? BorderSide(color: theme.dividerColor) : BorderSide.none;
+    
+    if (stockQuantity != null) {
+      if (stockQuantity! <= 0) {
+        borderSide = const BorderSide(color: Colors.red, width: 2);
+      } else if (stockQuantity! <= (lowStockThreshold ?? 5.0)) {
+        borderSide = const BorderSide(color: Colors.orange, width: 2);
+      }
+    }
+
     return Card(
       clipBehavior: Clip.antiAlias,
       elevation: isDark ? 4 : 1,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.m),
-        side: isDark ? BorderSide(color: theme.dividerColor) : BorderSide.none,
+        side: borderSide,
       ),
       child: InkWell(
         onTap: onTap,
@@ -54,15 +70,31 @@ class ProductCard extends StatelessWidget {
                     : imageUrl.startsWith('assets/') 
                       ? Image.asset(
                           imageUrl,
+                          key: ValueKey(imageUrl),
                           fit: BoxFit.cover,
                           width: double.infinity,
                           errorBuilder: (context, error, stackTrace) => _buildErrorIcon(context),
                         )
                       : Image.network(
                           imageUrl,
+                          key: ValueKey(imageUrl),
                           fit: BoxFit.cover,
                           width: double.infinity,
-                          errorBuilder: (context, error, stackTrace) => _buildErrorIcon(context),
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Center(
+                              child: CircularProgressIndicator(
+                                value: loadingProgress.expectedTotalBytes != null
+                                    ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                                    : null,
+                                strokeWidth: 2,
+                              ),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) {
+                            debugPrint('Product Image Load Error ($name): $error');
+                            return _buildErrorIcon(context);
+                          },
                         ),
                   if (promoLabel != null)
                     Positioned(
@@ -76,6 +108,22 @@ class ProductCard extends StatelessWidget {
                         ),
                         child: Text(
                           promoLabel!,
+                          style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  if (stockQuantity != null)
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: (stockQuantity! > 0 ? Colors.green : Colors.red).withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '${stockQuantity!.toStringAsFixed(1)}${unit ?? "kg"}',
                           style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
                         ),
                       ),

@@ -5,6 +5,8 @@ import 'supabase_transfer_service.dart';
 import 'product_service.dart';
 import 'notification_service.dart';
 
+import 'offline_sync_service.dart';
+
 class TransferNotifier extends StateNotifier<List<StockTransfer>> {
   final SupabaseTransferService _service;
   final Ref ref;
@@ -26,7 +28,13 @@ class TransferNotifier extends StateNotifier<List<StockTransfer>> {
 
   Future<void> addTransfer(StockTransfer transfer) async {
     try {
-      await _service.addTransfer(transfer);
+      // 1. Add to Offline Queue
+      await OfflineSyncService.addToQueue(
+        actionType: 'TRANSFER', 
+        data: transfer.toJson(),
+      );
+
+      // 2. Update local state
       state = [transfer, ...state];
       
       // Notify System (Local)
@@ -42,7 +50,10 @@ class TransferNotifier extends StateNotifier<List<StockTransfer>> {
   Future<void> addTransfers(List<StockTransfer> transfers) async {
     try {
       for (final t in transfers) {
-        await _service.addTransfer(t);
+        await OfflineSyncService.addToQueue(
+          actionType: 'TRANSFER', 
+          data: t.toJson(),
+        );
       }
       state = [...transfers, ...state];
       
@@ -62,9 +73,15 @@ class TransferNotifier extends StateNotifier<List<StockTransfer>> {
   Future<void> markAsReceived(String id) async {
     try {
       final transfer = state.firstWhere((t) => t.id == id);
-      await _service.updateTransferStatus(id, TransferStatus.received);
+      final updatedTransfer = transfer.copyWith(status: TransferStatus.received);
+
+      // 1. Add to Offline Queue (Update)
+      await OfflineSyncService.addToQueue(
+        actionType: 'UPDATE_TRANSFER', 
+        data: updatedTransfer.toJson(),
+      );
       
-      // Update Retail Stock
+      // 2. Update Retail Stock
       final productsAsync = ref.read(productsFutureProvider);
       final products = productsAsync.value;
       
@@ -96,7 +113,12 @@ class TransferNotifier extends StateNotifier<List<StockTransfer>> {
         orElse: () => throw Exception('Product not found in retail catalog for: $cutToMatch'),
       );
 
-      await ref.read(productsFutureProvider.notifier).updateStock(product.id, transfer.weight);
+      await ref.read(productsFutureProvider.notifier).updateStock(
+        product.id, 
+        transfer.weight,
+        reason: 'TRANSFER',
+        referenceId: transfer.id,
+      );
 
       // Notify System (Local)
       ref.read(notificationProvider.notifier).addNotification(
@@ -106,10 +128,7 @@ class TransferNotifier extends StateNotifier<List<StockTransfer>> {
 
       state = [
         for (final t in state)
-          if (t.id == id)
-            t.copyWith(status: TransferStatus.received)
-          else
-            t
+          if (t.id == id) updatedTransfer else t
       ];
     } catch (e) {
       debugPrint('Error marking transfer as received: $e');

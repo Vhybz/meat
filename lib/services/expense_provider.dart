@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/expense_model.dart';
 import 'supabase_expense_service.dart';
 import 'user_provider.dart';
+import 'offline_sync_service.dart';
 
 class ExpenseState {
   final List<ExpenseRecord> records;
@@ -23,7 +25,7 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
 
   ExpenseNotifier(this._service, this.ref) : super(ExpenseState(
     records: [],
-    categories: ['Electricity', 'GRA Tax', 'Water', 'Rent', 'Wages', 'Transport', 'Vet Check', 'Animal Transport', 'Maintenance'],
+    categories: ['Electricity', 'GRA Tax', 'Water', 'Rent', 'Wages', 'Transport', 'Vet Check', 'Animal Transport', 'Maintenance', 'Bank Deposit'],
   )) {
     loadExpenses();
   }
@@ -37,23 +39,36 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
       if (state.records.length != expenses.length || state.records.toString() != expenses.toString()) {
         state = state.copyWith(records: expenses);
       }
-    } catch (e) {}
+    } catch (_) {}
   }
 
   Future<void> addExpense(ExpenseRecord expense) async {
     try {
       final user = ref.read(currentUserProvider);
       final expenseWithBranch = expense.copyWith(branchCode: user?.branchCode);
-      await _service.addExpense(expenseWithBranch);
+      
+      // 1. Add to Offline Queue (Hive)
+      await OfflineSyncService.addToQueue(
+        actionType: 'EXPENSE', 
+        data: expenseWithBranch.toJson(),
+      );
+
+      // 2. Optimistic local update
       state = state.copyWith(records: [expenseWithBranch, ...state.records]);
-    } catch (e) {}
+    } catch (e) {
+      debugPrint('Error adding expense (Queue): $e');
+    }
+  }
+
+  Future<String?> uploadReceipt(Uint8List bytes, String fileName) async {
+    return await _service.uploadReceipt(bytes, fileName);
   }
 
   Future<void> deleteExpense(String id) async {
     try {
       await _service.deleteExpense(id);
       state = state.copyWith(records: state.records.where((e) => e.id != id).toList());
-    } catch (e) {}
+    } catch (_) {}
   }
 
   Future<void> purgeAllRecords() async {
@@ -62,7 +77,7 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
         await _service.deleteExpense(exp.id);
       }
       state = state.copyWith(records: []);
-    } catch (e) {}
+    } catch (_) {}
   }
 
   void addCategory(String category) {

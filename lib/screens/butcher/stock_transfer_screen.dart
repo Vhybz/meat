@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants.dart';
@@ -8,8 +9,12 @@ import '../../services/transfer_provider.dart';
 import '../../services/butcher_service.dart';
 import '../../models/transfer_models.dart';
 import '../../models/butcher_models.dart';
+import '../../models/branch_model.dart';
 import '../../services/branch_provider.dart';
 import '../../services/label_service.dart';
+import '../../services/notification_service.dart';
+import '../../services/product_service.dart';
+import '../../services/sms_service.dart';
 
 class StockTransferScreen extends ConsumerStatefulWidget {
   const StockTransferScreen({super.key});
@@ -19,6 +24,36 @@ class StockTransferScreen extends ConsumerStatefulWidget {
 }
 
 class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
+  Widget _buildExpiryWarning() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: AppSpacing.l),
+      padding: const EdgeInsets.all(AppSpacing.m),
+      decoration: BoxDecoration(
+        color: Colors.red.shade50,
+        borderRadius: BorderRadius.circular(AppRadius.m),
+        border: Border.all(color: Colors.red.shade200),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.red.shade700),
+          const SizedBox(width: AppSpacing.m),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Meat Freshness Alert', 
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red.shade900)),
+                Text('Some items have been in the butcher house for over 24 hours. Please transfer them to the Cold Room immediately.', 
+                  style: TextStyle(fontSize: 12, color: Colors.red.shade800)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showNewTransferDialog() {
     showDialog(
       context: context,
@@ -29,13 +64,21 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
   @override
   Widget build(BuildContext context) {
     final transfers = ref.watch(transferProvider);
+    final branchesAsync = ref.watch(branchesProvider);
+    final activeBatches = ref.watch(activeBatchesProvider).value ?? [];
     final isMobile = MediaQuery.of(context).size.width < 600;
+
+    final hasOldMeat = activeBatches.any((b) => 
+      b.createdAt.isBefore(DateTime.now().subtract(const Duration(hours: 24)))
+    );
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.l),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (hasOldMeat)
+            _buildExpiryWarning(),
           Flex(
             direction: isMobile ? Axis.vertical : Axis.horizontal,
             crossAxisAlignment: isMobile ? CrossAxisAlignment.start : CrossAxisAlignment.center,
@@ -64,7 +107,7 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
           const SizedBox(height: AppSpacing.l),
           _buildTransferSummary(context, transfers),
           const SizedBox(height: AppSpacing.l),
-          _buildRecentTransfers(transfers),
+          _buildRecentTransfers(transfers, branchesAsync.value ?? []),
         ],
       ),
     );
@@ -118,7 +161,7 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
     );
   }
 
-  Widget _buildRecentTransfers(List<StockTransfer> transfers) {
+  Widget _buildRecentTransfers(List<StockTransfer> transfers, List<Branch> branches) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.l),
@@ -142,7 +185,7 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
                       0: FlexColumnWidth(1.2),
                       1: FlexColumnWidth(1),
                       2: FlexColumnWidth(2),
-                      3: FlexColumnWidth(1.2),
+                      3: FlexColumnWidth(1.5),
                       4: FlexColumnWidth(1.2),
                     },
                     children: [
@@ -157,12 +200,16 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
                           Padding(padding: EdgeInsets.all(12), child: Text('Action', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12))),
                         ],
                       ),
-                      ...transfers.reversed.map((t) => TableRow(
+                      ...transfers.reversed.map((t) {
+                        final branch = branches.where((b) => b.code == t.destination).firstOrNull;
+                        final destinationDisplay = branch != null ? '${branch.name} (${branch.location})' : t.destination;
+                        
+                        return TableRow(
                         children: [
-                          Padding(padding: const EdgeInsets.all(12), child: Text(t.id, style: const TextStyle(fontSize: 12))),
+                          Padding(padding: const EdgeInsets.all(12), child: Text(t.id.substring(t.id.length - 8), style: const TextStyle(fontSize: 12, fontFamily: 'monospace'))),
                           Padding(padding: const EdgeInsets.all(12), child: Text(DateFormat('hh:mm a').format(t.transferTime), style: const TextStyle(fontSize: 12))),
                           Padding(padding: const EdgeInsets.all(12), child: Text('${t.meatType} (${WeightConverter.formatShort(t.weight)})', style: const TextStyle(fontSize: 10), overflow: TextOverflow.ellipsis)),
-                          Padding(padding: const EdgeInsets.all(12), child: Text(t.destination, style: const TextStyle(fontSize: 12))),
+                          Padding(padding: const EdgeInsets.all(12), child: Text(destinationDisplay, style: const TextStyle(fontSize: 12))),
                           Padding(padding: const EdgeInsets.all(8), child: StatusChip(
                             label: t.status.name.toUpperCase(), 
                             color: t.status == TransferStatus.pending ? Colors.blue : Colors.green
@@ -183,7 +230,8 @@ class _StockTransferScreenState extends ConsumerState<StockTransferScreen> {
                             ),
                           ),
                         ],
-                      )),
+                      );
+                      }),
                     ],
                   ),
                 ),
@@ -203,9 +251,21 @@ class NewTransferDialog extends ConsumerStatefulWidget {
 }
 
 class _NewTransferDialogState extends ConsumerState<NewTransferDialog> {
+  bool _isDirectTransfer = false;
+  final _weightController = TextEditingController();
+  
   String? _selectedBatchId;
   final Set<String> _selectedCutIds = {};
   String? _destination;
+  bool _isThirdParty = false;
+  final _thirdPartyCustomerController = TextEditingController();
+
+  @override
+  void dispose() {
+    _thirdPartyCustomerController.dispose();
+    _weightController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -213,22 +273,20 @@ class _NewTransferDialogState extends ConsumerState<NewTransferDialog> {
     final cutsAsync = ref.watch(recentCutsProvider);
     final transfers = ref.watch(transferProvider);
     final branchesAsync = ref.watch(branchesProvider);
+    final productsAsync = ref.watch(productsFutureProvider);
     
     final activeBatches = batchesAsync.value ?? [];
     final activeCuts = cutsAsync.value ?? [];
     final branches = branchesAsync.value ?? [];
     
-    // Set default destination branch if not yet set
     if (_destination == null && branches.isNotEmpty) {
       _destination = branches.first.code;
     }
 
-    // Find the selected objects based on IDs (safe against provider refreshes)
     final selectedBatch = _selectedBatchId != null 
         ? activeBatches.where((b) => b.id == _selectedBatchId).firstOrNull 
         : null;
 
-    // Filter cuts by selected batch and ensure they haven't been transferred yet
     final availableCuts = selectedBatch == null 
         ? <MeatCut>[] 
         : activeCuts.where((c) => c.batchId == selectedBatch.id && 
@@ -240,147 +298,281 @@ class _NewTransferDialogState extends ConsumerState<NewTransferDialog> {
         children: [
           const Icon(Icons.local_shipping_outlined, color: AppColors.primaryMaroon),
           const SizedBox(width: 12),
-          Expanded(child: Text('Move Stock to Retail', style: const TextStyle(fontSize: 18), overflow: TextOverflow.ellipsis)),
+          Expanded(child: Text(_isDirectTransfer ? 'Direct Transfer / Sale' : 'Move Stock to Retail', style: const TextStyle(fontSize: 18), overflow: TextOverflow.ellipsis)),
         ],
       ),
       content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 450, maxHeight: 500),
+        constraints: const BoxConstraints(maxWidth: 450, maxHeight: 600),
         child: SizedBox(
           width: MediaQuery.of(context).size.width * 0.85,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              batchesAsync.when(
-                data: (batches) => DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  value: _selectedBatchId,
-                  decoration: const InputDecoration(labelText: '1. Select Source Batch', border: OutlineInputBorder()),
-                  items: batches.map((b) => DropdownMenuItem<String>(
-                    value: b.id,
-                    child: Text(
-                      '${b.id.length > 8 ? b.id.substring(0,8) : b.id} (${b.meatType})', 
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 13),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(value: false, label: Text('Batch'), icon: Icon(Icons.inventory_2)),
+                    ButtonSegment(value: true, label: Text('Direct'), icon: Icon(Icons.bolt)),
+                  ],
+                  selected: {_isDirectTransfer},
+                  onSelectionChanged: (val) => setState(() => _isDirectTransfer = val.first),
+                ),
+                const SizedBox(height: 16),
+                if (_isDirectTransfer) ...[
+                  productsAsync.when(
+                    data: (products) => DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Product to Transfer', border: OutlineInputBorder()),
+                      items: products.where((p) => !p.isDeleted).map((p) => DropdownMenuItem(
+                        value: p.name, 
+                        child: Text('${p.category} - ${p.name}', style: const TextStyle(fontSize: 12)),
+                      )).toList(),
+                      onChanged: (v) => setState(() => _selectedBatchId = v), // Reusing variable to store name
                     ),
-                  )).toList(),
-                  onChanged: (v) => setState(() {
-                    _selectedBatchId = v;
-                    _selectedCutIds.clear();
-                  }),
-                ),
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => Text('Error loading batches', style: const TextStyle(fontSize: 12, color: Colors.red)),
-              ),
-              const SizedBox(height: 16),
-              const Align(alignment: Alignment.centerLeft, child: Text('2. Select Parts to Move', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
-              const SizedBox(height: 8),
-              if (selectedBatch != null && availableCuts.isNotEmpty) 
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () {
-                      setState(() {
-                        if (_selectedCutIds.length == availableCuts.length) {
-                          _selectedCutIds.clear();
-                        } else {
-                          _selectedCutIds.addAll(availableCuts.map((c) => c.id));
-                        }
-                      });
-                    },
-                    child: Text(_selectedCutIds.length == availableCuts.length ? 'Deselect All' : 'Select All Available'),
+                    loading: () => const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => const Text('Error loading products'),
                   ),
-                ),
-              Flexible(
-                child: Container(
-                  constraints: const BoxConstraints(maxHeight: 200),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade300),
-                    borderRadius: BorderRadius.circular(4),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _weightController,
+                    decoration: const InputDecoration(labelText: 'Quantity (kg)', border: OutlineInputBorder()),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
                   ),
-                  child: availableCuts.isEmpty 
-                    ? Center(child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Text(selectedBatch == null ? 'Select batch first' : 'No parts available for transfer', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                      ))
-                    : ListView.separated(
-                        shrinkWrap: true,
-                        itemCount: availableCuts.length,
-                        separatorBuilder: (context, index) => const Divider(height: 1),
-                        itemBuilder: (context, index) {
-                          final cut = availableCuts[index];
-                          final isSelected = _selectedCutIds.contains(cut.id);
-                          return CheckboxListTile(
-                            title: Text(cut.name, style: const TextStyle(fontSize: 13)),
-                            subtitle: Text('${cut.weight}kg', style: const TextStyle(fontSize: 11)),
-                            value: isSelected,
-                            onChanged: (val) {
-                              setState(() {
-                                if (val == true) {
-                                  _selectedCutIds.add(cut.id);
-                                } else {
-                                  _selectedCutIds.remove(cut.id);
-                                }
-                              });
-                            },
-                            dense: true,
-                            controlAffinity: ListTileControlAffinity.leading,
-                          );
+                ] else ...[
+                  batchesAsync.when(
+                    data: (batches) => DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      initialValue: _selectedBatchId,
+                      decoration: const InputDecoration(labelText: '1. Select Source Batch', border: OutlineInputBorder()),
+                      items: batches.map((b) => DropdownMenuItem<String>(
+                        value: b.id,
+                        child: Text(
+                          '${b.id.length > 8 ? b.id.substring(0,8) : b.id} (${b.meatType})', 
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      )).toList(),
+                      onChanged: (v) => setState(() {
+                        _selectedBatchId = v;
+                        _selectedCutIds.clear();
+                      }),
+                    ),
+                    loading: () => const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => Text('Error loading batches', style: const TextStyle(fontSize: 12, color: Colors.red)),
+                  ),
+                  const SizedBox(height: 16),
+                  const Align(alignment: Alignment.centerLeft, child: Text('2. Select Parts to Move', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold))),
+                  const SizedBox(height: 8),
+                  if (selectedBatch != null && availableCuts.isNotEmpty) 
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: () {
+                          setState(() {
+                            if (_selectedCutIds.length == availableCuts.length) {
+                              _selectedCutIds.clear();
+                            } else {
+                              _selectedCutIds.addAll(availableCuts.map((c) => c.id));
+                            }
+                          });
                         },
+                        child: Text(_selectedCutIds.length == availableCuts.length ? 'Deselect All' : 'Select All Available'),
                       ),
+                    ),
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 180),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade300),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: availableCuts.isEmpty 
+                      ? Center(child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Text(selectedBatch == null ? 'Select batch first' : 'No parts available for transfer', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                        ))
+                      : ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: availableCuts.length,
+                          separatorBuilder: (context, index) => const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final cut = availableCuts[index];
+                            final isSelected = _selectedCutIds.contains(cut.id);
+                            return CheckboxListTile(
+                              title: Text(cut.name, style: const TextStyle(fontSize: 13)),
+                              subtitle: Text('${cut.weight}kg', style: const TextStyle(fontSize: 11)),
+                              value: isSelected,
+                              onChanged: (val) {
+                                setState(() {
+                                  if (val == true) {
+                                    _selectedCutIds.add(cut.id);
+                                  } else {
+                                    _selectedCutIds.remove(cut.id);
+                                  }
+                                });
+                              },
+                              dense: true,
+                              controlAffinity: ListTileControlAffinity.leading,
+                            );
+                          },
+                        ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+                SwitchListTile(
+                  title: const Text('Third Party Sale', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                  subtitle: const Text('Notify CEO & Cashier for payment', style: TextStyle(fontSize: 11)),
+                  value: _isThirdParty,
+                  onChanged: (v) => setState(() => _isThirdParty = v),
+                  activeThumbColor: AppColors.primaryMaroon,
+                  contentPadding: EdgeInsets.zero,
                 ),
-              ),
-              const SizedBox(height: 16),
-              branchesAsync.when(
-                data: (branches) => DropdownButtonFormField<String>(
-                  isExpanded: true,
-                  value: _destination,
-                  decoration: const InputDecoration(labelText: '3. Destination Branch', border: OutlineInputBorder()),
-                  items: branches.map((b) => DropdownMenuItem<String>(
-                    value: b.code,
-                    child: Text('${b.name} (${b.location})', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
-                  )).toList(),
-                  onChanged: (v) => setState(() => _destination = v!),
-                ),
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (e, _) => const Text('Error loading branches', style: TextStyle(color: Colors.red, fontSize: 12)),
-              ),
-            ],
+                if (_isThirdParty) ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _thirdPartyCustomerController,
+                    decoration: const InputDecoration(
+                      labelText: 'Customer Name / Destination',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ] else if (!_isDirectTransfer)
+                  branchesAsync.when(
+                    data: (branches) => DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      initialValue: _destination,
+                      decoration: const InputDecoration(labelText: 'Destination Branch', border: OutlineInputBorder()),
+                      items: branches.map((b) => DropdownMenuItem<String>(
+                        value: b.code,
+                        child: Text('${b.name} (${b.location})', overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+                      )).toList(),
+                      onChanged: (v) => setState(() => _destination = v!),
+                    ),
+                    loading: () => const Center(child: CircularProgressIndicator()),
+                    error: (e, _) => const Text('Error loading branches', style: TextStyle(color: Colors.red, fontSize: 12)),
+                  ),
+              ],
+            ),
           ),
         ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
         ElevatedButton(
-          onPressed: (_selectedCutIds.isEmpty || _destination == null || selectedBatch == null) ? null : () {
+          onPressed: () {
+            // Validation
+            if (_isDirectTransfer) {
+              if (_selectedBatchId == null || _weightController.text.isEmpty) return;
+            } else {
+              if (_selectedCutIds.isEmpty || selectedBatch == null) return;
+              if (!_isThirdParty && _destination == null) return;
+            }
+
             final List<StockTransfer> transfersList = [];
             final now = DateTime.now();
 
-            for (final cutId in _selectedCutIds) {
-              final cut = availableCuts.firstWhere((c) => c.id == cutId);
+            if (_isDirectTransfer) {
+              final weight = double.tryParse(_weightController.text) ?? 0.0;
               final String timestamp = now.millisecondsSinceEpoch.toString();
-              final String suffix = timestamp.substring(timestamp.length - 10);
-              final String indexStr = transfersList.length.toString().padLeft(2, '0');
+              final String suffix = timestamp.substring(timestamp.length - 12);
               
               transfersList.add(StockTransfer(
-                id: '00000000-0000-0000-0000-$suffix$indexStr',
-                batchId: cut.batchId,
-                meatType: '${selectedBatch.meatType} - ${cut.name}',
-                weight: cut.weight,
-                destination: _destination!,
+                id: '00000000-0000-0000-0000-$suffix',
+                batchId: 'DIRECT',
+                meatType: _selectedBatchId!, // This is the product name
+                weight: weight,
+                destination: _isThirdParty ? 'Third Party: ${_thirdPartyCustomerController.text}' : 'Cold Room',
                 transferTime: now,
+                isThirdParty: _isThirdParty,
+                status: _isThirdParty ? TransferStatus.awaitingPayment : TransferStatus.pending,
               ));
+            } else {
+              for (final cutId in _selectedCutIds) {
+                final cut = availableCuts.firstWhere((c) => c.id == cutId);
+                final String timestamp = now.millisecondsSinceEpoch.toString();
+                final String suffix = timestamp.substring(timestamp.length - 10);
+                final String indexStr = transfersList.length.toString().padLeft(2, '0');
+                
+                transfersList.add(StockTransfer(
+                  id: '00000000-0000-0000-0000-$suffix$indexStr',
+                  batchId: cut.batchId,
+                  meatType: '${selectedBatch!.meatType} - ${cut.name}',
+                  weight: cut.weight,
+                  destination: _isThirdParty ? 'Third Party: ${_thirdPartyCustomerController.text}' : _destination!,
+                  transferTime: now,
+                  isThirdParty: _isThirdParty,
+                  status: _isThirdParty ? TransferStatus.awaitingPayment : TransferStatus.pending,
+                ));
+              }
             }
 
             ref.read(transferProvider.notifier).addTransfers(transfersList);
+            
+            // Notify CEO and Cashier
+            final meatDescription = _isDirectTransfer 
+                ? (_selectedBatchId ?? "Meat") 
+                : (selectedBatch?.meatType ?? "Meat");
+            final totalWeight = transfersList.fold(0.0, (sum, t) => sum + t.weight);
+
+            final msg = _isThirdParty 
+                ? 'URGENT: Third Party Transfer initiated. Butcher needs payment for ${totalWeight.toStringAsFixed(1)}kg of $meatDescription.'
+                : 'Stock Transfer to Retail: ${transfersList.length} items moved to Cold Room';
+            
+            ref.read(notificationProvider.notifier).addNotification('Stock Alert', msg);
+            SmsService.notifyAdmin(title: 'TRANSFER ALERT', message: msg);
+
             Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Transferred ${transfersList.length} items to $_destination')),
-            );
+            
+            // Show Barcode Alert Dialog
+            _showBarcodePrintPrompt(context, transfersList);
           },
           style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMaroon, foregroundColor: Colors.white),
-          child: Text(_selectedCutIds.length > 1 ? 'Confirm Bulk Transfer' : 'Confirm Transfer'),
+          child: Text(_isThirdParty ? 'Initiate Transfer & Notify' : 'Confirm Transfer'),
         ),
       ],
+    );
+  }
+
+  void _showBarcodePrintPrompt(BuildContext context, List<StockTransfer> transfers) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
+        title: const Row(
+          children: [
+            Icon(Icons.qr_code_2_rounded, color: AppColors.primaryMaroon),
+            SizedBox(width: 12),
+            Text('Attach Barcodes', style: TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Please print and attach the unique barcodes for these ${transfers.length} items to the package.'),
+            const SizedBox(height: 12),
+            const Text('The Receiver/Cashier will need to scan these to verify the stock receipt.', 
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.blue)),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context), 
+            child: const Text('I\'ll do it later')
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              LabelService.printMultipleTransferLabels(transfers);
+              Navigator.pop(context);
+            },
+            icon: const Icon(Icons.print),
+            label: const Text('PRINT ALL LABELS'),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMaroon, foregroundColor: Colors.white),
+          ),
+        ],
+      ),
     );
   }
 }

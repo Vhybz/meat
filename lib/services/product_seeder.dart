@@ -15,37 +15,58 @@ class ProductSeeder {
     
     final List<Map<String, List<String>>> data = [
       {
-        'Chicken': [
-          'Hard Thigh', 'Soft Thigh', 'Hard Breast', 'Soft Breast', 
-          'Hard Back', 'Soft Back', 'Hard Wings', 'Soft Wings', 
-          'Hard Half Chicken', 'Soft Half Chicken', 'Hard Whole Chicken', 
-          'Soft Whole Chicken', 'Hard Drumsticks', 'Soft Drumsticks'
+        'CHICKEN': [
+          'Hard Thigh (Layer)', 'Soft Thigh (Broiler)', 'Hard Breast (Layer)', 'Soft Breast (Broiler)', 
+          'Hard Back (Layer)', 'Soft Back (Broiler)', 'Hard Wings (Layer)', 'Soft Wings (Broiler)', 
+          'Hard Half Chicken (Layer)', 'Soft Half Chicken (Broiler)', 'Hard Whole Chicken (Layer)', 
+          'Soft Whole Chicken (Broiler)', 'Hard Drumsticks (Layer)', 'Soft Drumsticks (Broiler)'
         ]
       },
       {
-        'Beef': [
+        'BEEF': [
           'Mixed Meat', 'Boneless', 'Offals / Yemadeɛ', 'Beef Steak', 
           'Liver & Lungs', 'Grounded Meat', 'Feet', 'Head', 'Tail / Padua'
         ]
       },
       {
-        'Goat': [
+        'GOAT': [
           'Mixed Meat', 'Boneless', 'Offals / Yemadeɛ', 'Head', 'Feet'
         ]
       },
       {
-        'Pork': [
+        'SHEEP': [
+          'Mixed Meat', 'Boneless', 'Offals / Yemadeɛ', 'Head', 'Feet'
+        ]
+      },
+      {
+        'PORK': [
           'Mixed Meat', 'Boneless Meat', 'Offals / Yemadeɛ', 'Pork Steak', 
           'Head', 'Ear', 'Feet', 'Liver', 'Skin'
         ]
       },
+      {
+        'TURKEY': [
+          'Whole Turkey', 'Breast', 'Thighs', 'Drumsticks', 'Wings', 'Gizzards', 'Feet'
+        ]
+      },
+      {
+        'RABBIT': [
+          'Whole Rabbit', 'Legs', 'Saddle', 'Shoulders'
+        ]
+      }
     ];
+
+    // Get existing products to avoid duplicates
+    final existingProductsAsync = ref.read(productsFutureProvider);
+    final existingNames = existingProductsAsync.value?.map((p) => p.name.toLowerCase()).toSet() ?? {};
 
     for (var categoryMap in data) {
       final category = categoryMap.keys.first;
       final productNames = categoryMap.values.first;
 
       for (var name in productNames) {
+        if (existingNames.contains(name.toLowerCase())) continue;
+
         final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
         final String suffix = (timestamp.length > 12) ? timestamp.substring(timestamp.length - 12) : timestamp.padLeft(12, '0');
         final String validUuid = '00000000-0000-0000-0000-$suffix';
@@ -56,10 +77,11 @@ class ProductSeeder {
           name: name,
           retailPrice: 0.0,
           wholesalePrice: 0.0,
-          imageUrl: '', // Default empty, admin can upload later
+          costPrice: 0.0, // Initializing with zero as requested
+          imageUrl: '', 
           category: category,
           stockQuantity: 0.0,
-          unit: 'kg',
+          unit: (name.contains('Whole') || category == 'TURKEY' || category == 'RABBIT') ? 'unit' : 'kg',
         );
         
         await service.addProduct(product);

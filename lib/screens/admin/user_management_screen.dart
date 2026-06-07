@@ -6,11 +6,11 @@ import '../../core/constants.dart';
 import '../../services/user_provider.dart';
 import '../../models/user_model.dart';
 import '../../widgets/main_app_bar.dart';
-import '../../widgets/status_chip.dart';
 
 import '../../widgets/responsive_layout.dart';
 import '../../widgets/app_sidebar.dart';
 import '../../services/menu_service.dart';
+import '../../models/branch_model.dart';
 import '../../services/branch_provider.dart';
 import '../../widgets/role_pop_scope.dart';
 
@@ -36,6 +36,7 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
 
     final theme = Theme.of(context);
     final users = ref.watch(userProvider);
+    final branchesAsync = ref.watch(branchesProvider);
     final activeUsers = users.where((u) => !u.isDeleted).toList();
     final pendingUsers = activeUsers.where((u) => u.status == AccountStatus.pending).toList();
     final approvedUsers = activeUsers.where((u) => u.status != AccountStatus.pending).toList();
@@ -71,25 +72,30 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                 onTap: (route) => MenuService.navigate(context, route, currentRoute),
               ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(AppSpacing.l),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildHeader(context, ref),
-                    const SizedBox(height: AppSpacing.m),
-                    _buildSummaryInfo(context, activeUsers, pendingUsers),
-                    if (pendingUsers.isNotEmpty) ...[
-                      const SizedBox(height: AppSpacing.xl),
-                      Text('Pending Approvals', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.colorScheme.secondary)),
+              child: SafeArea(
+                top: false,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(AppSpacing.l),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(context, ref),
                       const SizedBox(height: AppSpacing.m),
-                      _buildPendingList(context, ref, pendingUsers),
+                      _buildSummaryInfo(context, activeUsers, pendingUsers),
+                      if (pendingUsers.isNotEmpty) ...[
+                        const SizedBox(height: AppSpacing.xl),
+                        Text('Pending Approvals', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.colorScheme.secondary)),
+                        const SizedBox(height: AppSpacing.m),
+                        _buildPendingList(context, ref, pendingUsers, branchesAsync.value ?? []),
+                      ],
+                      const SizedBox(height: AppSpacing.xl),
+                      Text('Team Members', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+                      const SizedBox(height: AppSpacing.m),
+                      _buildUserList(context, ref, approvedUsers, branchesAsync.value ?? []),
+                      // Add padding for bottom navigation bars
+                      const SizedBox(height: AppSpacing.xl),
                     ],
-                    const SizedBox(height: AppSpacing.xl),
-                    Text('Team Members', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
-                    const SizedBox(height: AppSpacing.m),
-                    _buildUserList(context, ref, approvedUsers),
-                  ],
+                  ),
                 ),
               ),
             ),
@@ -99,52 +105,129 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
     );
   }
 
-  Widget _buildPendingList(BuildContext context, WidgetRef ref, List<UserAccount> pending) {
+  Widget _buildPendingList(BuildContext context, WidgetRef ref, List<UserAccount> pending, List<Branch> branches) {
     final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.cardTheme.color,
+    return Column(
+      children: [
+        for (final user in pending)
+          _buildPendingUserCard(context, ref, user, branches, theme),
+      ],
+    );
+  }
+
+  Widget _buildPendingUserCard(BuildContext context, WidgetRef ref, UserAccount user, List<Branch> branches, ThemeData theme) {
+    final branch = branches.where((b) => b.code == user.branchCode).firstOrNull;
+    final branchDisplay = branch != null ? '${branch.name} (${branch.location})' : (user.branchCode ?? "HQ");
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: AppSpacing.m),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.m),
-        border: Border.all(color: theme.colorScheme.secondary.withValues(alpha: 0.3)),
+        side: BorderSide(color: theme.colorScheme.secondary.withValues(alpha: 0.2)),
       ),
-      child: ListView.separated(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: pending.length,
-        separatorBuilder: (context, index) => Divider(height: 1, color: theme.dividerColor),
-        itemBuilder: (context, index) {
-          final user = pending[index];
-          return ListTile(
-            contentPadding: const EdgeInsets.all(AppSpacing.m),
-            leading: CircleAvatar(
-              backgroundColor: theme.colorScheme.secondary.withValues(alpha: 0.1),
-              child: Icon(_getRoleIcon(user.role), color: theme.colorScheme.secondary),
-            ),
-            title: Text(user.name, style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('${user.role.name.toUpperCase()} • ${user.email}', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
-                Text('Branch: ${user.branchCode ?? "Global"} • Phone: ${user.phone ?? "N/A"}', style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant)),
-              ],
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.check_circle, color: Colors.green),
-                  onPressed: () => _confirmApproval(context, ref, user),
+      child: InkWell(
+        onTap: () => _showUserDetails(context, user),
+        borderRadius: BorderRadius.circular(AppRadius.m),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.m),
+          child: Row(
+            children: [
+              _buildAvatar(context, user, size: 50),
+              const SizedBox(width: AppSpacing.m),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(user.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    const SizedBox(height: 2),
+                    Text('${user.role.name.toUpperCase()} • $branchDisplay • ${user.email}',
+                      style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant)),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.secondary.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text('WAITING FOR APPROVAL', 
+                        style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900, color: theme.colorScheme.secondary, letterSpacing: 0.5)),
+                    ),
+                  ],
                 ),
-                IconButton(
-                  icon: const Icon(Icons.cancel, color: Colors.red),
-                  onPressed: () => _confirmDelete(context, ref, user),
-                ),
-              ],
-            ),
-            onTap: () => _showUserDetails(context, user),
-          );
-        },
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _circleIconButton(
+                    icon: Icons.check_rounded, 
+                    color: Colors.green, 
+                    onPressed: () => _confirmApproval(context, ref, user),
+                    tooltip: 'Approve',
+                  ),
+                  const SizedBox(width: 8),
+                  _circleIconButton(
+                    icon: Icons.close_rounded, 
+                    color: Colors.red, 
+                    onPressed: () => _confirmDelete(context, ref, user),
+                    tooltip: 'Reject',
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
+    );
+  }
+
+  Widget _buildAvatar(BuildContext context, UserAccount user, {double size = 40}) {
+    final roleColor = _getRoleColor(user.activePrimaryRole);
+    
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: roleColor.withValues(alpha: 0.2), width: 2),
+      ),
+      child: ClipOval(
+        child: user.photoUrl != null && user.photoUrl!.isNotEmpty
+            ? Image.network(
+                user.photoUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => _fallbackAvatar(user, roleColor, size),
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return const Center(child: SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2)));
+                },
+              )
+            : _fallbackAvatar(user, roleColor, size),
+      ),
+    );
+  }
+
+  Widget _fallbackAvatar(UserAccount user, Color color, double size) {
+    return Container(
+      color: color.withValues(alpha: 0.1),
+      child: Icon(_getRoleIcon(user.activePrimaryRole), color: color, size: size * 0.5),
+    );
+  }
+
+  Widget _circleIconButton({required IconData icon, required Color color, required VoidCallback onPressed, String? tooltip}) {
+    return IconButton(
+      onPressed: onPressed,
+      tooltip: tooltip,
+      icon: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.1),
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: color, size: 20),
+      ),
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(),
     );
   }
 
@@ -188,9 +271,9 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Expanded(
-          flex: isMobile ? 0 : 1,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
               Text('Staff & Access Control', 
                 style: TextStyle(fontSize: isMobile ? 20 : 24, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface),
@@ -266,10 +349,9 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
     );
   }
 
-  Widget _buildUserList(BuildContext context, WidgetRef ref, List<UserAccount> users) {
+  Widget _buildUserList(BuildContext context, WidgetRef ref, List<UserAccount> users, List<Branch> branches) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
-    final isMobile = ResponsiveLayout.isMobile(context);
 
     if (users.isEmpty) {
       return Container(
@@ -284,130 +366,120 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
           children: [
             Icon(Icons.people_outline, size: 48, color: theme.dividerColor),
             const SizedBox(height: AppSpacing.m),
-            Text('No staff members found in this branch.', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+            Text('No staff members found.', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
           ],
         ),
       );
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.cardTheme.color,
-        borderRadius: BorderRadius.circular(AppRadius.m),
-        boxShadow: [
-          if (!isDark) BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10)
-        ],
-        border: isDark ? Border.all(color: theme.dividerColor) : null,
-      ),
-      child: Column(
-        children: [
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: users.length,
-            separatorBuilder: (context, index) => Divider(height: 1, color: theme.dividerColor),
-            itemBuilder: (context, index) {
-              final user = users[index];
-              final isSuspended = user.status == AccountStatus.suspended;
-              final effectiveRole = user.activePrimaryRole;
-              final isPromoted = user.hasActivePromotion;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final crossAxisCount = constraints.maxWidth > 1200 ? 3 : (constraints.maxWidth > 800 ? 2 : 1);
+        
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: users.length,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: crossAxisCount,
+            crossAxisSpacing: AppSpacing.m,
+            mainAxisSpacing: AppSpacing.m,
+            childAspectRatio: 2.8,
+          ),
+          itemBuilder: (context, index) {
+            final user = users[index];
+            final isSuspended = user.status == AccountStatus.suspended;
+            final role = user.activePrimaryRole;
+            final roleColor = _getRoleColor(role);
+            final branch = branches.where((b) => b.code == user.branchCode).firstOrNull;
+            final branchDisplay = branch != null ? '${branch.name} (${branch.location})' : (user.branchCode ?? "HQ");
 
-              return ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.l, vertical: AppSpacing.m),
-                leading: Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: isMobile ? 22 : 26,
-                      backgroundColor: _getRoleColor(effectiveRole).withValues(alpha: isSuspended ? 0.05 : 0.1),
-                      child: Icon(_getRoleIcon(effectiveRole), color: _getRoleColor(effectiveRole).withValues(alpha: isSuspended ? 0.3 : 1.0), size: isMobile ? 20 : 24),
-                    ),
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        width: 10,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: isSuspended ? Colors.red : Colors.green,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: theme.cardTheme.color!, width: 2),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                title: Row(
-                  children: [
-                    Flexible(
-                      child: Text(user.name, 
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold, 
-                          fontSize: isMobile ? 14 : 16,
-                          color: isSuspended ? theme.colorScheme.onSurfaceVariant : theme.colorScheme.onSurface,
-                          decoration: isSuspended ? TextDecoration.lineThrough : null,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    if (isPromoted) ...[
-                      const StatusChip(label: 'PROMO', color: Colors.purple),
-                      const SizedBox(width: 4),
-                    ],
-                  ],
-                ),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 4),
-                    Text(user.email, 
-                      style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 10),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    FittedBox(
-                      fit: BoxFit.scaleDown,
-                      alignment: Alignment.centerLeft,
-                      child: Row(
+            return Card(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.m),
+                side: BorderSide(color: isDark ? theme.dividerColor : Colors.grey.shade200),
+              ),
+              child: InkWell(
+                onTap: () => _showUserDetails(context, user),
+                borderRadius: BorderRadius.circular(AppRadius.m),
+                child: Padding(
+                  padding: const EdgeInsets.all(AppSpacing.m),
+                  child: Row(
+                    children: [
+                      Stack(
                         children: [
-                          Icon(Icons.map_outlined, size: 10, color: theme.colorScheme.onSurfaceVariant),
-                          const SizedBox(width: 4),
-                          Text(user.branchCode ?? "Global HQ", style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 10)),
-                          const SizedBox(width: 12),
-                          Icon(Icons.phone_outlined, size: 10, color: theme.colorScheme.onSurfaceVariant),
-                          const SizedBox(width: 4),
-                          Text(user.phone ?? "No Phone", style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 10)),
+                          _buildAvatar(context, user, size: 55),
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              width: 12,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: user.isOnline ? Colors.green : Colors.grey.shade400,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: theme.cardTheme.color!, width: 2),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
-                    ),
-                  ],
-                ),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (!isMobile)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: _getRoleColor(effectiveRole).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: _getRoleColor(effectiveRole).withValues(alpha: 0.3)),
-                        ),
-                        child: Text(
-                          effectiveRole.name.toUpperCase(),
-                          style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: _getRoleColor(effectiveRole), letterSpacing: 0.5),
+                      const SizedBox(width: AppSpacing.m),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Text(
+                              user.name, 
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold, 
+                                fontSize: 15,
+                                color: isSuspended ? theme.colorScheme.onSurfaceVariant : theme.colorScheme.onSurface,
+                                decoration: isSuspended ? TextDecoration.lineThrough : null,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              role.name.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 9, 
+                                fontWeight: FontWeight.w900, 
+                                color: roleColor,
+                                letterSpacing: 0.5
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Row(
+                                children: [
+                                  Icon(Icons.map_outlined, size: 10, color: theme.colorScheme.onSurfaceVariant),
+                                  const SizedBox(width: 4),
+                                  Text(branchDisplay, style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 10)),
+                                  const SizedBox(width: 8),
+                                  Icon(Icons.phone_outlined, size: 10, color: theme.colorScheme.onSurfaceVariant),
+                                  const SizedBox(width: 4),
+                                  Text(user.phone ?? "N/A", style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 10)),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    const SizedBox(width: 4),
-                    _buildUserActionMenu(context, ref, user, isSuspended, isPromoted),
-                  ],
+                      _buildUserActionMenu(context, ref, user, isSuspended, user.hasActivePromotion),
+                    ],
+                  ),
                 ),
-                onTap: () => _showUserDetails(context, user),
-              );
-            },
-          ),
-        ],
-      ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -564,6 +636,8 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
     List<UserRole> selectedSecondary = List.from(user.secondaryRoles);
     Set<String> selectedPermissions = Set.from(user.enabledPermissions);
     String? selectedBranchCode = user.branchCode;
+    final salaryController = TextEditingController(text: user.salaryAmount?.toString() ?? '');
+    int? selectedSalaryDay = user.salaryDay;
     bool isSaving = false;
 
     showDialog(
@@ -595,51 +669,55 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
               ],
             ),
           ),
-          content: SizedBox(
-            width: 500,
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildSectionHeader(context, 'ASSIGNED BRANCH', Icons.map_outlined),
-                  Consumer(
-                    builder: (context, ref, _) {
-                      final branchesAsync = ref.watch(branchesProvider);
-                      final isSuperAdmin = currentUser?.role == UserRole.superAdmin;
-                      
-                      return branchesAsync.when(
-                        data: (branches) => DropdownButtonFormField<String>(
-                          initialValue: selectedBranchCode,
-                          decoration: InputDecoration(
-                            border: const OutlineInputBorder(), 
-                            isDense: true, 
-                            helperText: isSuperAdmin ? null : 'Branch transfers require Super Admin access',
+          content: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.95),
+            child: SizedBox(
+              width: 500,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildSectionHeader(context, 'ASSIGNED BRANCH', Icons.map_outlined),
+                    Consumer(
+                      builder: (context, ref, _) {
+                        final branchesAsync = ref.watch(branchesProvider);
+                        final isSuperAdmin = currentUser?.role == UserRole.superAdmin;
+                        
+                        return branchesAsync.when(
+                          data: (branches) => DropdownButtonFormField<String>(
+                            isExpanded: true,
+                            initialValue: selectedBranchCode,
+                            decoration: InputDecoration(
+                              border: const OutlineInputBorder(), 
+                              isDense: true, 
+                              helperText: isSuperAdmin ? null : 'Branch transfers require Super Admin access',
+                            ),
+                            items: branches.map((b) => DropdownMenuItem(
+                              value: b.code, 
+                              child: Text('${b.name} (${b.location})', overflow: TextOverflow.ellipsis)
+                            )).toList(),
+                            onChanged: isSuperAdmin ? (v) => setState(() => selectedBranchCode = v) : null,
                           ),
-                          items: branches.map((b) => DropdownMenuItem(
-                            value: b.code, 
-                            child: Text('${b.name} (${b.location})')
-                          )).toList(),
-                          onChanged: isSuperAdmin ? (v) => setState(() => selectedBranchCode = v) : null,
-                        ),
-                        loading: () => const LinearProgressIndicator(),
-                        error: (err, _) => const Text('Error loading branches', style: TextStyle(color: Colors.red, fontSize: 11)),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 24),
-                  _buildSectionHeader(context, 'PRIMARY SYSTEM ROLE', Icons.work_outline),
-                  DropdownButtonFormField<UserRole>(
-                    initialValue: selectedPrimary,
-                    decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
-                    items: UserRole.values
-                        .map((r) => DropdownMenuItem(value: r, child: Text(r.name.toUpperCase())))
-                        .toList(),
-                    onChanged: (v) => setState(() {
-                      selectedPrimary = v!;
-                      if (v == UserRole.admin) selectedPermissions.add('/admin');
-                    }),
-                  ),
+                          loading: () => const LinearProgressIndicator(),
+                          error: (err, _) => const Text('Error loading branches', style: TextStyle(color: Colors.red, fontSize: 11)),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    _buildSectionHeader(context, 'PRIMARY SYSTEM ROLE', Icons.work_outline),
+                    DropdownButtonFormField<UserRole>(
+                      isExpanded: true,
+                      initialValue: selectedPrimary,
+                      decoration: const InputDecoration(border: OutlineInputBorder(), isDense: true),
+                      items: UserRole.values
+                          .map((r) => DropdownMenuItem(value: r, child: Text(r.name.toUpperCase(), overflow: TextOverflow.ellipsis)))
+                          .toList(),
+                      onChanged: (v) => setState(() {
+                        selectedPrimary = v!;
+                        if (v == UserRole.admin) selectedPermissions.add('/admin');
+                      }),
+                    ),
                   const SizedBox(height: 24),
                   _buildSectionHeader(context, 'SPECIFIC MENU ACCESS', Icons.menu_open_rounded),
                   Container(
@@ -692,16 +770,53 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                       checkmarkColor: theme.colorScheme.primary,
                     )).toList(),
                   ),
+                  const SizedBox(height: 24),
+                  _buildSectionHeader(context, 'SALARY CONFIGURATION', Icons.monetization_on_outlined),
+                  Column(
+                    children: [
+                      TextFormField(
+                        controller: salaryController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: 'Monthly Salary (GHS)',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                          prefixText: '₵ ',
+                        ),
+                        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<int>(
+                        isExpanded: true,
+                        initialValue: selectedSalaryDay,
+                        decoration: const InputDecoration(
+                          labelText: 'Pay Day',
+                          border: OutlineInputBorder(),
+                          isDense: true,
+                        ),
+                        items: List.generate(31, (i) => i + 1)
+                            .map((d) => DropdownMenuItem(value: d, child: Text('Day $d')))
+                            .toList(),
+                        onChanged: (v) => setState(() => selectedSalaryDay = v),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
           ),
-          actions: [
-            TextButton(onPressed: isSaving ? null : () => Navigator.pop(context), child: Text('Cancel', style: TextStyle(color: theme.colorScheme.onSurfaceVariant))),
+        ),
+        actions: [
+            TextButton(
+              onPressed: isSaving ? null : () => Navigator.pop(context), 
+              child: Text('Cancel', style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+            ),
             ElevatedButton(
               onPressed: isSaving ? null : () async {
                 setState(() => isSaving = true);
                 try {
+                  final double? salaryAmt = double.tryParse(salaryController.text);
+                  
                   await ref.read(userProvider.notifier).updateRoles(
                     user.id,
                     primaryRole: selectedPrimary,
@@ -709,6 +824,11 @@ class _UserManagementScreenState extends ConsumerState<UserManagementScreen> {
                   );
                   await ref.read(userProvider.notifier).updateProfile(user.id, branchCode: selectedBranchCode);
                   await ref.read(userProvider.notifier).setPermissions(user.id, selectedPermissions);
+                  await ref.read(userProvider.notifier).updateSalary(
+                    user.id,
+                    amount: salaryAmt,
+                    day: selectedSalaryDay,
+                  );
 
                   if (context.mounted) {
                     Navigator.pop(context);

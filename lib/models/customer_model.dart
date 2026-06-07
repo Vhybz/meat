@@ -54,14 +54,16 @@ class Customer {
     );
   }
 
-  Map<String, dynamic> toJson() => {
-    'id': id,
-    'branch_code': branchCode,
-    'name': name,
-    'phone': phone,
-    'location': location,
-    'is_favorite': isFavorite,
-    'loyalty_points': loyaltyPoints,
-    'visit_count': visitCount,
-  };
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'branch_code': branchCode,
+      'name': name,
+      'phone': phone,
+      'location': location,
+      'is_favorite': isFavorite,
+      'loyalty_points': loyaltyPoints,
+      'visit_count': visitCount,
+    };
+  }
 }

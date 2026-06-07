@@ -3,7 +3,7 @@ import '../../widgets/app_sidebar.dart';
 import '../../models/user_model.dart';
 
 List<SidebarItem> getAdminMenuItems(UserAccount? user) {
-  final defaultCoreRoutes = {'/admin', '/admin/settings', '/admin/users'};
+  final defaultCoreRoutes = {'/admin', '/admin/settings', '/admin/users', '/admin/salaries'};
 
   final allItems = [
     SidebarItem(icon: Icons.dashboard_rounded, label: 'Dashboard', route: '/admin'),
@@ -13,6 +13,7 @@ List<SidebarItem> getAdminMenuItems(UserAccount? user) {
     SidebarItem(icon: Icons.people_outline_rounded, label: 'Customer Directory', route: '/admin/customers'),
     SidebarItem(icon: Icons.account_balance_wallet_rounded, label: 'Debt Tracker', route: '/admin/debts'),
     SidebarItem(icon: Icons.inventory_2_rounded, label: 'Inventory Control', route: '/admin/stock'),
+    SidebarItem(icon: Icons.payments_rounded, label: 'Salary Management', route: '/admin/salaries'),
     SidebarItem(icon: Icons.people_alt_rounded, label: 'Staff Management', route: '/admin/users'),
     SidebarItem(icon: Icons.settings_suggest_rounded, label: 'System Settings', route: '/admin/settings'),
   ];

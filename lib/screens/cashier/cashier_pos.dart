@@ -16,6 +16,8 @@ import '../../services/sale_provider.dart';
 import '../../services/customer_provider.dart';
 import '../../services/menu_service.dart';
 import '../../services/user_provider.dart';
+import '../../services/expense_provider.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../models/transfer_models.dart';
 import '../../models/sale_model.dart';
 import '../../models/product.dart';
@@ -24,6 +26,7 @@ import '../../models/user_model.dart';
 import '../../services/receipt_service.dart';
 import '../../services/sms_service.dart';
 import '../../widgets/role_pop_scope.dart';
+import '../../services/birthday_service.dart';
 
 enum POSView { sales, history }
 
@@ -37,7 +40,6 @@ class CashierPOS extends ConsumerStatefulWidget {
 class _CashierPOSState extends ConsumerState<CashierPOS> {
   POSView _currentView = POSView.sales;
   String _selectedCategory = 'All';
-  final List<String> _categories = ['All', 'Beef', 'Pork', 'Chicken', 'Goat', 'Others'];
   
   String _productSearchQuery = '';
   String _historySearchQuery = '';
@@ -45,11 +47,19 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
 
   // Selected customer for the current sale
   Customer? _selectedCustomer;
+  String? _uploadedReceiptUrl;
 
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(currentUserProvider);
     if (user == null) return const Center(child: CircularProgressIndicator());
+
+    // Check for Birthday
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.mounted) {
+        BirthdayService.checkAndShowBirthdayWish(context, user);
+      }
+    });
 
     // Instant Permission Guard: Redirect if access is revoked
     final roles = user.activeRoles;
@@ -71,6 +81,18 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
         .toList();
     final isWholesale = ref.watch(isWholesaleProvider);
     final menuItems = ref.watch(menuItemsProvider);
+
+    // Safety: Reset selected category if it no longer exists after deletions
+    final productsAsync = ref.watch(productsFutureProvider);
+    if (productsAsync.hasValue) {
+      final products = productsAsync.value!;
+      final availableCategories = ['All', ...products.where((p) => !p.isDeleted).map((p) => p.category.toUpperCase()).toSet()];
+      if (!availableCategories.contains(_selectedCategory.toUpperCase()) && _selectedCategory != 'All') {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _selectedCategory = 'All');
+        });
+      }
+    }
 
     return RolePopScope(
       currentRoute: '/cashier',
@@ -100,49 +122,49 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
               _buildNotificationBadge(pendingTransfers),
             ],
           ),
-        drawer: isDesktop ? null : Drawer(child: _buildSidebar(context, user, menuItems)),
-        body: Row(
-          children: [
-            if (isDesktop) _buildSidebar(context, user, menuItems),
-            Expanded(
-              child: _currentView == POSView.sales 
-                ? _buildPOSLayout(isMobile, isDesktop)
-                : _buildHistoryLayout(),
-            ),
-          ],
-        ),
-        bottomNavigationBar: SafeArea(child: _buildFooter()),
-        floatingActionButton: (isMobile && _currentView == POSView.sales)
-            ? SafeArea(
-                child: FloatingActionButton.extended(
-                  onPressed: () => _showMobileCart(),
-                  label: const Text('View Cart'),
-                  icon: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      const Icon(Icons.shopping_cart),
-                      if (ref.watch(cartProvider).isNotEmpty)
-                        Positioned(
-                          right: -8,
-                          top: -8,
-                          child: CircleAvatar(
-                            radius: 8,
-                            backgroundColor: Colors.red,
-                            child: Text(
-                              '${ref.watch(cartProvider).length}',
-                              style: const TextStyle(color: Colors.white, fontSize: 8),
+          drawer: isDesktop ? null : Drawer(child: _buildSidebar(context, user, menuItems)),
+          body: Row(
+            children: [
+              if (isDesktop) _buildSidebar(context, user, menuItems),
+              Expanded(
+                child: _currentView == POSView.sales 
+                  ? _buildPOSLayout(isMobile, isDesktop)
+                  : _buildHistoryLayout(),
+              ),
+            ],
+          ),
+          bottomNavigationBar: SafeArea(child: _buildFooter()),
+          floatingActionButton: (isMobile && _currentView == POSView.sales)
+              ? SafeArea(
+                  child: FloatingActionButton.extended(
+                    onPressed: () => _showMobileCart(),
+                    label: const Text('View Cart'),
+                    icon: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        const Icon(Icons.shopping_cart),
+                        if (ref.watch(cartProvider).isNotEmpty)
+                          Positioned(
+                            right: -8,
+                            top: -8,
+                            child: CircleAvatar(
+                              radius: 8,
+                              backgroundColor: Colors.red,
+                              child: Text(
+                                '${ref.watch(cartProvider).length}',
+                                style: const TextStyle(color: Colors.white, fontSize: 8),
+                              ),
                             ),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
+                    backgroundColor: theme.colorScheme.primary,
+                    foregroundColor: theme.colorScheme.onPrimary,
                   ),
-                  backgroundColor: AppColors.primaryMaroon,
-                  foregroundColor: Colors.white,
-                ),
-              )
-            : null,
+                )
+              : null,
+        ),
       ),
-    ),
     );
   }
 
@@ -249,19 +271,72 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
     final isWholesale = ref.watch(isWholesaleProvider);
     int crossAxisCount = ResponsiveLayout.isMobile(context) ? 2 : (ResponsiveLayout.isTablet(context) ? 3 : 4);
 
+    // Define the official catalog allowed for the POS
+    const Map<String, List<String>> allowedCatalog = {
+      'CHICKEN': [
+        'Hard Thigh', 'Soft Thigh', 'Hard Breast', 'Soft Breast', 
+        'Hard Back', 'Soft Back', 'Hard Wings', 'Soft Wings', 
+        'Hard Half Chicken', 'Soft Half Chicken', 'Hard Whole Chicken', 
+        'Soft Whole Chicken', 'Hard Drumsticks', 'Soft Drumsticks',
+        'Layer', 'Broiler'
+      ],
+      'BEEF': [
+        'Mixed Meat', 'Boneless', 'Offals / Yemadeɛ', 'Beef Steak', 
+        'Liver & Lungs', 'Grounded Meat', 'Feet', 'Head', 'Tail / Padua'
+      ],
+      'GOAT': ['Mixed Meat', 'Boneless', 'Offals / Yemadeɛ', 'Head', 'Feet'],
+      'PORK': [
+        'Mixed Meat', 'Boneless Meat', 'Offals / Yemadeɛ', 'Pork Steak', 
+        'Head', 'Ear', 'Feet', 'Liver', 'Skin'
+      ],
+    };
+
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.m),
       child: Column(
         children: [
-          _buildPOSControls(),
+          // Build controls with ALL standard categories always visible
+          _buildPOSControls(['All', ...allowedCatalog.keys]),
           const SizedBox(height: AppSpacing.m),
           Expanded(
             child: productsAsync.when(
               data: (products) {
                 final filtered = products
                     .where((p) => !p.isDeleted)
-                    .where((p) => _selectedCategory == 'All' || p.category == _selectedCategory)
-                    .where((p) => p.name.toLowerCase().contains(_productSearchQuery.toLowerCase()))
+                    .where((p) {
+                      // STAGE 1: Standardize Category
+                      String cat = p.category.toUpperCase();
+                      String mappedCat = '';
+                      
+                      if (cat.contains('CHICKEN')) {
+                        mappedCat = 'CHICKEN';
+                      } else if (cat.contains('BEEF')) {
+                        mappedCat = 'BEEF';
+                      } else if (cat.contains('GOAT')) {
+                        mappedCat = 'GOAT';
+                      } else if (cat.contains('PORK')) {
+                        mappedCat = 'PORK';
+                      } else if (cat.contains('LAMB')) {
+                        mappedCat = 'GOAT'; // Lamb is often grouped with goat/sheep
+                      }
+                      
+                      // If category doesn't match our core list, hide it from POS
+                      if (mappedCat.isEmpty) return false;
+                      
+                      // STAGE 2: Check if Product Name is allowed in that category
+                      // We use 'contains' for name matching to handle variations like "Hard Thigh (Layer)"
+                      final bool isAllowedName = allowedCatalog[mappedCat]!.any((allowedName) => 
+                        p.name.toUpperCase().contains(allowedName.toUpperCase())
+                      );
+                      
+                      if (!isAllowedName) return false;
+
+                      // STAGE 3: UI Search & Category Filters
+                      final matchesCategory = _selectedCategory == 'All' || mappedCat == _selectedCategory;
+                      final matchesSearch = p.name.toLowerCase().contains(_productSearchQuery.toLowerCase());
+                      
+                      return matchesCategory && matchesSearch;
+                    })
                     .toList();
                 
                 if (filtered.isEmpty) {
@@ -280,15 +355,23 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
                     final product = filtered[index];
                     final hasPromo = product.isPromoActiveFor(isWholesale, _selectedCustomer);
                     final currentPrice = product.getPrice(isWholesale, customer: _selectedCustomer);
+                    final isPriced = currentPrice > 0.01;
 
                     return ProductCard(
                       name: product.name,
                       category: product.category,
-                      price: '₵${currentPrice.toStringAsFixed(2)}/${product.unit}',
+                      price: isPriced ? '₵${currentPrice.toStringAsFixed(2)}/${product.unit}' : 'UNPRICED',
                       originalPrice: hasPromo ? '₵${(isWholesale ? product.wholesalePrice : product.retailPrice).toStringAsFixed(2)}' : null,
+                      stockQuantity: product.stockQuantity,
+                      lowStockThreshold: product.lowStockThreshold,
+                      unit: product.unit,
                       promoLabel: hasPromo ? '${product.discountPercentage.toInt()}% OFF' : null,
                       imageUrl: product.imageUrl,
-                      onTap: () => _showWeightInputDialog(product),
+                      onTap: isPriced ? () => _showWeightInputDialog(product) : () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('This product is not yet priced. Please contact Admin.')),
+                        );
+                      },
                     );
                   },
                 );
@@ -302,7 +385,7 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
     );
   }
 
-  Widget _buildPOSControls() {
+  Widget _buildPOSControls(List<String> categories) {
     final isWholesale = ref.watch(isWholesaleProvider);
     final theme = Theme.of(context);
     final isMobile = ResponsiveLayout.isMobile(context);
@@ -332,7 +415,7 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
               const SizedBox(width: AppSpacing.m),
               SizedBox(
                 width: 200,
-                child: _buildCategoryDropdown(),
+                child: _buildCategoryDropdown(categories),
               ),
             ],
           ],
@@ -362,7 +445,7 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
               const SizedBox(width: AppSpacing.s),
               SizedBox(
                 width: 120,
-                child: _buildCategoryDropdown(),
+                child: _buildCategoryDropdown(categories),
               ),
             ],
           ],
@@ -371,13 +454,21 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
     );
   }
 
-  Widget _buildCategoryDropdown() {
+  Widget _buildCategoryDropdown(List<String> categories) {
     return DropdownButtonFormField<String>(
       initialValue: _selectedCategory,
+      isExpanded: true, // Crucial for preventing internal overflow
       decoration: const InputDecoration(
         contentPadding: EdgeInsets.symmetric(horizontal: 12),
+        isDense: true,
       ),
-      items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis))).toList(),
+      items: categories.map((c) => DropdownMenuItem(
+        value: c, 
+        child: Text(c, 
+          style: const TextStyle(fontSize: 12), 
+          overflow: TextOverflow.ellipsis
+        )
+      )).toList(),
       onChanged: (v) => setState(() {
         _selectedCategory = v!;
         _productSearchQuery = ''; 
@@ -612,7 +703,10 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
       barrierDismissible: false,
       builder: (context) => PaymentDialog(
         totalAmount: finalTotal,
-        onComplete: (payments) => _completeSale(ref, payments, finalTotal, discount, promo),
+        onComplete: (payments, receiptUrl) {
+          setState(() => _uploadedReceiptUrl = receiptUrl);
+          _completeSale(ref, payments, finalTotal, discount, promo);
+        },
       ),
     );
   }
@@ -623,6 +717,7 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
     
     final double amountPaid = payments.fold(0.0, (sum, p) => sum + p.amount);
     final double balance = finalTotal - amountPaid;
+    final double totalCost = cartItems.fold(0.0, (sum, item) => sum + (item.product.costPrice * item.quantity));
 
     // Debt Enforcement: If there's a balance, a customer MUST be selected
     if (balance > 0.01 && _selectedCustomer == null) {
@@ -632,6 +727,8 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
       // If they registered/selected a customer, _selectedCustomer will be non-null now
       if (_selectedCustomer == null) return; 
     }
+
+    final hasBankDeposit = payments.any((p) => p.method == PaymentMethod.bankDeposit);
 
     final sale = SaleRecord(
       id: 'INV-${DateTime.now().millisecondsSinceEpoch}',
@@ -643,6 +740,7 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
       )).toList(),
       totalAmount: finalTotal,
       totalDiscount: discount,
+      totalCost: totalCost,
       appliedPromo: promo.isEmpty ? null : promo,
       payments: payments,
       timestamp: DateTime.now(),
@@ -650,6 +748,8 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
       cashierId: currentUser?.id ?? 'N/A',
       customerName: _selectedCustomer?.name,
       customerPhone: _selectedCustomer?.phone,
+      status: hasBankDeposit ? SaleStatus.awaitingDeposit : SaleStatus.completed,
+      bankReceiptUrl: _uploadedReceiptUrl,
     );
 
     await ref.read(saleHistoryProvider.notifier).addSale(sale);
@@ -660,6 +760,7 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
 
     setState(() {
       _selectedCustomer = null;
+      _uploadedReceiptUrl = null;
     });
 
     _showPrintConfirmation(sale);
@@ -796,7 +897,7 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
                   child: TextField(
                     onChanged: (v) => setState(() => _historySearchQuery = v),
                     decoration: InputDecoration(
-                      hintText: 'Search Receipt #...',
+                      hintText: 'Search Receipt # or Customer Name...',
                       prefixIcon: const Icon(Icons.search, size: 20),
                       isDense: true,
                       contentPadding: const EdgeInsets.symmetric(vertical: 8),
@@ -1047,7 +1148,11 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
                               children: [
                                 Row(
                                   children: [
-                                    Icon(p.method == PaymentMethod.cash ? Icons.money : Icons.smartphone, size: 14, color: theme.colorScheme.onSurfaceVariant),
+                                    Icon(
+                                      p.method == PaymentMethod.cash ? Icons.money : 
+                                      (p.method == PaymentMethod.mobileMoney ? Icons.smartphone : Icons.account_balance), 
+                                      size: 14, color: theme.colorScheme.onSurfaceVariant
+                                    ),
                                     const SizedBox(width: 8),
                                     Text(p.method.name.toUpperCase(), style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurface)),
                                     if (p.reference != null)
@@ -1061,6 +1166,38 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
                           if (sale.balance > 0.01) ...[
                              const SizedBox(height: 8),
                              _detailRow('BALANCE DUE', '₵${sale.balance.toStringAsFixed(2)}', color: Colors.red, isBold: true),
+                          ],
+                          if (sale.bankReceiptUrl != null) ...[
+                            const Divider(height: 32),
+                            Text('BANK DEPOSIT RECEIPT', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 12),
+                            InkWell(
+                              onTap: () => _viewBankReceipt(sale.bankReceiptUrl!, receiptId: sale.bankReceiptId),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: theme.dividerColor),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.image_outlined, size: 20, color: Colors.purple),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text('View Uploaded Receipt', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.purple)),
+                                          if (sale.bankReceiptId != null)
+                                            Text('ID: ${sale.bankReceiptId}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                        ],
+                                      ),
+                                    ),
+                                    const Icon(Icons.open_in_new, size: 16, color: Colors.purple),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ],
                         ],
                       ),
@@ -1078,6 +1215,36 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
                       spacing: 8,
                       overflowSpacing: 8,
                       children: [
+                        if (sale.status == SaleStatus.awaitingDeposit)
+                          ElevatedButton.icon(
+                            onPressed: () => _showBankReceiptUploadDialog(sale),
+                            icon: const Icon(Icons.upload_file, size: 16),
+                            label: const Text('UPLOAD RECEIPT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.purple,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              minimumSize: Size.zero,
+                            ),
+                          ),
+                        if (!sale.isVerified && sale.status != SaleStatus.awaitingDeposit)
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              ref.read(saleHistoryProvider.notifier).verifySale(sale.id);
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Transaction Verified. Inventory updated.'), backgroundColor: Colors.green),
+                              );
+                            },
+                            icon: const Icon(Icons.check_circle_outline, size: 16),
+                            label: const Text('VERIFY', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              minimumSize: Size.zero,
+                            ),
+                          ),
                         if (sale.status == SaleStatus.completed)
                           TextButton.icon(
                             onPressed: () => _showReportErrorDialog(sale),
@@ -1117,6 +1284,171 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
             ),
           );
         }
+      ),
+    );
+  }
+
+  void _showBankReceiptUploadDialog(SaleRecord sale) {
+    final receiptIdController = TextEditingController();
+    Uint8List? selectedImageBytes;
+    bool isUploading = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
+          title: const Row(
+            children: [
+              Icon(Icons.account_balance, color: Colors.purple),
+              SizedBox(width: 12),
+              Text('Complete Bank Deposit'),
+            ],
+          ),
+          content: SizedBox(
+            width: 400,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Please provide the bank transaction reference/ID and a photo of the deposit slip.',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 24),
+                TextField(
+                  controller: receiptIdController,
+                  decoration: const InputDecoration(
+                    labelText: 'Bank Receipt ID / Reference',
+                    hintText: 'e.g. UMB-123456',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.tag),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                InkWell(
+                  onTap: () async {
+                    final picker = ImagePicker();
+                    final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+                    if (image != null) {
+                      final bytes = await image.readAsBytes();
+                      setState(() => selectedImageBytes = bytes);
+                    }
+                  },
+                  child: Container(
+                    height: 150,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.withValues(alpha: 0.05),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: selectedImageBytes != null ? Colors.purple : Colors.grey.shade300),
+                    ),
+                    child: selectedImageBytes != null
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Image.memory(selectedImageBytes!, fit: BoxFit.cover),
+                          )
+                        : const Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.add_a_photo_outlined, color: Colors.purple, size: 32),
+                              SizedBox(height: 8),
+                              Text('Select Deposit Slip Photo', style: TextStyle(fontSize: 11, color: Colors.purple)),
+                            ],
+                          ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isUploading ? null : () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: (isUploading || selectedImageBytes == null || receiptIdController.text.isEmpty)
+                  ? null
+                  : () async {
+                      setState(() => isUploading = true);
+                      try {
+                        final fileName = 'bank_${sale.id}_${DateTime.now().millisecondsSinceEpoch}.jpg';
+                        final url = await ref.read(expenseProvider.notifier).uploadReceipt(selectedImageBytes!, fileName);
+                        
+                        if (url != null) {
+                          await ref.read(saleHistoryProvider.notifier).verifySale(
+                            sale.id, 
+                            bankReceiptUrl: url,
+                            bankReceiptId: receiptIdController.text.trim(),
+                          );
+                          if (context.mounted) {
+                            Navigator.pop(context); // Close dialog
+                            Navigator.pop(context); // Close sale details
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Bank details saved & sale verified!'), backgroundColor: Colors.green),
+                            );
+                          }
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+                          );
+                        }
+                      } finally {
+                        if (mounted) setState(() => isUploading = false);
+                      }
+                    },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.purple, foregroundColor: Colors.white),
+              child: isUploading
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Text('Confirm & Verify'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _viewBankReceipt(String url, {String? receiptId}) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppBar(
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Bank Deposit Slip', style: TextStyle(fontSize: 16)),
+                  if (receiptId != null)
+                    Text('REF: $receiptId', style: const TextStyle(fontSize: 10, color: Colors.white70)),
+                ],
+              ),
+              backgroundColor: Colors.purple,
+              foregroundColor: Colors.white,
+              leading: IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+            ),
+            Flexible(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.m),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(
+                    url,
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return const Center(child: CircularProgressIndicator());
+                    },
+                    errorBuilder: (_, __, ___) => const Center(child: Text('Could not load image')),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1186,6 +1518,7 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
       case SaleStatus.rectified: return Colors.blue;
       case SaleStatus.pendingCorrection: return Colors.orange;
       case SaleStatus.cancelled: return Colors.red;
+      case SaleStatus.awaitingDeposit: return Colors.purple;
     }
   }
 
@@ -1208,6 +1541,7 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
 
             if (match != null) {
               ref.read(transferProvider.notifier).markAsReceived(match.id).then((_) {
+                if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('Scanned & Received: ${match.meatType}'),
@@ -1218,6 +1552,7 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
                 // Refresh dialog state to show item is gone
                 setDialogState(() {});
               }).catchError((e) {
+                if (!context.mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('Error: ${e.toString().replaceAll('Exception:', '')}'),
@@ -1290,34 +1625,62 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
                             itemCount: transfers.length,
                             itemBuilder: (context, index) {
                               final t = transfers[index];
+                              final isAwaitingPayment = t.status == TransferStatus.awaitingPayment;
+
                               return Card(
                                 margin: const EdgeInsets.only(bottom: 8),
                                 elevation: 0,
-                                color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.m), side: BorderSide(color: theme.dividerColor)),
+                                color: isAwaitingPayment 
+                                    ? Colors.orange.withValues(alpha: 0.05)
+                                    : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(AppRadius.m), 
+                                  side: BorderSide(color: isAwaitingPayment ? Colors.orange.shade200 : theme.dividerColor)
+                                ),
                                 child: ListTile(
                                   contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                  leading: const Icon(Icons.shopping_basket_outlined, size: 20),
+                                  leading: Icon(
+                                    isAwaitingPayment ? Icons.payments_outlined : Icons.shopping_basket_outlined, 
+                                    color: isAwaitingPayment ? Colors.orange : theme.colorScheme.onSurfaceVariant,
+                                    size: 20
+                                  ),
                                   title: Text(t.meatType, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                  subtitle: Text('Weight: ${WeightConverter.formatShort(t.weight)} • Batch: ${t.batchId.substring(0, 8).toUpperCase()}', 
-                                    style: const TextStyle(fontSize: 10)),
+                                  subtitle: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('Weight: ${WeightConverter.formatShort(t.weight)} • Batch: ${t.batchId.length > 8 ? t.batchId.substring(0, 8) : t.batchId}', 
+                                        style: const TextStyle(fontSize: 10)),
+                                      if (isAwaitingPayment)
+                                        const Text('PAYMENT REQUIRED BEFORE ACCEPTANCE', 
+                                          style: TextStyle(fontSize: 9, color: Colors.orange, fontWeight: FontWeight.bold)),
+                                    ],
+                                  ),
                                   trailing: IconButton(
-                                    icon: const Icon(Icons.add_task, color: Colors.green),
-                                    tooltip: 'Verify Manually',
+                                    icon: Icon(
+                                      isAwaitingPayment ? Icons.check_circle : Icons.add_task, 
+                                      color: Colors.green
+                                    ),
+                                    tooltip: isAwaitingPayment ? 'Accept Payment & Confirm' : 'Verify Manually',
                                     onPressed: () {
-                                      ref.read(transferProvider.notifier).markAsReceived(t.id).then((_) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(content: Text('Manually Received ${t.weight}kg of ${t.meatType}')),
-                                        );
-                                        setDialogState(() {});
-                                      }).catchError((e) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          SnackBar(
-                                            content: Text('Error: ${e.toString().replaceAll('Exception:', '')}'),
-                                            backgroundColor: Colors.red,
-                                          ),
-                                        );
-                                      });
+                                      if (isAwaitingPayment) {
+                                        _confirmDirectTransferPayment(context, ref, t, () => setDialogState(() {}));
+                                      } else {
+                                        ref.read(transferProvider.notifier).markAsReceived(t.id).then((_) {
+                                          if (!context.mounted) return;
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text('Manually Received ${t.weight}kg of ${t.meatType}')),
+                                          );
+                                          setDialogState(() {});
+                                        }).catchError((e) {
+                                          if (!context.mounted) return;
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Error: ${e.toString().replaceAll('Exception:', '')}'),
+                                              backgroundColor: Colors.red,
+                                            ),
+                                          );
+                                        });
+                                      }
                                     },
                                   ),
                                 ),
@@ -1333,6 +1696,55 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
             ],
           );
         }
+      ),
+    );
+  }
+
+  void _confirmDirectTransferPayment(BuildContext context, WidgetRef ref, StockTransfer transfer, VoidCallback onDone) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Third-Party Payment'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Has the customer paid for this direct transfer?'),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                children: [
+                  _detailRow('Item', transfer.meatType),
+                  _detailRow('Weight', '${transfer.weight}kg'),
+                  _detailRow('Source', 'Butcher House'),
+                  _detailRow('Recipient', transfer.destination),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Not Yet')),
+          ElevatedButton(
+            onPressed: () {
+              ref.read(transferProvider.notifier).markAsReceived(transfer.id).then((_) {
+                if (!context.mounted) return;
+                Navigator.pop(context);
+                onDone();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Payment Confirmed & Stock Updated'), backgroundColor: Colors.green),
+                );
+              });
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+            child: const Text('Yes, Paid & Received'),
+          ),
+        ],
       ),
     );
   }
@@ -1687,12 +2099,14 @@ class _CustomerSelectionDialogState extends ConsumerState<CustomerSelectionDialo
                           child: ElevatedButton(
                             onPressed: () async {
                               if (_formKey.currentState!.validate()) {
+                                final user = ref.read(currentUserProvider);
                                 final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
                                 final String suffix = timestamp.substring(timestamp.length - 12);
                                 final String validUuid = '00000000-0000-0000-0000-$suffix';
 
                                 final newCustomer = Customer(
                                   id: validUuid,
+                                  branchCode: user?.branchCode,
                                   name: _nameController.text,
                                   phone: _phoneController.text,
                                   location: _locationController.text,
@@ -1739,22 +2153,25 @@ class _CustomerSelectionDialogState extends ConsumerState<CustomerSelectionDialo
   }
 }
 
-class PaymentDialog extends StatefulWidget {
+class PaymentDialog extends ConsumerStatefulWidget {
   final double totalAmount;
-  final Function(List<PaymentDetail>) onComplete;
+  final Function(List<PaymentDetail>, String?) onComplete;
 
   const PaymentDialog({super.key, required this.totalAmount, required this.onComplete});
 
   @override
-  State<PaymentDialog> createState() => _PaymentDialogState();
+  ConsumerState<PaymentDialog> createState() => _PaymentDialogState();
 }
 
-class _PaymentDialogState extends State<PaymentDialog> {
+class _PaymentDialogState extends ConsumerState<PaymentDialog> {
   final _formKey = GlobalKey<FormState>();
   final List<PaymentDetail> _payments = [];
   PaymentMethod _selectedMethod = PaymentMethod.cash;
   final _amountController = TextEditingController();
   final _refController = TextEditingController();
+
+  String? _receiptUrl;
+  bool _isUploading = false;
 
   @override
   void initState() {
@@ -1787,9 +2204,10 @@ class _PaymentDialogState extends State<PaymentDialog> {
     final paid = _payments.fold(0.0, (sum, p) => sum + p.amount);
     final remaining = (widget.totalAmount - paid).clamp(0.0, widget.totalAmount);
     final bool isMoMo = _selectedMethod == PaymentMethod.mobileMoney;
+    final bool isBank = _selectedMethod == PaymentMethod.bankDeposit;
 
-    // Lock amount for MoMo
-    if (isMoMo && double.tryParse(_amountController.text) != remaining) {
+    // Lock amount for MoMo or Bank
+    if ((isMoMo || isBank) && double.tryParse(_amountController.text) != remaining) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) setState(() => _amountController.text = remaining.toStringAsFixed(2));
       });
@@ -1855,7 +2273,8 @@ class _PaymentDialogState extends State<PaymentDialog> {
                               child: Column(
                                 children: [
                                   Icon(
-                                    m == PaymentMethod.cash ? Icons.money_rounded : Icons.smartphone_rounded,
+                                    m == PaymentMethod.cash ? Icons.money_rounded : 
+                                    (m == PaymentMethod.mobileMoney ? Icons.smartphone_rounded : Icons.account_balance_rounded),
                                     color: _selectedMethod == m ? Colors.white : theme.colorScheme.primary,
                                     size: 20,
                                   ),
@@ -1878,17 +2297,24 @@ class _PaymentDialogState extends State<PaymentDialog> {
                         children: [
                           TextFormField(
                             controller: _amountController, 
-                            readOnly: isMoMo,
+                            readOnly: isMoMo || isBank,
                             textAlign: TextAlign.center,
                             decoration: InputDecoration(
-                              labelText: isMoMo ? 'Amount (Locked)' : 'Amount Received', 
+                              labelText: (isMoMo || isBank) ? 'Amount (Locked)' : 'Amount Received', 
                               prefixText: '₵ ', 
                               isDense: true,
+                              helperText: isBank ? 'Customer will provide deposit slip later' : 'Enter 0 for full credit/debt sale',
+                              helperStyle: const TextStyle(fontSize: 9),
                             ),
                             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
                             onChanged: (v) => setState(() {}),
-                            validator: (v) => (v == null || (double.tryParse(v) ?? 0) <= 0) ? '!' : null,
+                            validator: (v) {
+                              if (v == null || v.isEmpty) return '!';
+                              final val = double.tryParse(v);
+                              if (val == null || val < 0) return '!';
+                              return null;
+                            },
                           ),
                           const SizedBox(height: 12),
                           TextFormField(
@@ -1904,15 +2330,32 @@ class _PaymentDialogState extends State<PaymentDialog> {
                         ],
                       ),
                     ),
+                    if (isBank) ...[
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _isUploading ? null : _uploadBankReceipt,
+                          icon: _isUploading 
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                            : Icon(_receiptUrl != null ? Icons.check_circle : Icons.add_a_photo, color: _receiptUrl != null ? Colors.green : null),
+                          label: Text(_receiptUrl != null ? 'RECEIPT ATTACHED' : 'UPLOAD DEPOSIT SLIP'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: _receiptUrl != null ? Colors.green : Colors.purple,
+                            side: BorderSide(color: _receiptUrl != null ? Colors.green : Colors.purple),
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
                         onPressed: _addPayment,
-                        icon: Icon(isMoMo ? Icons.send_to_mobile : Icons.add_circle_outline, size: 18),
-                        label: Text(isMoMo ? 'INITIATE PULL' : 'APPLY PAYMENT'),
+                        icon: Icon(isMoMo ? Icons.send_to_mobile : (isBank ? Icons.account_balance : Icons.add_circle_outline), size: 18),
+                        label: Text(isMoMo ? 'INITIATE PULL' : (isBank ? 'APPLY BANK DEPOSIT' : 'APPLY PAYMENT')),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accentGreen, 
+                          backgroundColor: isBank ? Colors.purple : AppColors.accentGreen,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
@@ -1931,7 +2374,11 @@ class _PaymentDialogState extends State<PaymentDialog> {
                         ),
                         child: Row(
                           children: [
-                            Icon(p.method == PaymentMethod.cash ? Icons.money : Icons.smartphone, size: 16, color: Colors.green),
+                            Icon(
+                              p.method == PaymentMethod.cash ? Icons.money : 
+                              (p.method == PaymentMethod.mobileMoney ? Icons.smartphone : Icons.account_balance), 
+                              size: 16, color: Colors.green
+                            ),
                             const SizedBox(width: 8),
                             Expanded(child: Text(p.method.name.toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11))),
                             Text('₵${p.amount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
@@ -1957,7 +2404,7 @@ class _PaymentDialogState extends State<PaymentDialog> {
                   child: ElevatedButton(
                     onPressed: _payments.isEmpty ? null : () {
                       Navigator.pop(context);
-                      widget.onComplete(_payments);
+                      widget.onComplete(_payments, _receiptUrl);
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: theme.colorScheme.primary, 
@@ -1972,6 +2419,30 @@ class _PaymentDialogState extends State<PaymentDialog> {
         ),
       ),
     );
+  }
+
+  Future<void> _uploadBankReceipt() async {
+    final picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+    if (image == null) return;
+
+    setState(() => _isUploading = true);
+    try {
+      final bytes = await image.readAsBytes();
+      final url = await ref.read(expenseProvider.notifier).uploadReceipt(
+        bytes, 
+        'bank_${DateTime.now().millisecondsSinceEpoch}.jpg'
+      );
+      if (mounted) setState(() => _receiptUrl = url);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Upload failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isUploading = false);
+    }
   }
 
   Widget _billRow(BuildContext context, String label, String value, ThemeData theme, {bool isTotal = false, Color? color, bool isBold = false}) {

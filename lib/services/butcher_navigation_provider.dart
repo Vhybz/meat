@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../models/butcher_models.dart';
 
 enum ButcherScreen {
   dashboard,
@@ -15,7 +16,8 @@ enum ButcherScreen {
   expenses,
   settings,
   profile,
-  howToUse
+  howToUse,
+  carcassBreakdown
 }
 
 class ButcherNavigationNotifier extends StateNotifier<ButcherScreen> {
@@ -27,3 +29,6 @@ class ButcherNavigationNotifier extends StateNotifier<ButcherScreen> {
 final butcherNavProvider = StateNotifierProvider<ButcherNavigationNotifier, ButcherScreen>((ref) {
   return ButcherNavigationNotifier();
 });
+
+// Provider to hold the active log being broken down
+final activeSlaughterLogProvider = StateProvider<SlaughterLog?>((ref) => null);

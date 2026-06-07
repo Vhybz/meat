@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../core/constants.dart';
 import '../services/auth_provider.dart';
 import '../services/user_provider.dart';
 import '../models/user_model.dart';
@@ -105,18 +104,19 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: AppColors.primaryMaroon,
+      backgroundColor: theme.colorScheme.primary,
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              AppColors.primaryMaroon,
-              Color(0xFF4A0808),
+              theme.colorScheme.primary,
+              HSLColor.fromColor(theme.colorScheme.primary).withLightness(0.15).toColor(),
             ],
           ),
         ),
@@ -167,7 +167,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> with SingleTickerPr
                       child: const Column(
                         children: [
                           Text(
-                            'Mi CORAZON',
+                            'Mi~CORAZON',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 32,

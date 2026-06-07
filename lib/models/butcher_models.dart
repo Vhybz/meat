@@ -1,13 +1,24 @@
-enum SlaughterStatus { pending, processing, completed }
+enum SlaughterStatus { pending, slaughtering, cleaned, completed, processed }
+
+enum MeatBatchStatus { 
+  transporting, 
+  received, 
+  preparing, 
+  mincing, 
+  cutting, 
+  packaging, 
+  frozen, 
+  completed 
+}
 
 enum AnimalType { cow, bull, pig, sheep, goat, hardChicken, softChicken, turkey, rabbit }
 
 extension AnimalTypeX on AnimalType {
   String get displayName {
     switch (this) {
-      case AnimalType.hardChicken: return 'Hard Chicken (Layers)';
-      case AnimalType.softChicken: return 'Soft Chicken (Broilers)';
-      default: return name[0].toUpperCase() + name.substring(1);
+      case AnimalType.hardChicken: return 'CHICKEN (LAYERS)';
+      case AnimalType.softChicken: return 'CHICKEN (BROILERS)';
+      default: return name.toUpperCase();
     }
   }
 
@@ -54,7 +65,6 @@ extension AnimalTypeX on AnimalType {
           'Feet',
           'Head',
           'Tail / Padua',
-          'Bones',
         ];
       case AnimalType.pig:
         return [
@@ -65,7 +75,7 @@ extension AnimalTypeX on AnimalType {
           'Head',
           'Ear',
           'Feet',
-          'Liver/lungs',
+          'Liver',
           'Skin',
         ];
       case AnimalType.goat:
@@ -80,26 +90,36 @@ extension AnimalTypeX on AnimalType {
       case AnimalType.hardChicken:
         return [
           'Hard Thigh',
+          'Soft Thigh',
           'Hard Breast',
+          'Soft Breast',
           'Hard Back',
+          'Soft Back',
           'Hard Wings',
+          'Soft Wings',
           'Hard Half Chicken',
+          'Soft Half Chicken',
           'Hard Whole Chicken',
+          'Soft Whole Chicken',
           'Hard Drumsticks',
-          'Gizzards',
-          'Feet',
+          'Soft Drumsticks',
         ];
       case AnimalType.softChicken:
         return [
+          'Hard Thigh',
           'Soft Thigh',
+          'Hard Breast',
           'Soft Breast',
+          'Hard Back',
           'Soft Back',
+          'Hard Wings',
           'Soft Wings',
+          'Hard Half Chicken',
           'Soft Half Chicken',
+          'Hard Whole Chicken',
           'Soft Whole Chicken',
+          'Hard Drumsticks',
           'Soft Drumsticks',
-          'Gizzards',
-          'Feet',
         ];
       case AnimalType.turkey:
         return ['Whole Turkey', 'Breast', 'Thighs', 'Drumsticks', 'Wings', 'Gizzards', 'Feet'];
@@ -112,47 +132,69 @@ extension AnimalTypeX on AnimalType {
 class SlaughterLog {
   final String id;
   final String? branchCode;
-  final String animalId;
+  final String animalId; // Database UUID
+  final String? tagNumber; // Human-readable ID (Auto-generated)
+  final String? manualFarmTag; // Optional manual farm tag from the farm
   final AnimalType type;
-  final double weight;
+  final double liveWeight;
+  final double meatWeight;
+  final double price; // Selling price (Standard)
+  final double? farmPrice; // Optional cost price from the farm
   final DateTime? slaughterTime;
   final SlaughterStatus status;
-  final double? recordedWaste;
 
   SlaughterLog({
     required this.id,
     this.branchCode,
     required this.animalId,
+    this.tagNumber,
+    this.manualFarmTag,
     required this.type,
-    required this.weight,
+    required this.liveWeight,
+    required this.meatWeight,
+    required this.price,
+    this.farmPrice,
     this.slaughterTime,
     required this.status,
-    this.recordedWaste,
   });
 
-  double get estimatedYield => recordedWaste != null 
-    ? (weight - recordedWaste!) 
-    : weight * type.dressingPercentage;
+  double get weightLoss => liveWeight - meatWeight;
+  double get yieldPercentage => liveWeight > 0 ? (meatWeight / liveWeight) * 100 : 0;
+
+  // Profit calculation logic: If farmPrice is null, full price is profit.
+  double get estimatedProfit => price - (farmPrice ?? 0.0);
+
+  // Compatibility getters
+  double get weight => liveWeight;
+  double get estimatedYield => meatWeight;
 
   SlaughterLog copyWith({
     String? id,
     String? branchCode,
     String? animalId,
+    String? tagNumber,
+    String? manualFarmTag,
     AnimalType? type,
-    double? weight,
+    double? liveWeight,
+    double? meatWeight,
+    double? price,
+    double? farmPrice,
     DateTime? slaughterTime,
     SlaughterStatus? status,
-    double? recordedWaste,
   }) {
     return SlaughterLog(
       id: id ?? this.id,
       branchCode: branchCode ?? this.branchCode,
       animalId: animalId ?? this.animalId,
+      tagNumber: tagNumber ?? this.tagNumber,
+      manualFarmTag: manualFarmTag ?? this.manualFarmTag,
       type: type ?? this.type,
-      weight: weight ?? this.weight,
+      liveWeight: liveWeight ?? this.liveWeight,
+      meatWeight: meatWeight ?? this.meatWeight,
+      price: price ?? this.price,
+      farmPrice: farmPrice ?? this.farmPrice,
       slaughterTime: slaughterTime ?? this.slaughterTime,
       status: status ?? this.status,
-      recordedWaste: recordedWaste ?? this.recordedWaste,
     );
   }
 
@@ -161,13 +203,15 @@ class SlaughterLog {
       id: json['id'] as String,
       branchCode: json['branch_code'] as String?,
       animalId: json['animal_id'] as String,
+      tagNumber: json['tag_number'] as String?,
+      manualFarmTag: json['manual_farm_tag'] as String?,
       type: AnimalType.values.firstWhere((e) => e.name == json['type']),
-      weight: (json['initial_weight'] as num).toDouble(),
+      liveWeight: (json['initial_weight'] as num).toDouble(),
+      meatWeight: (json['carcass_weight'] as num? ?? 0).toDouble(),
+      price: (json['price'] as num? ?? 0).toDouble(),
+      farmPrice: (json['farm_price'] as num?)?.toDouble(),
       slaughterTime: json['slaughter_time'] != null ? DateTime.parse(json['slaughter_time'] as String) : null,
       status: SlaughterStatus.values.firstWhere((e) => e.name == json['status']),
-      recordedWaste: json['carcass_weight'] != null 
-        ? ((json['initial_weight'] as num).toDouble() - (json['carcass_weight'] as num).toDouble())
-        : null,
     );
   }
 
@@ -175,11 +219,15 @@ class SlaughterLog {
     'id': id,
     'branch_code': branchCode,
     'animal_id': animalId,
+    'tag_number': tagNumber,
+    'manual_farm_tag': manualFarmTag,
     'type': type.name,
-    'initial_weight': weight,
+    'initial_weight': liveWeight,
+    'carcass_weight': meatWeight,
+    'price': price,
+    'farm_price': farmPrice,
     'slaughter_time': slaughterTime?.toIso8601String(),
     'status': status.name,
-    'carcass_weight': estimatedYield, // We store the yield as carcass_weight in DB
   };
 }
 
@@ -196,8 +244,10 @@ class BatchSource {
 class MeatBatch {
   final String id;
   final String? branchCode;
+  final String? animalId;
   final String meatType;
   final double weight;
+  final double costPrice;
   final DateTime createdAt;
   final String status;
   final BatchSource source;
@@ -207,8 +257,10 @@ class MeatBatch {
   MeatBatch({
     required this.id,
     this.branchCode,
+    this.animalId,
     required this.meatType,
     required this.weight,
+    this.costPrice = 0.0,
     required this.createdAt,
     required this.status,
     required this.source,
@@ -219,8 +271,10 @@ class MeatBatch {
   MeatBatch copyWith({
     String? id,
     String? branchCode,
+    String? animalId,
     String? meatType,
     double? weight,
+    double? costPrice,
     DateTime? createdAt,
     String? status,
     BatchSource? source,
@@ -230,8 +284,10 @@ class MeatBatch {
     return MeatBatch(
       id: id ?? this.id,
       branchCode: branchCode ?? this.branchCode,
+      animalId: animalId ?? this.animalId,
       meatType: meatType ?? this.meatType,
       weight: weight ?? this.weight,
+      costPrice: costPrice ?? this.costPrice,
       createdAt: createdAt ?? this.createdAt,
       status: status ?? this.status,
       source: source ?? this.source,
@@ -244,8 +300,10 @@ class MeatBatch {
     return MeatBatch(
       id: json['id'] as String,
       branchCode: json['branch_code'] as String?,
+      animalId: json['animal_id'] as String?,
       meatType: json['meat_type'] as String,
       weight: (json['initial_weight'] as num).toDouble(),
+      costPrice: (json['cost_price'] as num? ?? 0.0).toDouble(),
       createdAt: DateTime.parse(json['created_at'] as String),
       status: json['status'] as String,
       source: BatchSource(
@@ -261,9 +319,11 @@ class MeatBatch {
   Map<String, dynamic> toJson() => {
     'id': id,
     'branch_code': branchCode,
+    'animal_id': animalId,
     'meat_type': meatType,
     'initial_weight': weight,
     'current_weight': weight,
+    'cost_price': costPrice,
     'status': status,
     'source_name': source.name,
     'source_location': source.location,
@@ -278,6 +338,7 @@ class MeatCut {
   final String id;
   final String? branchCode;
   final String name;
+  final String? meatType;
   final String batchId;
   final double weight;
   final DateTime processedAt;
@@ -286,6 +347,7 @@ class MeatCut {
     required this.id,
     this.branchCode,
     required this.name,
+    this.meatType,
     required this.batchId,
     required this.weight,
     required this.processedAt,
@@ -295,6 +357,7 @@ class MeatCut {
     String? id,
     String? branchCode,
     String? name,
+    String? meatType,
     String? batchId,
     double? weight,
     DateTime? processedAt,
@@ -303,6 +366,7 @@ class MeatCut {
       id: id ?? this.id,
       branchCode: branchCode ?? this.branchCode,
       name: name ?? this.name,
+      meatType: meatType ?? this.meatType,
       batchId: batchId ?? this.batchId,
       weight: weight ?? this.weight,
       processedAt: processedAt ?? this.processedAt,
@@ -314,6 +378,7 @@ class MeatCut {
       id: json['id'] as String,
       branchCode: json['branch_code'] as String?,
       name: json['name'] as String,
+      meatType: json['meat_type'] as String?,
       batchId: json['batch_id'] as String,
       weight: (json['weight'] as num).toDouble(),
       processedAt: DateTime.parse(json['processed_at'] as String),
@@ -325,6 +390,7 @@ class MeatCut {
     'branch_code': branchCode,
     'batch_id': batchId,
     'name': name,
+    'meat_type': meatType,
     'weight': weight,
     'processed_at': processedAt.toIso8601String(),
   };
@@ -335,7 +401,9 @@ enum ButcherOrderStatus { pending, preparing, ready, completed }
 class ButcherOrder {
   final String id;
   final String? branchCode;
+  final String? customerId;
   final String customerName;
+  final String? customerPhone;
   final List<String> items;
   final double totalWeight;
   final DateTime dueDate;
@@ -344,7 +412,9 @@ class ButcherOrder {
   ButcherOrder({
     required this.id,
     this.branchCode,
+    this.customerId,
     required this.customerName,
+    this.customerPhone,
     required this.items,
     required this.totalWeight,
     required this.dueDate,
@@ -354,7 +424,9 @@ class ButcherOrder {
   ButcherOrder copyWith({
     String? id,
     String? branchCode,
+    String? customerId,
     String? customerName,
+    String? customerPhone,
     List<String>? items,
     double? totalWeight,
     DateTime? dueDate,
@@ -363,7 +435,9 @@ class ButcherOrder {
     return ButcherOrder(
       id: id ?? this.id,
       branchCode: branchCode ?? this.branchCode,
+      customerId: customerId ?? this.customerId,
       customerName: customerName ?? this.customerName,
+      customerPhone: customerPhone ?? this.customerPhone,
       items: items ?? this.items,
       totalWeight: totalWeight ?? this.totalWeight,
       dueDate: dueDate ?? this.dueDate,
@@ -375,7 +449,9 @@ class ButcherOrder {
     return ButcherOrder(
       id: json['id'] as String,
       branchCode: json['branch_code'] as String?,
+      customerId: json['customer_id'] as String?,
       customerName: json['customer_name'] as String,
+      customerPhone: json['customer_phone'] as String?,
       items: List<String>.from(json['items'] ?? []),
       totalWeight: (json['total_weight'] as num).toDouble(),
       dueDate: DateTime.parse(json['due_date'] as String),
@@ -386,7 +462,9 @@ class ButcherOrder {
   Map<String, dynamic> toJson() => {
     'id': id,
     'branch_code': branchCode,
+    'customer_id': customerId,
     'customer_name': customerName,
+    'customer_phone': customerPhone,
     'items': items,
     'total_weight': totalWeight,
     'due_date': dueDate.toIso8601String(),

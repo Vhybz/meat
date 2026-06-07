@@ -142,9 +142,9 @@ class ReportService {
             data: logs.map((l) => [
               DateFormat('MMM dd').format(l.slaughterTime ?? DateTime.now()),
               l.type.displayName,
-              l.weight.toStringAsFixed(1),
-              l.estimatedYield.toStringAsFixed(1),
-              (l.weight - l.estimatedYield).toStringAsFixed(1),
+              l.liveWeight.toStringAsFixed(1),
+              l.meatWeight.toStringAsFixed(1),
+              (l.liveWeight - l.meatWeight).toStringAsFixed(1),
               l.status.name.toUpperCase(),
             ]).toList(),
           ),
@@ -325,17 +325,15 @@ class ReportService {
           ),
           
           pw.SizedBox(height: 30),
-          pw.Text('GRA Standard Rate Tax Breakdown', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14, color: _primaryMaroon)),
+          pw.Text('GRA TAX COMPLIANCE SUMMARY', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14, color: _primaryMaroon)),
           pw.SizedBox(height: 10),
           pw.TableHelper.fromTextArray(
             headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white),
             headerDecoration: const pw.BoxDecoration(color: _primaryMaroon),
-            headers: ['Tax Component', 'Rate', 'Calculated Amount (GHS)'],
+            headers: ['Tax Component', 'Calculation Base', 'Calculated Amount (GHS)'],
             data: [
-              ['NHIL', '2.5%', taxBreakdown['NHIL']!.toStringAsFixed(2)],
-              ['GETFund', '2.5%', taxBreakdown['GETFund']!.toStringAsFixed(2)],
-              ['COVID-19 Health Recovery Levy', '1.0%', taxBreakdown['COVID']!.toStringAsFixed(2)],
-              ['VAT (Standard)', '15.0%', taxBreakdown['VAT']!.toStringAsFixed(2)],
+              ['VAT (Value Added Tax)', '20% of Sales', taxBreakdown['VAT (20% Sales)']!.toStringAsFixed(2)],
+              ['Income Tax', '20% of Profit', taxBreakdown['Income Tax (20% Profit)']!.toStringAsFixed(2)],
               ['TOTAL TAX PAYABLE', '', taxBreakdown['TOTAL']!.toStringAsFixed(2)],
             ],
           ),
@@ -393,7 +391,7 @@ class ReportService {
               children: [
                 pw.Text('HEALTH INSPECTION CERTIFICATE', style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold, color: _primaryMaroon)),
                 pw.SizedBox(height: 20),
-                pw.Text('This is to certify that Mi Corazon Freshmeat Butchery has passed all health and hygiene standards for the year 2024.', textAlign: pw.TextAlign.center),
+                pw.Text('This is to certify that Mi~Corazon Freshmeat Butchery has passed all health and hygiene standards for the year 2024.', textAlign: pw.TextAlign.center),
                 pw.SizedBox(height: 40),
                 pw.Text('Status: VERIFIED', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.green)),
                 pw.SizedBox(height: 60),
@@ -452,7 +450,7 @@ class ReportService {
             pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Text('Mi CORAZON FRESHMEAT BUTCHERY', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 18, color: _primaryMaroon)),
+                pw.Text('Mi~CORAZON FRESHMEAT BUTCHERY', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 18, color: _primaryMaroon)),
                 pw.Text('Quality Meat Service • Ghana', style: const pw.TextStyle(fontSize: 10)),
               ],
             ),

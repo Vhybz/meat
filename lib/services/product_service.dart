@@ -7,7 +7,9 @@ import 'supabase_product_service.dart';
 import 'user_provider.dart';
 import 'notification_service.dart';
 import 'sms_service.dart';
+import 'audit_service.dart';
 import 'offline_sync_service.dart';
+import '../models/system_models.dart';
 
 abstract class ProductService {
   Future<List<Product>> getProducts(String branchCode);
@@ -46,7 +48,7 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
     });
 
     // 2. Background Heartbeat: Silent refresh logic every 3 seconds
-    ref.listen(liveHeartbeatProvider, (_, __) {
+    ref.listen(liveHeartbeatProvider, (_, _) {
       final products = state.value;
       if (products != null) {
         _checkStockAlerts(products);
@@ -142,7 +144,13 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
       final user = ref.read(currentUserProvider);
       final productWithBranch = product.copyWith(branchCode: user?.branchCode);
       await _service.addProduct(productWithBranch);
-      // No need to manually update state, the stream will catch it
+      
+      // Update cache immediately
+      state.whenData((products) {
+        final newList = [...products, productWithBranch];
+        state = AsyncValue.data(newList);
+        _saveToCache(newList);
+      });
     } catch (e) {
       debugPrint('Add Product Error: $e');
     }
@@ -150,9 +158,24 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
 
   Future<void> updateProduct(Product updatedProduct) async {
     try {
+      final oldProduct = state.value?.firstWhere((p) => p.id == updatedProduct.id);
+      
       await _service.updateProduct(updatedProduct);
+
+      // Audit Log
+      await AuditService.log(
+        ref: ref,
+        action: 'PRODUCT_UPDATED',
+        entityType: 'PRODUCT',
+        entityId: updatedProduct.id,
+        oldData: oldProduct?.toJson(),
+        newData: updatedProduct.toJson(),
+      );
+
       state.whenData((products) {
-        state = AsyncValue.data(products.map((p) => p.id == updatedProduct.id ? updatedProduct : p).toList());
+        final newList = products.map((p) => p.id == updatedProduct.id ? updatedProduct : p).toList();
+        state = AsyncValue.data(newList);
+        _saveToCache(newList);
       });
     } catch (e) {
       debugPrint('Update Product Error: $e');
@@ -163,7 +186,9 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
     try {
       await _service.deleteProduct(id);
       state.whenData((products) {
-        state = AsyncValue.data(products.where((p) => p.id != id).toList());
+        final newList = products.where((p) => p.id != id).toList();
+        state = AsyncValue.data(newList);
+        _saveToCache(newList);
       });
     } catch (e) {
       debugPrint('Delete Product Error: $e');
@@ -176,7 +201,7 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
     });
   }
 
-  Future<void> updateStock(String id, double quantityChange) async {
+  Future<void> updateStock(String id, double quantityChange, {String reason = 'ADJUSTMENT', String? referenceId}) async {
     final products = state.value;
     if (products == null) return;
 
@@ -206,6 +231,33 @@ class ProductNotifier extends StateNotifier<AsyncValue<List<Product>>> {
 
       await _service.updateProduct(updatedProduct);
       
+      // Audit Log for Stock Change
+      await AuditService.log(
+        ref: ref,
+        action: 'STOCK_ADJUSTED',
+        entityType: 'PRODUCT',
+        entityId: id,
+        newData: {'change': quantityChange, 'new_total': newQuantity, 'reason': reason},
+      );
+
+      // Log Stock History
+      final user = ref.read(currentUserProvider);
+      final historyEntry = StockHistory(
+        id: '00000000-0000-0000-0000-${DateTime.now().millisecondsSinceEpoch}',
+        branchCode: user?.branchCode,
+        productId: id,
+        changeAmount: quantityChange,
+        newQuantity: newQuantity,
+        reason: reason,
+        referenceId: referenceId,
+        timestamp: now,
+      );
+
+      await OfflineSyncService.addToQueue(
+        actionType: 'STOCK_HISTORY',
+        data: historyEntry.toJson(),
+      );
+
       state = AsyncValue.data(products.map((p) {
         if (p.id == id) {
           return updatedProduct;

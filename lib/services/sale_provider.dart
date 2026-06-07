@@ -7,6 +7,7 @@ import 'supabase_sale_service.dart';
 import 'user_provider.dart';
 import 'product_service.dart';
 import 'offline_sync_service.dart';
+import 'audit_service.dart';
 
 class SaleHistoryNotifier extends StateNotifier<List<SaleRecord>> {
   final SupabaseSaleService _service;
@@ -17,7 +18,7 @@ class SaleHistoryNotifier extends StateNotifier<List<SaleRecord>> {
     _init();
     
     // Background Heartbeat: Auto-refresh data and check for updates every 3 seconds
-    ref.listen(liveHeartbeatProvider, (_, __) {
+    ref.listen(liveHeartbeatProvider, (_, _) {
       // Force a list refresh to ensure all financial calculations are re-computed
       state = [...state];
     });
@@ -91,44 +92,74 @@ class SaleHistoryNotifier extends StateNotifier<List<SaleRecord>> {
         data: saleWithBranch.toJson(),
       );
 
+      // 1b. Audit Log
+      await AuditService.log(
+        ref: ref,
+        action: 'SALE_CREATED',
+        entityType: 'SALE',
+        entityId: saleWithBranch.id,
+        newData: saleWithBranch.toJson(),
+      );
+
       // 2. Optimistic UI update: Add to local state immediately
       state = [saleWithBranch, ...state];
       
-      // 3. Subtract items from total stock
-      for (final item in sale.items) {
-        await ref.read(productsFutureProvider.notifier).updateStock(item.product.id, -item.quantity);
-      }
+      // 3. NO LONGER SUBTRACTING STOCK HERE
+      // Stock will be subtracted when the sale is VERIFIED.
     } catch (e) {
       debugPrint('Add Sale (Queue) Error: $e');
     }
   }
 
-  Future<void> updateSale(SaleRecord updatedSale) async {
+  Future<void> verifySale(String saleId, {String? bankReceiptUrl, String? bankReceiptId}) async {
     try {
-      final oldSale = state.firstWhere((s) => s.id == updatedSale.id);
+      final sale = state.firstWhere((s) => s.id == saleId);
+      if (sale.isVerified) return; // Already verified
+
+      final updatedSale = sale.copyWith(
+        isVerified: true, 
+        status: SaleStatus.completed,
+        bankReceiptUrl: bankReceiptUrl ?? sale.bankReceiptUrl,
+        bankReceiptId: bankReceiptId ?? sale.bankReceiptId,
+      );
       
+      // 1. Update DB
       await _service.updateSale(updatedSale);
 
-      // If sale is being cancelled, return items to stock
-      if (updatedSale.status == SaleStatus.cancelled && oldSale.status != SaleStatus.cancelled) {
-        for (final item in updatedSale.items) {
-          await ref.read(productsFutureProvider.notifier).updateStock(item.product.id, item.quantity);
-        }
+      // 1b. Audit Log
+      await AuditService.log(
+        ref: ref,
+        action: 'SALE_VERIFIED',
+        entityType: 'SALE',
+        entityId: sale.id,
+        newData: updatedSale.toJson(),
+      );
+
+      // 2. Subtract items from total stock (The user wants this after verification)
+      for (final item in sale.items) {
+        await ref.read(productsFutureProvider.notifier).updateStock(
+          item.product.id, 
+          -item.quantity, 
+          reason: 'SALE', 
+          referenceId: sale.id,
+        );
       }
       
-      // If sale is being rectified, adjust stock
-      if (updatedSale.status == SaleStatus.rectified && oldSale.status != SaleStatus.cancelled) {
-        // Return old items
-        for (final item in oldSale.items) {
-          await ref.read(productsFutureProvider.notifier).updateStock(item.product.id, item.quantity);
-        }
-        // Subtract new items
-        for (final item in updatedSale.items) {
-          await ref.read(productsFutureProvider.notifier).updateStock(item.product.id, -item.quantity);
-        }
-      }
-      
-      // State is updated automatically by stream
+      // Notify session listeners
+      state = [
+        for (final s in state)
+          if (s.id == saleId) updatedSale else s
+      ];
+    } catch (e) {
+      debugPrint('Verify Sale Error: $e');
+    }
+  }
+
+  Future<void> updateSale(SaleRecord updatedSale) async {
+    try {
+      await _service.updateSale(updatedSale);
+      // NOTE: Stock is NOT automatically returned on cancellation or rectification 
+      // to ensure stock only increases via verified transfers or manual admin overrides.
     } catch (e) {
       debugPrint('Update Sale Error: $e');
     }

@@ -11,15 +11,18 @@ import '../../services/expense_provider.dart';
 import '../../models/sale_model.dart';
 import '../../services/notification_service.dart';
 import '../../services/product_service.dart';
-import '../../services/customer_provider.dart';
 import '../../services/butcher_service.dart';
 import '../../models/butcher_models.dart';
+import '../../models/system_models.dart';
 
 import '../../services/menu_service.dart';
 import '../../services/user_provider.dart';
 import '../../models/user_model.dart';
+import '../../models/branch_model.dart';
+import '../../services/branch_provider.dart';
 import '../../widgets/role_pop_scope.dart';
 import '../../services/report_service.dart';
+import '../../services/birthday_service.dart';
 
 class AdminDashboard extends ConsumerStatefulWidget {
   const AdminDashboard({super.key});
@@ -77,6 +80,13 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
     final user = ref.watch(currentUserProvider);
     if (user == null) return const Center(child: CircularProgressIndicator());
 
+    // Check for Birthday
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.mounted) {
+        BirthdayService.checkAndShowBirthdayWish(context, user);
+      }
+    });
+
     // Instant Permission Guard: Redirect if admin access is revoked
     final roles = user.activeRoles;
     final hasAccess = roles.contains(UserRole.admin) || roles.contains(UserRole.superAdmin) || user.enabledPermissions.contains('/admin');
@@ -93,6 +103,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
     final dateStr = DateFormat('EEEE, d MMMM yyyy').format(now);
     const currentRoute = '/admin';
     final menuItems = ref.watch(menuItemsProvider);
+    final currentBranch = ref.watch(currentBranchProvider);
 
     return RolePopScope(
       currentRoute: currentRoute,
@@ -145,7 +156,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildHeader(context, dateStr, user),
+                        _buildHeader(context, dateStr, user, currentBranch),
                         const SizedBox(height: AppSpacing.l),
                         _buildBanner(context),
                         const SizedBox(height: AppSpacing.xl),
@@ -249,7 +260,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
               if (item is SaleRecord) {
                 displayTitle = 'Mistake in Sale ${item.id}';
                 displaySubtitle = 'Reported by ${item.cashierName}: ${item.correctionReason}';
-              } else if (item is AppNotification) {
+              } else if (item is SystemNotification) {
                 displayTitle = item.title;
                 displaySubtitle = item.message;
               }
@@ -300,7 +311,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
             onPressed: () {
               if (item is SaleRecord) {
                 ref.read(saleHistoryProvider.notifier).updateSale(item.copyWith(status: SaleStatus.cancelled));
-              } else if (item is AppNotification) {
+              } else if (item is SystemNotification) {
                 ref.read(notificationProvider.notifier).deleteNotification(item.id);
               }
               Navigator.pop(context);
@@ -323,6 +334,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setState) {
+          final theme = Theme.of(context);
           double calculateNewTotal() => editedItems.fold(0, (sum, item) => sum + item.total);
 
           return AlertDialog(
@@ -393,7 +405,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
                       children: [
                         const Text('Corrected Total:', style: TextStyle(fontWeight: FontWeight.bold)),
                         Text('₵${calculateNewTotal().toStringAsFixed(2)}', 
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryMaroon, fontSize: 16)),
+                          style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.primary, fontSize: 16)),
                       ],
                     ),
                   ],
@@ -438,7 +450,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
     );
   }
 
-  void _showRectifyButcherReportDialog(BuildContext context, WidgetRef ref, AppNotification report) {
+  void _showRectifyButcherReportDialog(BuildContext context, WidgetRef ref, SystemNotification report) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -478,7 +490,8 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
   }
 
   Widget _buildBanner(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final isMobile = ResponsiveLayout.isMobile(context);
 
     return Container(
@@ -537,7 +550,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: AppColors.primaryMaroon,
+                      color: theme.colorScheme.primary,
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -561,7 +574,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
                     ),
                   ),
                   Text(
-                    'Unforgettable Taste from Mi Corazon',
+                    'Unforgettable Taste from Mi~Corazon',
                     style: TextStyle(
                       color: Colors.white70,
                       fontSize: isMobile ? 12 : 16,
@@ -583,7 +596,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
                     height: 8,
                     margin: const EdgeInsets.only(left: 4),
                     decoration: BoxDecoration(
-                      color: _currentPage == index ? AppColors.primaryMaroon : Colors.white54,
+                      color: _currentPage == index ? theme.colorScheme.primary : Colors.white54,
                       borderRadius: BorderRadius.circular(4),
                     ),
                   );
@@ -596,7 +609,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, String dateStr, UserAccount user) {
+  Widget _buildHeader(BuildContext context, String dateStr, UserAccount user, Branch? branch) {
     final isMobile = ResponsiveLayout.isMobile(context);
     final theme = Theme.of(context);
     
@@ -610,8 +623,8 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          if (user.branchCode != null)
-             Text('Branch Code: ${user.branchCode}', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 12)),
+          if (branch != null)
+             Text('${branch.name} - ${branch.location}', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 12)),
           const SizedBox(height: 4),
           Text(dateStr, style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12)),
           const SizedBox(height: AppSpacing.m),
@@ -633,8 +646,8 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              if (user.branchCode != null)
-                 Text('Branch Code: ${user.branchCode}', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 14)),
+              if (branch != null)
+                 Text('${branch.name} - ${branch.location}', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold, fontSize: 14)),
               const SizedBox(height: 4),
               Row(
                 children: [
@@ -908,7 +921,13 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
     }).toList() ?? [];
 
     final totalRevenue = sales.fold(0.0, (sum, sale) => sum + sale.totalAmount);
-    final totalDebt = sales.fold(0.0, (sum, sale) => sum + (sale.balance > 0 ? sale.balance : 0));
+    final totalCost = sales.fold(0.0, (sum, sale) => sum + sale.totalCost);
+    final grossProfit = totalRevenue - totalCost;
+    
+    // Total Debt should reflect all-time outstanding balance, not just the current month
+    final totalDebt = allSales.where((s) => s.status != SaleStatus.cancelled)
+        .fold(0.0, (sum, sale) => sum + (sale.balance > 0 ? sale.balance : 0));
+
     final totalDiscounts = sales.fold(0.0, (sum, sale) => sum + sale.totalDiscount);
     final totalWeightSold = sales.fold(0.0, (sum, sale) => sum + sale.totalQty);
     
@@ -917,11 +936,9 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
       e.date.month == now.month && e.date.year == now.year
     ).fold(0.0, (sum, e) => sum + e.amount);
 
-    final netProfit = totalRevenue - totalExpenses;
+    final netProfit = grossProfit - totalExpenses;
 
     final theme = Theme.of(context);
-    final customers = ref.watch(customerProvider);
-    final totalCustomers = customers.length;
 
     int crossAxisCount = isMobile ? 2 : (isTablet ? 4 : 4);
     double aspectRatio = isMobile ? 1.4 : 1.8;
@@ -947,10 +964,10 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
           mainAxisSpacing: AppSpacing.m,
           childAspectRatio: aspectRatio,
           children: [
-            _kpiWithTrend(context, "Gross Sales", '₵${totalRevenue.toStringAsFixed(0)}', Icons.payments, Colors.blue, '+12.5%'),
-            _kpiWithTrend(context, "Total Debt", '₵${totalDebt.toStringAsFixed(2)}', Icons.account_balance_wallet, Colors.red, 'OWED'),
-            _kpiWithTrend(context, "Expenses", '₵${totalExpenses.toStringAsFixed(0)}', Icons.trending_down, Colors.red, '+5.2%'),
-            _kpiWithTrend(context, 'Net Profit', '₵${netProfit.toStringAsFixed(0)}', Icons.account_balance_wallet, Colors.green, '+8.1%'),
+            _kpiWithTrend(context, "Gross Sales", '₵${totalRevenue.toStringAsFixed(0)}', Icons.payments, Colors.blue, 'MONTH'),
+            _kpiWithTrend(context, "Gross Profit", '₵${grossProfit.toStringAsFixed(0)}', Icons.show_chart, Colors.teal, 'MARGIN'),
+            _kpiWithTrend(context, "Expenses", '₵${totalExpenses.toStringAsFixed(0)}', Icons.trending_down, Colors.red, 'MONTH'),
+            _kpiWithTrend(context, 'Net Profit', '₵${netProfit.toStringAsFixed(0)}', Icons.account_balance_wallet, Colors.green, 'MONTH'),
           ],
         ),
         const SizedBox(height: AppSpacing.m),
@@ -962,9 +979,9 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
           mainAxisSpacing: AppSpacing.m,
           childAspectRatio: isMobile ? 1.4 : 2.5,
           children: [
-            _kpiWithTrend(context, 'Customers', '$totalCustomers', Icons.people, Colors.purple, 'ACTIVE'),
+            _kpiWithTrend(context, 'Total Debt', '₵${totalDebt.toStringAsFixed(0)}', Icons.money_off, Colors.red, 'TOTAL'),
             _kpiWithTrend(context, 'Promo Impact', '₵${totalDiscounts.toStringAsFixed(0)}', Icons.auto_awesome, Colors.orange, 'SAVED'),
-            _kpiWithTrend(context, 'Stock Sold', '${totalWeightSold.toStringAsFixed(1)} kg', Icons.scale, AppColors.primaryMaroon, 'LIVE'),
+            _kpiWithTrend(context, 'Stock Sold', '${totalWeightSold.toStringAsFixed(1)} kg', Icons.scale, theme.colorScheme.primary, 'LIVE'),
             _kpiWithTrend(context, 'Daily Slaughter', '${todayLogs.length}', Icons.precision_manufacturing, Colors.green, 'TODAY'),
           ],
         ),
@@ -1414,6 +1431,18 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
     final lowStockItems = productsAsync.value?.where((p) => !p.isDeleted && p.stockQuantity < 10).toList() ?? [];
     final pendingCorrections = sales.where((s) => s.status == SaleStatus.pendingCorrection).toList();
     final unreadButcherReports = notifications.where((n) => n.title.contains('BUTCHER') && !n.isRead).toList();
+    
+    final now = DateTime.now();
+    final users = ref.watch(userProvider);
+    final pendingSalaries = users.where((u) {
+      if (u.isDeleted || u.status != AccountStatus.approved) return false;
+      if (u.salaryAmount == null || u.salaryDay == null) return false;
+      if (now.day >= u.salaryDay!) {
+        if (u.lastSalaryDate == null) return true;
+        if (u.lastSalaryDate!.month != now.month || u.lastSalaryDate!.year != now.year) return true;
+      }
+      return false;
+    }).toList();
 
     return Container(
       height: 400,
@@ -1435,12 +1464,12 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
               const SizedBox(width: 8),
               Text('System Alerts', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: theme.colorScheme.onSurface)),
               const Spacer(),
-              if (lowStockItems.length + pendingCorrections.length + unreadButcherReports.length > 0)
+              if (lowStockItems.length + pendingCorrections.length + unreadButcherReports.length + pendingSalaries.length > 0)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(10)),
                   child: Text(
-                    '${lowStockItems.length + pendingCorrections.length + unreadButcherReports.length}',
+                    '${lowStockItems.length + pendingCorrections.length + unreadButcherReports.length + pendingSalaries.length}',
                     style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                   ),
                 ),
@@ -1448,7 +1477,7 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
           ),
           const SizedBox(height: AppSpacing.l),
           Expanded(
-            child: (lowStockItems.isEmpty && pendingCorrections.isEmpty && unreadButcherReports.isEmpty)
+            child: (lowStockItems.isEmpty && pendingCorrections.isEmpty && unreadButcherReports.isEmpty && pendingSalaries.isEmpty)
                 ? Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -1461,6 +1490,15 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
                   )
                 : ListView(
                     children: [
+                      if (pendingSalaries.isNotEmpty)
+                        _alertTile(
+                          context,
+                          'Payroll Due', 
+                          '${pendingSalaries.length} staff members are due for salary payment.', 
+                          Colors.purple, 
+                          Icons.payments_rounded,
+                          onTap: () => Navigator.pushNamed(context, '/admin/salaries'),
+                        ),
                       ...pendingCorrections.map((s) => _alertTile(
                         context,
                         'Sale Correction Req', 
@@ -1490,32 +1528,36 @@ class _AdminDashboardState extends ConsumerState<AdminDashboard> {
     );
   }
 
-  Widget _alertTile(BuildContext context, String title, String subtitle, Color color, IconData icon) {
+  Widget _alertTile(BuildContext context, String title, String subtitle, Color color, IconData icon, {VoidCallback? onTap}) {
     final theme = Theme.of(context);
-    return Container(
-      margin: const EdgeInsets.only(bottom: AppSpacing.m),
-      padding: const EdgeInsets.all(AppSpacing.m),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(AppRadius.m),
-        border: Border.all(color: color.withValues(alpha: 0.1)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 18),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: color)),
-                const SizedBox(height: 4),
-                Text(subtitle, style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant)),
-              ],
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.m),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: AppSpacing.m),
+        padding: const EdgeInsets.all(AppSpacing.m),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(AppRadius.m),
+          border: Border.all(color: color.withValues(alpha: 0.1)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: color)),
+                  const SizedBox(height: 4),
+                  Text(subtitle, style: TextStyle(fontSize: 11, color: theme.colorScheme.onSurfaceVariant)),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

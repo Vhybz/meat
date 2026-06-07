@@ -42,7 +42,7 @@ class ReceiptService {
                   pw.Center(
                     child: pw.Column(
                       children: [
-                        pw.Text('Mi CORAZON', style: pw.TextStyle(font: boldFont, fontSize: 18)),
+                        pw.Text('Mi~CORAZON', style: pw.TextStyle(font: boldFont, fontSize: 18)),
                         pw.Text('FRESHMEAT BUTCHERY', style: pw.TextStyle(font: font)),
                         pw.Text('Location: New Town, Road linking From Water works Ltd. to Atronie Road', 
                           style: pw.TextStyle(font: font, fontSize: 7), textAlign: pw.TextAlign.center),
@@ -58,6 +58,34 @@ class ReceiptService {
                   if (sale.customerName != null)
                     pw.Text('Customer: ${sale.customerName} ${sale.customerPhone != null ? "(${sale.customerPhone})" : ""}', 
                       style: pw.TextStyle(font: font, fontSize: 9)),
+                  
+                  if (sale.status == SaleStatus.awaitingDeposit)
+                    pw.Container(
+                      width: double.infinity,
+                      margin: const pw.EdgeInsets.symmetric(vertical: 8),
+                      padding: const pw.EdgeInsets.all(10),
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: PdfColors.red, width: 2),
+                        color: PdfColors.red50,
+                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                      ),
+                      child: pw.Column(
+                        children: [
+                          pw.Text('*** AWAITING BANK DEPOSIT ***', style: pw.TextStyle(font: boldFont, fontSize: 11, color: PdfColors.red)),
+                          pw.Divider(color: PdfColors.red, thickness: 0.5),
+                          pw.SizedBox(height: 5),
+                          pw.Text('Please pay into the account below:', style: pw.TextStyle(font: font, fontSize: 8, color: PdfColors.red)),
+                          pw.SizedBox(height: 4),
+                          pw.Text('Bank: UMB (Universal Merchant Bank)', style: pw.TextStyle(font: boldFont, fontSize: 8)),
+                          pw.Text('Branch: Sunyani', style: pw.TextStyle(font: font, fontSize: 8)),
+                          pw.Text('Account Name: Mi-Corazon Enterprise', style: pw.TextStyle(font: font, fontSize: 8)),
+                          pw.Text('Account Number: 1111069263015', style: pw.TextStyle(font: boldFont, fontSize: 10)),
+                          pw.SizedBox(height: 5),
+                          pw.Text('VALID ONLY AFTER BANK VERIFICATION', style: pw.TextStyle(font: boldFont, fontSize: 7, color: PdfColors.red)),
+                        ],
+                      ),
+                    ),
+                    
                   pw.Divider(thickness: 0.5),
                   pw.Row(
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -123,11 +151,14 @@ class ReceiptService {
                   ),
                   pw.Divider(thickness: 0.5),
 
+                  pw.Text('PAYMENT BREAKDOWN', style: pw.TextStyle(font: boldFont, fontSize: 8)),
+                  pw.SizedBox(height: 4),
+
                   ...sale.payments.map((p) => pw.Row(
                         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                         children: [
-                          pw.Text(p.method.name.toUpperCase(), style: pw.TextStyle(font: boldFont, fontSize: 9)),
-                          pw.Text(p.amount.toStringAsFixed(2), style: pw.TextStyle(font: boldFont, fontSize: 9)),
+                          pw.Text('METHOD: ${_formatMethod(p.method)}', style: pw.TextStyle(font: font, fontSize: 9)),
+                          pw.Text('₵ ${p.amount.toStringAsFixed(2)}', style: pw.TextStyle(font: boldFont, fontSize: 9)),
                         ],
                       )),
                   
@@ -164,7 +195,7 @@ class ReceiptService {
                             'Date: ${DateFormat('yyyy-MM-dd HH:mm').format(sale.timestamp)}\n'
                             'Total: GHC ${sale.totalAmount.toStringAsFixed(2)}\n'
                             'Cashier: ${sale.cashierName}\n'
-                            'Status: ${sale.balance <= 0 ? "PAID" : "PARTIAL"}',
+                            'Status: ${sale.status == SaleStatus.awaitingDeposit ? "AWAITING DEPOSIT" : (sale.balance <= 0 ? "PAID" : "PARTIAL")}',
                       width: 60,
                       height: 60,
                     ),
@@ -213,6 +244,14 @@ class ReceiptService {
     }
   }
 
+  static String _formatMethod(PaymentMethod method) {
+    switch (method) {
+      case PaymentMethod.cash: return 'CASH';
+      case PaymentMethod.mobileMoney: return 'MOMO';
+      case PaymentMethod.bankDeposit: return 'BANK';
+    }
+  }
+
   static pw.Widget _receiptRow(String label, double value, pw.Font font, {bool isBold = false}) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 1),
@@ -227,10 +266,11 @@ class ReceiptService {
     );
   }
 
-  static Future<void> printSalesReport(List<SaleRecord> sales, {String title = 'Sales Report'}) async {
+  static Future<void> printSalesReport(List<SaleRecord> sales, {String title = 'Sales Report', double totalExpenses = 0.0}) async {
     try {
       final doc = pw.Document();
-      final totalRevenue = sales.fold(0.0, (sum, s) => sum + s.totalAmount);
+      final totalRevenue = sales.where((s) => s.status != SaleStatus.cancelled).fold(0.0, (sum, s) => sum + s.totalAmount);
+      final netProfit = totalRevenue - totalExpenses;
       
       pw.Font font;
       pw.Font boldFont;
@@ -253,7 +293,7 @@ class ReceiptService {
                 child: pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Mi CORAZON FRESHMEAT BUTCHERY', style: pw.TextStyle(font: boldFont)),
+                    pw.Text('Mi~CORAZON FRESHMEAT BUTCHERY', style: pw.TextStyle(font: boldFont)),
                     pw.Text(DateFormat('yyyy-MM-dd').format(DateTime.now()), style: pw.TextStyle(font: font)),
                   ],
                 ),
@@ -280,8 +320,31 @@ class ReceiptService {
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.end,
                 children: [
-                  pw.Text('Total Revenue: ', style: pw.TextStyle(font: boldFont)),
-                  pw.Text('GHC ${totalRevenue.toStringAsFixed(2)}', style: pw.TextStyle(font: boldFont, fontSize: 16)),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Row(
+                        children: [
+                          pw.Text('Total Revenue: ', style: pw.TextStyle(font: boldFont)),
+                          pw.Text('₵ ${totalRevenue.toStringAsFixed(2)}', style: pw.TextStyle(font: boldFont)),
+                        ],
+                      ),
+                      if (totalExpenses > 0)
+                        pw.Row(
+                          children: [
+                            pw.Text('Total Expenses: ', style: pw.TextStyle(font: boldFont, color: PdfColors.red)),
+                            pw.Text('₵ ${totalExpenses.toStringAsFixed(2)}', style: pw.TextStyle(font: boldFont, color: PdfColors.red)),
+                          ],
+                        ),
+                      pw.SizedBox(width: 150, child: pw.Divider()),
+                      pw.Row(
+                        children: [
+                          pw.Text('Estimated Profit: ', style: pw.TextStyle(font: boldFont, fontSize: 16, color: PdfColors.green)),
+                          pw.Text('₵ ${netProfit.toStringAsFixed(2)}', style: pw.TextStyle(font: boldFont, fontSize: 16, color: PdfColors.green)),
+                        ],
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ];
@@ -330,7 +393,7 @@ class ReceiptService {
                 child: pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Mi CORAZON FRESHMEAT BUTCHERY', style: pw.TextStyle(font: boldFont)),
+                    pw.Text('Mi~CORAZON FRESHMEAT BUTCHERY', style: pw.TextStyle(font: boldFont)),
                     pw.Text(DateFormat('yyyy-MM-dd').format(DateTime.now()), style: pw.TextStyle(font: font)),
                   ],
                 ),
@@ -414,7 +477,7 @@ class ReceiptService {
               ),
               pw.SizedBox(height: 40),
               pw.Center(
-                child: pw.Text('Report Generated by Mi Corazon Management System', style: pw.TextStyle(font: font, fontSize: 8, color: PdfColors.grey)),
+                child: pw.Text('Report Generated by Mi~Corazon Management System', style: pw.TextStyle(font: font, fontSize: 8, color: PdfColors.grey)),
               ),
             ];
           },
@@ -476,7 +539,7 @@ class ReceiptService {
                 child: pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Mi CORAZON FRESHMEAT BUTCHERY', style: pw.TextStyle(font: boldFont)),
+                    pw.Text('Mi~CORAZON FRESHMEAT BUTCHERY', style: pw.TextStyle(font: boldFont)),
                     pw.Text(DateFormat('yyyy-MM-dd').format(DateTime.now()), style: pw.TextStyle(font: font)),
                   ],
                 ),
@@ -558,7 +621,7 @@ class ReceiptService {
               ),
               pw.SizedBox(height: 40),
               pw.Center(
-                child: pw.Text('Report Generated by Mi Corazon Management System', style: pw.TextStyle(font: font, fontSize: 8, color: PdfColors.grey)),
+                child: pw.Text('Report Generated by Mi~Corazon Management System', style: pw.TextStyle(font: font, fontSize: 8, color: PdfColors.grey)),
               ),
             ];
           },

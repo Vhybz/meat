@@ -10,6 +10,7 @@ import '../../services/menu_service.dart';
 import '../../services/user_provider.dart';
 import '../../models/user_model.dart';
 import '../../widgets/role_pop_scope.dart';
+import '../../services/birthday_service.dart';
 import 'butcher_dashboard.dart';
 import 'animal_intake_screen.dart';
 import 'slaughter_log_screen.dart';
@@ -22,6 +23,7 @@ import 'waste_management_screen.dart';
 import 'documents_screen.dart';
 import 'reports_screen.dart';
 import 'settings_screen.dart';
+import 'carcass_breakdown_screen.dart';
 import '../profile_screen.dart';
 import 'how_to_use_screen.dart';
 import 'butcher_expense_screen.dart';
@@ -33,6 +35,13 @@ class ButcherShell extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(currentUserProvider);
     if (user == null) return const Center(child: CircularProgressIndicator());
+
+    // Check for Birthday
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (context.mounted) {
+        BirthdayService.checkAndShowBirthdayWish(context, user);
+      }
+    });
 
     // Instant Permission Guard: Redirect to Login/Admin if access is revoked
     final roles = user.activeRoles;
@@ -53,19 +62,11 @@ class ButcherShell extends ConsumerWidget {
     return RolePopScope(
       currentRoute: '/butcher',
       child: PopScope(
-        canPop: false,
+        canPop: currentScreen == ButcherScreen.dashboard,
         onPopInvokedWithResult: (didPop, result) {
           if (didPop) return;
           if (currentScreen != ButcherScreen.dashboard) {
             ref.read(butcherNavProvider.notifier).setScreen(ButcherScreen.dashboard);
-          } else {
-            // Already on dashboard, stay here instead of showing exit dialog
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Use the menu to logout or switch accounts'),
-                duration: Duration(seconds: 2),
-              ),
-            );
           }
         },
         child: Scaffold(
@@ -81,24 +82,24 @@ class ButcherShell extends ConsumerWidget {
               ),
             ],
           ),
-        drawer: isDesktop ? null : Drawer(child: _buildSidebar(ref, currentScreen, user, context, menuItems)),
-        body: Row(
-          children: [
-            if (isDesktop) _buildSidebar(ref, currentScreen, user, context, menuItems),
-            Expanded(
-              child: Container(
-                color: theme.scaffoldBackgroundColor,
-                child: SafeArea(
-                  top: false,
-                  bottom: true,
-                  child: _buildContent(currentScreen),
+          drawer: isDesktop ? null : Drawer(child: _buildSidebar(ref, currentScreen, user, context, menuItems)),
+          body: Row(
+            children: [
+              if (isDesktop) _buildSidebar(ref, currentScreen, user, context, menuItems),
+              Expanded(
+                child: Container(
+                  color: theme.scaffoldBackgroundColor,
+                  child: SafeArea(
+                    top: false,
+                    bottom: true,
+                    child: _buildContent(currentScreen),
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
 
@@ -119,11 +120,12 @@ class ButcherShell extends ConsumerWidget {
       case ButcherScreen.settings: return 'Workstation Settings';
       case ButcherScreen.profile: return 'Personal Profile';
       case ButcherScreen.howToUse: return 'How to Use System';
+      case ButcherScreen.carcassBreakdown: return 'Carcass Breakdown Station';
     }
   }
 
   Widget _buildSidebar(WidgetRef ref, ButcherScreen current, UserAccount user, BuildContext context, List<SidebarItem> menuItems) {
-    final currentRoute = '/butcher';
+    const currentRoute = '/butcher';
     return AppSidebar(
       userId: user.id,
       userName: user.name,
@@ -163,6 +165,7 @@ class ButcherShell extends ConsumerWidget {
       case ButcherScreen.settings: return const SettingsScreen();
       case ButcherScreen.profile: return const ProfileView();
       case ButcherScreen.howToUse: return const HowToUseScreen();
+      case ButcherScreen.carcassBreakdown: return const CarcassBreakdownScreen();
     }
   }
 
@@ -190,7 +193,7 @@ class ButcherShell extends ConsumerWidget {
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: Text('Cancel', style: TextStyle(color: theme.colorScheme.onSurfaceVariant))),
-            ElevatedButton(
+          ElevatedButton(
             onPressed: () async {
               if (controller.text.isNotEmpty) {
                 final user = ref.read(currentUserProvider);

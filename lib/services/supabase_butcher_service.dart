@@ -7,16 +7,23 @@ class SupabaseButcherService {
   Future<List<SlaughterLog>> getSlaughterLogs(String branchCode) async {
     final response = await _client
         .from('slaughter_logs')
-        .select()
+        .select('*, animals(tag_number)')
         .eq('branch_code', branchCode)
         .order('slaughter_time', ascending: false, nullsFirst: true);
     
-    return (response as List).map((json) => SlaughterLog.fromJson(json)).toList();
+    return (response as List).map((json) {
+      final Map<String, dynamic> data = Map<String, dynamic>.from(json);
+      if (data['animals'] != null) {
+        data['tag_number'] = data['animals']['tag_number'];
+      }
+      return SlaughterLog.fromJson(data);
+    }).toList();
   }
 
-  Future<void> addAnimal(String branchCode, String animalId, AnimalType type, double weight, String sourceFarm) async {
+  Future<void> addAnimal(String branchCode, String animalUuid, String tagNumber, AnimalType type, double weight, String sourceFarm) async {
     await _client.from('animals').insert({
-      'id': animalId,
+      'id': animalUuid,
+      'tag_number': tagNumber,
       'branch_code': branchCode,
       'type': type.name,
       'weight': weight,
@@ -27,14 +34,7 @@ class SupabaseButcherService {
   }
 
   Future<void> addSlaughterLog(SlaughterLog log) async {
-    await _client.from('slaughter_logs').insert({
-      'id': log.id,
-      'branch_code': log.branchCode,
-      'animal_id': log.animalId,
-      'type': log.type.name,
-      'initial_weight': log.weight,
-      'status': log.status.name,
-    });
+    await _client.from('slaughter_logs').insert(log.toJson());
   }
 
   Future<void> updateSlaughterLog(SlaughterLog log) async {
@@ -62,7 +62,7 @@ class SupabaseButcherService {
         .from('meat_batches')
         .select()
         .eq('branch_code', branchCode)
-        .eq('status', 'processing')
+        .neq('status', 'completed')
         .order('created_at', ascending: false);
     
     return (response as List).map((json) => MeatBatch.fromJson(json)).toList();

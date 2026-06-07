@@ -41,7 +41,9 @@ class BranchNotifier extends StateNotifier<AsyncValue<List<Branch>>> {
     try {
       await _service.updateBranchAdmin(code, adminId);
       await loadBranches();
-    } catch (e) {}
+    } catch (e) {
+      // Ignore errors for now as this is a secondary update
+    }
   }
 }
 
@@ -56,6 +58,6 @@ final currentBranchProvider = Provider<Branch?>((ref) {
   return branchesAsync.when(
     data: (branches) => branches.where((b) => b.code == user?.branchCode).firstOrNull,
     loading: () => null,
-    error: (_, __) => null,
+    error: (_, _) => null,
   );
 });

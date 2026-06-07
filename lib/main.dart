@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'theme/app_theme.dart';
 import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
@@ -20,11 +21,13 @@ import 'screens/admin/butcher_analytics_screen.dart';
 import 'screens/admin/recents_screen.dart';
 import 'screens/admin/system_maintenance_screen.dart';
 import 'screens/admin/tax_compliance_screen.dart';
+import 'screens/admin/salary_management_screen.dart';
 import 'screens/butcher/documents_screen.dart';
 import 'screens/cashier/cashier_pos.dart';
 import 'screens/butcher/butcher_shell.dart';
 import 'screens/settings_screen.dart';
 import 'screens/profile_screen.dart';
+import 'screens/about_screen.dart';
 import 'services/theme_provider.dart';
 import 'services/sync_provider.dart';
 import 'core/supabase_config.dart';
@@ -36,6 +39,18 @@ import 'screens/admin/super_admin_screen.dart';
 void main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
+    
+    // 0. Load Environment Variables First
+    try {
+      await dotenv.load(fileName: ".env");
+    } catch (_) {
+      try {
+        await dotenv.load(fileName: "assets/.env");
+      } catch (e) {
+        debugPrint('CRITICAL: .env could not be loaded. AI and Cloud features may fail: $e');
+      }
+    }
+
     usePathUrlStrategy();
 
     // Initialize Offline Sync Engine (Hive)
@@ -268,16 +283,16 @@ class MeatShopApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final themeMode = ref.watch(themeProvider);
+    final themeState = ref.watch(themeProvider);
     // Initialize background sync
     ref.watch(syncProvider);
 
     return MaterialApp(
-      title: 'Mi Corazon Freshmeat Butchery',
+      title: 'Mi~Corazon Freshmeat Butchery',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme,
-      darkTheme: AppTheme.darkTheme,
-      themeMode: themeMode,
+      theme: AppTheme.getLightTheme(themeState.primaryColor),
+      darkTheme: AppTheme.getDarkTheme(themeState.primaryColor),
+      themeMode: themeState.mode,
       initialRoute: '/',
       routes: {
         '/': (context) => const SplashScreen(),
@@ -294,12 +309,14 @@ class MeatShopApp extends ConsumerWidget {
         '/admin/stock': (context) => const InventoryControlScreen(),
         '/admin/tax': (context) => const TaxComplianceScreen(),
         '/admin/users': (context) => const UserManagementScreen(),
+        '/admin/salaries': (context) => const SalaryManagementScreen(),
         '/admin/butcher': (context) => const ButcherAnalyticsScreen(),
         '/admin/recents': (context) => const RecentsScreen(),
         '/admin/maintenance': (context) => const SystemMaintenanceScreen(),
         '/admin/settings': (context) => const SystemSettingsScreen(),
         '/settings': (context) => const SettingsScreen(),
         '/profile': (context) => const ProfileScreen(),
+        '/about': (context) => const AboutScreen(),
         '/cashier': (context) => const CashierPOS(),
         '/butcher': (context) => const ButcherShell(),
       },

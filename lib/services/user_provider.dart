@@ -9,7 +9,38 @@ class UserNotifier extends StateNotifier<List<UserAccount>> {
   final SupabaseUserService service;
   final Ref ref;
 
-  UserNotifier(this.service, this.ref) : super([]);
+  UserNotifier(this.service, this.ref) : super([]) {
+    _startHeartbeat();
+  }
+
+  void _startHeartbeat() {
+    ref.listen(liveHeartbeatProvider, (previous, next) {
+      final currentId = ref.read(currentUserIdProvider);
+      if (currentId != null) {
+        // Every 30 seconds (10 ticks of 3s heartbeat), update last seen in DB
+        if (next.value != null && next.value! % 10 == 0) {
+          updateLastSeen(currentId);
+          // Also refresh the user list to see other people's online status
+          loadUsers(silent: true);
+        }
+      }
+    });
+  }
+
+  Future<void> updateLastSeen(String userId) async {
+    try {
+      final now = DateTime.now();
+      await service.updateUserFields(userId, {'last_seen': now.toIso8601String()});
+      
+      // Update local state if the user is in our list
+      final user = await _getUser(userId);
+      if (user != null) {
+        _updateLocalAndSession(user.copyWith(lastSeen: now));
+      }
+    } catch (e) {
+      debugPrint('Heartbeat Error: $e');
+    }
+  }
 
   // Centralized method to update local state and notify session listeners
   void _updateLocalAndSession(UserAccount updatedUser) {
@@ -185,7 +216,40 @@ class UserNotifier extends StateNotifier<List<UserAccount>> {
     }
   }
 
-  Future<void> updatePhoto(String userId, Uint8List bytes) async {
+  Future<void> updateSalary(String userId, {double? amount, int? day, DateTime? lastPaid}) async {
+    try {
+      final user = await _getUser(userId);
+      if (user != null) {
+        final updatedUser = user.copyWith(
+          salaryAmount: amount,
+          salaryDay: day,
+          lastSalaryDate: lastPaid,
+        );
+        _updateLocalAndSession(updatedUser);
+        await service.updateUser(updatedUser);
+      }
+    } catch (e) {
+      debugPrint('Update Salary Error: $e');
+    }
+  }
+
+  Future<void> updateTheme(String userId, {String? mode, int? color}) async {
+    try {
+      final user = await _getUser(userId);
+      if (user != null) {
+        final updatedUser = user.copyWith(
+          themeMode: mode,
+          themePrimaryColor: color,
+        );
+        _updateLocalAndSession(updatedUser);
+        await service.updateUser(updatedUser);
+      }
+    } catch (e) {
+      debugPrint('Update Theme Error: $e');
+    }
+  }
+
+  Future<String?> updatePhoto(String userId, Uint8List bytes) async {
     try {
       final url = await service.uploadProfilePicture(userId, bytes);
       if (url != null) {
@@ -196,8 +260,10 @@ class UserNotifier extends StateNotifier<List<UserAccount>> {
           await service.updateUser(updatedUser);
         }
       }
+      return url;
     } catch (e) {
       debugPrint('Update Photo Error: $e');
+      return null;
     }
   }
 
@@ -298,6 +364,20 @@ class UserNotifier extends StateNotifier<List<UserAccount>> {
     return await service.checkPhoneExists(phone);
   }
 
+  Future<bool> checkIfAnyAdminExists() async {
+    try {
+      final allUsers = await service.getUsers();
+      // Any approved admin or superAdmin counts as an existing administrator
+      return allUsers.any((u) => 
+        (u.role == UserRole.admin || u.role == UserRole.superAdmin) && 
+        u.status == AccountStatus.approved &&
+        !u.isDeleted
+      );
+    } catch (e) {
+      return false;
+    }
+  }
+
   List<UserAccount> getPendingUsers() {
     return state.where((u) => !u.isDeleted && u.status == AccountStatus.pending).toList();
   }
@@ -306,7 +386,11 @@ class UserNotifier extends StateNotifier<List<UserAccount>> {
     return state.where((u) => !u.isDeleted && u.role == UserRole.cashier && u.status == AccountStatus.approved).toList();
   }
 
-  bool get isAdminExists => state.any((u) => u.role == UserRole.admin && u.status == AccountStatus.approved);
+  bool get isAdminExists => state.any((u) => 
+    (u.role == UserRole.admin || u.role == UserRole.superAdmin) && 
+    u.status == AccountStatus.approved &&
+    !u.isDeleted
+  );
 }
 
 final userServiceProvider = Provider<SupabaseUserService>((ref) {

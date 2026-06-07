@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../core/constants.dart';
 
 class AppTheme {
-  static ThemeData get lightTheme {
+  static ThemeData getLightTheme(Color primaryColor) {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
@@ -12,8 +12,8 @@ class AppTheme {
         ThemeData.light().textTheme,
       ),
       colorScheme: ColorScheme.fromSeed(
-        seedColor: AppColors.primaryMaroon,
-        primary: AppColors.primaryMaroon,
+        seedColor: primaryColor,
+        primary: primaryColor,
         surface: Colors.white,
         onSurface: AppColors.textDark,
         surfaceContainerHighest: AppColors.surfaceWhite,
@@ -40,15 +40,26 @@ class AppTheme {
         iconTheme: const IconThemeData(color: AppColors.textDark),
       ),
       dividerTheme: const DividerThemeData(color: AppColors.borderGray),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primaryColor,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.s)),
+        ),
+      ),
     );
   }
 
-  static ThemeData get darkTheme {
-    // Elegant deep dark palette
-    const darkSurface = Color(0xFF1E1E1E);
-    const darkBg = Color(0xFF121212);
-    const darkBorder = Color(0xFF2C2C2C);
-    const primaryMaroonLight = Color(0xFF9E1B1B);
+  static ThemeData getDarkTheme(Color primaryColor) {
+    // OLED Deep Black palette
+    const darkBg = Color(0xFF000000); // Pure Black
+    const darkSurface = Color(0xFF0A0A0A); // Very deep gray for cards
+    const darkBorder = Color(0xFF1A1F1A); // Subtle dark border
+    
+    // Lighten the primary color slightly for dark mode if it's too dark
+    final Color effectivePrimary = HSLColor.fromColor(primaryColor)
+        .withLightness((HSLColor.fromColor(primaryColor).lightness + 0.1).clamp(0.0, 0.9))
+        .toColor();
 
     return ThemeData(
       useMaterial3: true,
@@ -65,19 +76,19 @@ class AppTheme {
         ),
       ),
       colorScheme: ColorScheme.fromSeed(
-        seedColor: AppColors.primaryMaroon,
-        primary: primaryMaroonLight,
-        secondary: const Color(0xFFE57373),
+        seedColor: primaryColor,
+        primary: effectivePrimary,
+        secondary: effectivePrimary.withValues(alpha: 0.7),
         surface: darkSurface,
         onSurface: const Color(0xFFE0E0E0),
         onSurfaceVariant: const Color(0xFFB0B0B0),
-        surfaceContainerHighest: const Color(0xFF252525),
+        surfaceContainerHighest: const Color(0xFF121212),
         brightness: Brightness.dark,
       ),
       scaffoldBackgroundColor: darkBg,
       cardTheme: CardThemeData(
         color: darkSurface,
-        elevation: 4,
+        elevation: 0, // Lower elevation for deep black
         shadowColor: Colors.black.withValues(alpha: 0.5),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.m),
@@ -85,7 +96,7 @@ class AppTheme {
         ),
       ),
       appBarTheme: AppBarTheme(
-        backgroundColor: darkSurface,
+        backgroundColor: darkBg, // Match background
         elevation: 0,
         centerTitle: false,
         titleTextStyle: GoogleFonts.montserrat(
@@ -103,7 +114,7 @@ class AppTheme {
       iconTheme: const IconThemeData(color: Color(0xFFB0B0B0)),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0xFF252525),
+        fillColor: const Color(0xFF0F0F0F),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppRadius.s),
           borderSide: const BorderSide(color: darkBorder),
@@ -115,9 +126,16 @@ class AppTheme {
         labelStyle: GoogleFonts.montserrat(color: const Color(0xFFB0B0B0)),
         hintStyle: GoogleFonts.montserrat(color: const Color(0xFF757575)),
       ),
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: primaryMaroonLight,
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: effectivePrimary,
         foregroundColor: Colors.white,
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: effectivePrimary,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.s)),
+        ),
       ),
     );
   }

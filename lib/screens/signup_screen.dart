@@ -49,6 +49,14 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     super.initState();
     _passwordController.addListener(_checkPasswordStrength);
     _phoneController.addListener(_onPhoneChanged);
+    
+    // Ensure we have current user data loaded if an admin is logged in
+    // and using this screen to create a staff account.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (ref.read(currentUserIdProvider) != null) {
+        ref.read(userProvider.notifier).loadUsers(silent: true);
+      }
+    });
   }
 
   @override
@@ -134,267 +142,252 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     final bool isMobile = size.width < 600;
 
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: isDark 
-              ? [const Color(0xFF121212), const Color(0xFF000000)]
-              : [AppColors.primaryMaroon, const Color(0xFF4A0808)],
-          ),
-        ),
-        child: Center(
-          child: SingleChildScrollView(
-            padding: EdgeInsets.symmetric(
-              vertical: isMobile ? 20 : 40, 
-              horizontal: isMobile ? 10 : 20
+      body: SafeArea(
+        child: Container(
+          width: double.infinity,
+          height: double.infinity,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: isDark 
+                ? [const Color(0xFF121212), const Color(0xFF000000)]
+                : [theme.colorScheme.primary, HSLColor.fromColor(theme.colorScheme.primary).withLightness(0.15).toColor()],
             ),
-            child: Container(
-              constraints: const BoxConstraints(maxWidth: 550),
-              width: size.width * (isMobile ? 0.95 : 0.8),
-              padding: EdgeInsets.all(isMobile ? AppSpacing.l : AppSpacing.xl),
-              decoration: BoxDecoration(
-                color: theme.cardTheme.color,
-                borderRadius: BorderRadius.circular(AppRadius.l),
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.4), blurRadius: 20, offset: const Offset(0, 10)),
-                ],
-                border: isDark ? Border.all(color: theme.dividerColor) : null,
+          ),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.symmetric(
+                vertical: isMobile ? 20 : 40, 
+                horizontal: isMobile ? 10 : 20
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Fixed Header Section
-                  Container(
-                    padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.xl),
-                    child: Column(
-                      children: [
-                        Container(
-                          width: isMobile ? 80 : 100,
-                          height: isMobile ? 80 : 100,
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.1),
-                                blurRadius: 20,
-                                offset: const Offset(0, 10),
-                              ),
-                            ],
-                            border: Border.all(color: AppColors.primaryMaroon.withValues(alpha: 0.1), width: 4),
-                          ),
-                          child: ClipOval(
-                            child: Image.asset(
-                              'assets/logo/logo.jpg',
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.m),
-                        Text(
-                          'Staff Registration',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: isMobile ? 20 : 24, 
-                            fontWeight: FontWeight.bold, 
-                            color: isDark ? theme.colorScheme.primary : AppColors.primaryMaroon,
-                            letterSpacing: 1.1,
-                          ),
-                        ),
-                        Text(
-                          'Apply for a Mi Corazon team account', 
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Divider(height: 1, color: theme.dividerColor),
-                  // Scrollable Form Section
-                  Flexible(
-                    child: SingleChildScrollView(
+              child: Container(
+                constraints: const BoxConstraints(maxWidth: 550),
+                width: size.width * (isMobile ? 0.95 : 0.8),
+                padding: EdgeInsets.all(isMobile ? AppSpacing.l : AppSpacing.xl),
+                decoration: BoxDecoration(
+                  color: theme.cardTheme.color,
+                  borderRadius: BorderRadius.circular(AppRadius.l),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withValues(alpha: isDark ? 0.5 : 0.4), blurRadius: 20, offset: const Offset(0, 10)),
+                  ],
+                  border: isDark ? Border.all(color: theme.dividerColor) : null,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Fixed Header Section
+                    Container(
                       padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.xl),
-                      child: Form(
-                        key: _formKey,
-                        child: Column(
-                          children: [
-                            Flex(
-                              direction: isMobile ? Axis.vertical : Axis.horizontal,
-                              children: [
-                                Expanded(
-                                  flex: isMobile ? 0 : 1,
-                                  child: _buildTextField(context, _firstNameController, 'First Name', Icons.person_outline, isName: true),
-                                ),
-                                if (!isMobile) const SizedBox(width: AppSpacing.m) else const SizedBox(height: AppSpacing.m),
-                                Expanded(
-                                  flex: isMobile ? 0 : 1,
-                                  child: _buildTextField(context, _surnameController, 'Surname', Icons.person_outline, isName: true),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: isMobile ? 80 : 100,
+                            height: isMobile ? 80 : 100,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.1),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 10),
                                 ),
                               ],
+                              border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.1), width: 4),
                             ),
-                            const SizedBox(height: AppSpacing.m),
-                            
-                            _buildTextField(context, _emailController, 'Email Address', Icons.email_outlined, isEmail: true),
-                            const SizedBox(height: AppSpacing.m),
-                            
-                            _buildTextField(context, _phoneController, 'Phone Number', Icons.phone_android_outlined, isPhone: true),
-                            const SizedBox(height: AppSpacing.m),
-                            
-                            Flex(
-                              direction: isMobile ? Axis.vertical : Axis.horizontal,
-                              children: [
-                                Expanded(
-                                  flex: isMobile ? 0 : 1,
-                                  child: DropdownButtonFormField<String>(
-                                    initialValue: _selectedGender,
-                                    decoration: const InputDecoration(labelText: 'Gender', prefixIcon: Icon(Icons.wc)),
-                                    items: ['Male', 'Female', 'Other'].map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
-                                    onChanged: (v) => setState(() => _selectedGender = v),
-                                    validator: (v) => v == null ? 'Required' : null,
-                                  ),
+                            child: ClipOval(
+                              child: Image.asset(
+                                'assets/logo/logo.jpg',
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.m),
+                          Text(
+                            'Staff Registration',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: isMobile ? 20 : 24, 
+                              fontWeight: FontWeight.bold, 
+                              color: theme.colorScheme.primary,
+                              letterSpacing: 1.1,
+                            ),
+                          ),
+                          Text(
+                            'Apply for a Mi~Corazon team account',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Divider(height: 1, color: theme.dividerColor),
+                    // Scrollable Form Section
+                    Flexible(
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.all(isMobile ? AppSpacing.m : AppSpacing.xl),
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            children: [
+                              if (isMobile) ...[
+                                _buildTextField(context, _firstNameController, 'First Name', Icons.person_outline, isName: true),
+                                const SizedBox(height: AppSpacing.m),
+                                _buildTextField(context, _surnameController, 'Surname', Icons.person_outline, isName: true),
+                              ] else
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _buildTextField(context, _firstNameController, 'First Name', Icons.person_outline, isName: true),
+                                    ),
+                                    const SizedBox(width: AppSpacing.m),
+                                    Expanded(
+                                      child: _buildTextField(context, _surnameController, 'Surname', Icons.person_outline, isName: true),
+                                    ),
+                                  ],
                                 ),
-                                if (!isMobile) const SizedBox(width: AppSpacing.m) else const SizedBox(height: AppSpacing.m),
-                                Expanded(
-                                  flex: isMobile ? 0 : 1,
-                                  child: InkWell(
-                                    onTap: () async {
-                                      final picked = await showDatePicker(
-                                        context: context,
-                                        initialDate: DateTime(2000),
-                                        firstDate: DateTime(1950),
-                                        lastDate: DateTime.now().subtract(const Duration(days: 365 * 18)),
-                                      );
-                                      if (picked != null) setState(() => _selectedDob = picked);
-                                    },
-                                    child: Container(
-                                      height: 56, // Match standard input height
-                                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                                      decoration: BoxDecoration(
-                                        border: Border.all(color: theme.dividerColor), 
-                                        borderRadius: BorderRadius.circular(AppRadius.s),
-                                        color: theme.inputDecorationTheme.fillColor,
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Icon(Icons.cake_outlined, size: 20, color: theme.colorScheme.onSurfaceVariant),
-                                          const SizedBox(width: 8),
-                                          Text(_selectedDob == null ? 'Date of Birth' : DateFormat('yyyy-MM-dd').format(_selectedDob!), 
-                                            style: TextStyle(fontSize: 12, color: _selectedDob == null ? theme.colorScheme.onSurfaceVariant : theme.colorScheme.onSurface)),
-                                        ],
+                              const SizedBox(height: AppSpacing.m),
+                              
+                              _buildTextField(context, _emailController, 'Email Address', Icons.email_outlined, isEmail: true),
+                              const SizedBox(height: AppSpacing.m),
+                              
+                              _buildTextField(context, _phoneController, 'Phone Number', Icons.phone_android_outlined, isPhone: true),
+                              const SizedBox(height: AppSpacing.m),
+                              
+                              if (isMobile) ...[
+                                DropdownButtonFormField<String>(
+                                  initialValue: _selectedGender,
+                                  decoration: const InputDecoration(labelText: 'Gender', prefixIcon: Icon(Icons.wc)),
+                                  items: ['Male', 'Female', 'Other'].map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
+                                  onChanged: (v) => setState(() => _selectedGender = v),
+                                  validator: (v) => v == null ? 'Required' : null,
+                                ),
+                                const SizedBox(height: AppSpacing.m),
+                                _buildDatePickerTrigger(context, theme),
+                              ] else
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: DropdownButtonFormField<String>(
+                                        initialValue: _selectedGender,
+                                        decoration: const InputDecoration(labelText: 'Gender', prefixIcon: Icon(Icons.wc)),
+                                        items: ['Male', 'Female', 'Other'].map((g) => DropdownMenuItem(value: g, child: Text(g))).toList(),
+                                        onChanged: (v) => setState(() => _selectedGender = v),
+                                        validator: (v) => v == null ? 'Required' : null,
                                       ),
                                     ),
-                                  ),
+                                    const SizedBox(width: AppSpacing.m),
+                                    Expanded(
+                                      child: _buildDatePickerTrigger(context, theme),
+                                    ),
+                                  ],
+                                ),
+                              const SizedBox(height: AppSpacing.m),
+                              
+                              DropdownButtonFormField<UserRole>(
+                                initialValue: _selectedRole,
+                                decoration: const InputDecoration(labelText: 'Applying For Role', prefixIcon: Icon(Icons.work_outline)),
+                                items: [UserRole.cashier, UserRole.butcher, UserRole.admin].map((r) => DropdownMenuItem(value: r, child: Text(r.name.toUpperCase()))).toList(),
+                                onChanged: (v) {
+                                  setState(() {
+                                    _selectedRole = v!;
+                                    if (v != UserRole.admin) _isCreatingBranch = false;
+                                  });
+                                },
+                              ),
+                              const SizedBox(height: AppSpacing.m),
+                              
+                              if (_selectedRole == UserRole.admin || noBranchesExist) ...[
+                                CheckboxListTile(
+                                  title: Text('Setup New Branch?', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+                                  subtitle: Text(noBranchesExist ? 'Required: No branches found.' : 'Create a separate business unit', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant)),
+                                  value: _isCreatingBranch || noBranchesExist,
+                                  onChanged: noBranchesExist ? null : (v) => setState(() => _isCreatingBranch = v!),
+                                  activeColor: theme.colorScheme.primary,
+                                  dense: true,
+                                ),
+                                const SizedBox(height: AppSpacing.m),
+                              ],
+
+                              if (_isCreatingBranch || noBranchesExist) ...[
+                                _buildTextField(context, _branchNameController, 'Shop/Branch Name', Icons.store_mall_directory_outlined),
+                                const SizedBox(height: AppSpacing.m),
+                                _buildTextField(context, _branchLocationController, 'Branch Location (City/Town)', Icons.location_on_outlined),
+                                const SizedBox(height: AppSpacing.m),
+                              ] else ...[
+                                DropdownButtonFormField<String>(
+                                  isExpanded: true,
+                                  initialValue: _selectedBranchCode,
+                                  decoration: const InputDecoration(labelText: 'Select Working Branch', prefixIcon: Icon(Icons.map_outlined)),
+                                  items: branches.map((b) => DropdownMenuItem(value: b.code, child: Text('${b.name} (${b.location})', style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis))).toList(),
+                                  onChanged: (v) => setState(() => _selectedBranchCode = v),
+                                  validator: (v) => v == null ? 'Please select a branch' : null,
+                                ),
+                                const SizedBox(height: AppSpacing.m),
+                              ],
+                              
+                              _buildTextField(context, _passwordController, 'Password', Icons.lock_outline, isPassword: true),
+                              if (_passwordController.text.isNotEmpty) ...[
+                                const SizedBox(height: 8),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Text('Strength: ', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant)),
+                                        Text(_strengthLabel, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _strengthColor)),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    LinearProgressIndicator(
+                                      value: _strength,
+                                      backgroundColor: isDark ? Colors.white10 : Colors.grey.shade200,
+                                      valueColor: AlwaysStoppedAnimation<Color>(_strengthColor),
+                                    ),
+                                  ],
                                 ),
                               ],
-                            ),
-                            const SizedBox(height: AppSpacing.m),
-                            
-                            DropdownButtonFormField<UserRole>(
-                              initialValue: _selectedRole,
-                              decoration: const InputDecoration(labelText: 'Applying For Role', prefixIcon: Icon(Icons.work_outline)),
-                              items: [UserRole.cashier, UserRole.butcher, UserRole.admin].map((r) => DropdownMenuItem(value: r, child: Text(r.name.toUpperCase()))).toList(),
-                              onChanged: (v) {
-                                setState(() {
-                                  _selectedRole = v!;
-                                  if (v != UserRole.admin) _isCreatingBranch = false;
-                                });
-                              },
-                            ),
-                            const SizedBox(height: AppSpacing.m),
-                            
-                            if (_selectedRole == UserRole.admin || noBranchesExist) ...[
-                              CheckboxListTile(
-                                title: Text('Setup New Branch?', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
-                                subtitle: Text(noBranchesExist ? 'Required: No branches found.' : 'Create a separate business unit', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant)),
-                                value: _isCreatingBranch || noBranchesExist,
-                                onChanged: noBranchesExist ? null : (v) => setState(() => _isCreatingBranch = v!),
-                                activeColor: theme.colorScheme.primary,
-                                dense: true,
-                              ),
                               const SizedBox(height: AppSpacing.m),
-                            ],
-
-                            if (_isCreatingBranch || noBranchesExist) ...[
-                              _buildTextField(context, _branchNameController, 'Shop/Branch Name', Icons.store_mall_directory_outlined),
-                              const SizedBox(height: AppSpacing.m),
-                              _buildTextField(context, _branchLocationController, 'Branch Location (City/Town)', Icons.location_on_outlined),
-                              const SizedBox(height: AppSpacing.m),
-                            ] else ...[
-                              DropdownButtonFormField<String>(
-                                isExpanded: true,
-                                initialValue: _selectedBranchCode,
-                                decoration: const InputDecoration(labelText: 'Select Working Branch', prefixIcon: Icon(Icons.map_outlined)),
-                                items: branches.map((b) => DropdownMenuItem(value: b.code, child: Text('${b.name} (${b.location})', style: const TextStyle(fontSize: 11), overflow: TextOverflow.ellipsis))).toList(),
-                                onChanged: (v) => setState(() => _selectedBranchCode = v),
-                                validator: (v) => v == null ? 'Please select a branch' : null,
-                              ),
-                              const SizedBox(height: AppSpacing.m),
-                            ],
-                            
-                            _buildTextField(context, _passwordController, 'Password', Icons.lock_outline, isPassword: true),
-                            if (_passwordController.text.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Text('Strength: ', style: TextStyle(fontSize: 12, color: theme.colorScheme.onSurfaceVariant)),
-                                      Text(_strengthLabel, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _strengthColor)),
-                                    ],
+                              _buildTextField(context, _confirmPasswordController, 'Confirm Password', Icons.lock_reset_outlined, isPassword: true),
+                              
+                              const SizedBox(height: AppSpacing.xl),
+                              
+                              SizedBox(
+                                width: double.infinity,
+                                height: 55,
+                                child: ElevatedButton(
+                                  onPressed: _isLoading ? null : _handleSignup,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: theme.colorScheme.primary,
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.s)),
                                   ),
-                                  const SizedBox(height: 4),
-                                  LinearProgressIndicator(
-                                    value: _strength,
-                                    backgroundColor: isDark ? Colors.white10 : Colors.grey.shade200,
-                                    valueColor: AlwaysStoppedAnimation<Color>(_strengthColor),
+                                  child: _isLoading 
+                                      ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)))
+                                      : const Text('Submit Application', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                ),
+                              ),
+                              
+                              const SizedBox(height: AppSpacing.l),
+                              Wrap(
+                                alignment: WrapAlignment.center,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  Text('Already have an account?', style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 13)),
+                                  TextButton(
+                                    onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
+                                    child: Text('Login', style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.primary, fontSize: 13)),
                                   ),
                                 ],
                               ),
                             ],
-                            const SizedBox(height: AppSpacing.m),
-                            _buildTextField(context, _confirmPasswordController, 'Confirm Password', Icons.lock_reset_outlined, isPassword: true),
-                            
-                            const SizedBox(height: AppSpacing.xl),
-                            
-                            SizedBox(
-                              width: double.infinity,
-                              height: 55,
-                              child: ElevatedButton(
-                                onPressed: _isLoading ? null : _handleSignup,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: theme.colorScheme.primary,
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.s)),
-                                ),
-                                child: _isLoading 
-                                    ? const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)))
-                                    : const Text('Submit Application', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                              ),
-                            ),
-                            
-                            const SizedBox(height: AppSpacing.l),
-                            Wrap(
-                              alignment: WrapAlignment.center,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                Text('Already have an account?', style: TextStyle(color: theme.colorScheme.onSurfaceVariant, fontSize: 13)),
-                                TextButton(
-                                  onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
-                                  child: Text('Login', style: TextStyle(fontWeight: FontWeight.bold, color: theme.colorScheme.primary, fontSize: 13)),
-                                ),
-                              ],
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -468,10 +461,14 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         final userNotifier = ref.read(userProvider.notifier);
         final branchesAsync = ref.read(branchesProvider);
         final noBranchesExist = (branchesAsync.value ?? []).isEmpty;
+        final String email = _emailController.text.trim();
+        final String password = _passwordController.text;
         String? branchCode = _selectedBranchCode;
 
+        // Ensure user list is up to date for checking existing profile
+        await userNotifier.loadUsers(silent: true);
         final existingProfiles = ref.read(userProvider);
-        final existingProfile = existingProfiles.where((u) => u.email.toLowerCase() == _emailController.text.trim().toLowerCase()).firstOrNull;
+        final existingProfile = existingProfiles.where((u) => u.email.toLowerCase() == email.toLowerCase()).firstOrNull;
 
         if (_isCreatingBranch || noBranchesExist) {
           final String firstName = _firstNameController.text.trim();
@@ -489,17 +486,19 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           await ref.read(branchesProvider.notifier).addBranch(newBranch);
         }
 
-        final authResponse = await ref.read(authServiceProvider).signUp(_emailController.text, _passwordController.text);
+        final authResponse = await ref.read(authServiceProvider).signUp(email, password);
         
         if (authResponse.user != null) {
-          final adminExists = userNotifier.isAdminExists;
+          final adminExists = await userNotifier.checkIfAnyAdminExists();
           final isFirstAdmin = !adminExists && _selectedRole == UserRole.admin;
+          
+          debugPrint('Signup Trace: AdminExists=$adminExists, SelectedRole=$_selectedRole, IsFirstAdmin=$isFirstAdmin');
           
           final newUser = UserAccount(
             id: authResponse.user!.id,
             firstName: _firstNameController.text.trim(),
             surname: _surnameController.text.trim(),
-            email: _emailController.text.trim(),
+            email: email,
             phone: _phoneController.text.trim(),
             gender: _selectedGender,
             dob: _selectedDob,
@@ -515,6 +514,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                   '/admin/debts', 
                   '/admin/stock', 
                   '/admin/users', 
+                  '/admin/salaries',
                   '/cashier', 
                   '/butcher', 
                   '/settings'
@@ -527,31 +527,44 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
             if (_isCreatingBranch || noBranchesExist) {
               await ref.read(branchesProvider.notifier).setBranchAdmin(branchCode!, newUser.id);
             }
-            if (existingProfile != null) {
-              await SmsService.sendStaffOnboardingSms(newUser);
-            } else {
-              await SmsService.sendSignupConfirmationSms(newUser, isFirstAdmin);
-            }
-            if (!isFirstAdmin && existingProfile == null) {
-              final allUsers = ref.read(userProvider);
-              await SmsService.sendApprovalRequestSms(newUser, allUsers);
+            
+            // SMS Notifications (Best effort)
+            try {
+              if (existingProfile != null) {
+                await SmsService.sendStaffOnboardingSms(newUser);
+              } else {
+                await SmsService.sendSignupConfirmationSms(newUser, isFirstAdmin);
+              }
+              if (!isFirstAdmin && existingProfile == null) {
+                final allUsers = ref.read(userProvider);
+                await SmsService.sendApprovalRequestSms(newUser, allUsers);
+              }
+            } catch (smsErr) {
+              debugPrint('Signup SMS Error: $smsErr');
             }
 
             if (mounted) {
-              _showApprovalDialog();
+              _showApprovalDialog(isAutoApproved: isFirstAdmin || existingProfile != null);
             }
           } catch (dbError) {
-            await GlobalLogout.perform(ref);
+            debugPrint('Signup Database Error: $dbError');
             if (mounted) {
-              _showApprovalDialog();
+              _showErrorDialog('Profile Creation Failed', 'Account was created but we couldn\'t save your profile details. Please contact support. Error: $dbError');
             }
           }
         } else {
-           if (mounted) _showApprovalDialog();
+           if (mounted) _showErrorDialog('Auth Failed', 'Account creation returned no user. Please try again.');
         }
       } catch (e) {
+        debugPrint('Signup Catch Error: $e');
         if (mounted) {
-           _showApprovalDialog();
+          String errorMsg = e.toString();
+          if (errorMsg.contains('User already registered')) {
+            errorMsg = 'This email address is already in use. Please log in instead.';
+          } else if (errorMsg.contains('weak_password')) {
+            errorMsg = 'Your password is too weak. Please use a stronger password.';
+          }
+          _showErrorDialog('Registration Error', errorMsg);
         }
       } finally {
         if (mounted) setState(() => _isLoading = false);
@@ -559,21 +572,96 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
     }
   }
 
-  void _showApprovalDialog() {
+  Widget _buildDatePickerTrigger(BuildContext context, ThemeData theme) {
+    return InkWell(
+      onTap: () async {
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: DateTime(2000),
+          firstDate: DateTime(1950),
+          lastDate: DateTime.now().subtract(const Duration(days: 365 * 18)),
+        );
+        if (picked != null) setState(() => _selectedDob = picked);
+      },
+      child: Container(
+        height: 56,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          border: Border.all(color: theme.dividerColor), 
+          borderRadius: BorderRadius.circular(AppRadius.s),
+          color: theme.inputDecorationTheme.fillColor,
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.cake_outlined, size: 20, color: theme.colorScheme.onSurfaceVariant),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _selectedDob == null ? 'Date of Birth' : DateFormat('yyyy-MM-dd').format(_selectedDob!), 
+                style: TextStyle(
+                  fontSize: 12, 
+                  color: _selectedDob == null ? theme.colorScheme.onSurfaceVariant : theme.colorScheme.onSurface
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showErrorDialog(String title, String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
+        title: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                title, 
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        content: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: SingleChildScrollView(
+            child: Text(message, style: const TextStyle(fontSize: 13)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showApprovalDialog({bool isAutoApproved = false}) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.l)),
-        title: const Text('Application Submitted'),
-        content: const Text('Your registration is pending administrator approval. You will be notified via SMS once approved.'),
+        title: Text(isAutoApproved ? 'Registration Successful' : 'Application Submitted'),
+        content: Text(isAutoApproved 
+          ? 'Your account has been created and approved. You can now log in to access the system.' 
+          : 'Your registration is pending administrator approval. You will be notified via SMS once approved.'),
         actions: [
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
               Navigator.pushReplacementNamed(context, '/login');
             },
-            child: const Text('Back to Login'),
+            child: const Text('Go to Login'),
           ),
         ],
       ),

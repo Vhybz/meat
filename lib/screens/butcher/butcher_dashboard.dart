@@ -250,11 +250,14 @@ class ButcherDashboard extends ConsumerWidget {
             const SizedBox(height: AppSpacing.l),
             logsAsync.when(
               data: (logs) {
-                final completed = logs.where((l) => l.status == SlaughterStatus.completed).toList();
+                final completed = logs.where((l) => 
+                  l.status == SlaughterStatus.completed || 
+                  l.status == SlaughterStatus.processed
+                ).toList();
                 if (completed.isEmpty) return const Text("No yield data available yet.");
                 
-                final totalWeight = completed.fold(0.0, (sum, l) => sum + l.weight);
-                final totalYield = completed.fold(0.0, (sum, l) => sum + l.estimatedYield);
+                final totalWeight = completed.fold(0.0, (sum, l) => sum + l.liveWeight);
+                final totalYield = completed.fold(0.0, (sum, l) => sum + l.meatWeight);
                 final avgEfficiency = (totalYield / totalWeight) * 100;
 
                 return Column(
@@ -312,7 +315,7 @@ class ButcherDashboard extends ConsumerWidget {
 
     logsAsync.whenData((logs) {
       intakeCount = logs.where((l) => l.status == SlaughterStatus.pending).length;
-      slaughterCount = logs.where((l) => l.status == SlaughterStatus.processing).length;
+      slaughterCount = logs.where((l) => l.status == SlaughterStatus.slaughtering || l.status == SlaughterStatus.cleaned).length;
     });
 
     batchesAsync.whenData((batches) {
@@ -364,9 +367,18 @@ class ButcherDashboard extends ConsumerWidget {
   }
 
   Widget _buildKPIGrid(double maxWidth, List<SlaughterLog> logs, List<MeatBatch> batches, List<Map<String, dynamic>> wasteRecords) {
-    final completedCount = logs.where((l) => l.status == SlaughterStatus.completed).length;
+    final completedCount = logs.where((l) => 
+      l.status == SlaughterStatus.completed || 
+      l.status == SlaughterStatus.processed
+    ).length;
+    
     final pendingCount = logs.where((l) => l.status == SlaughterStatus.pending).length;
-    final totalYield = logs.where((l) => l.status == SlaughterStatus.completed).fold(0.0, (sum, l) => sum + l.estimatedYield);
+    
+    final totalYield = logs.where((l) => 
+      l.status == SlaughterStatus.completed || 
+      l.status == SlaughterStatus.processed
+    ).fold(0.0, (sum, l) => sum + l.meatWeight);
+
     final totalWaste = wasteRecords.fold(0.0, (sum, w) => sum + (double.tryParse(w['weight']?.toString() ?? '0') ?? 0));
 
     final bool isMobile = maxWidth < 700;
@@ -457,8 +469,10 @@ class ButcherDashboard extends ConsumerWidget {
   Color _getStatusColor(SlaughterStatus status) {
     switch (status) {
       case SlaughterStatus.completed: return Colors.green;
-      case SlaughterStatus.processing: return Colors.blue;
+      case SlaughterStatus.slaughtering: return Colors.red;
+      case SlaughterStatus.cleaned: return Colors.blue;
       case SlaughterStatus.pending: return Colors.orange;
+      case SlaughterStatus.processed: return Colors.blueGrey;
     }
   }
 
@@ -479,8 +493,11 @@ class ButcherDashboard extends ConsumerWidget {
                   return date.day == today.day && date.month == today.month && date.year == today.year;
                 }).toList();
 
-                final totalIntake = todayLogs.fold(0.0, (sum, l) => sum + l.weight);
-                final totalYield = todayLogs.where((l) => l.status == SlaughterStatus.completed).fold(0.0, (sum, l) => sum + l.estimatedYield);
+                final totalIntake = todayLogs.fold(0.0, (sum, l) => sum + l.liveWeight);
+                final totalYield = todayLogs.where((l) => 
+                  l.status == SlaughterStatus.completed || 
+                  l.status == SlaughterStatus.processed
+                ).fold(0.0, (sum, l) => sum + l.meatWeight);
                 final totalWaste = totalIntake - totalYield;
 
                 return Column(

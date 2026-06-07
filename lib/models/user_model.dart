@@ -17,6 +17,7 @@ class UserAccount {
   final AccountStatus status;
   final DateTime createdAt;
   final bool isDeleted; // Soft delete
+  final DateTime? lastSeen; // Last active timestamp
   
   // Temporary role promotions
   final UserRole? temporaryRole;
@@ -26,6 +27,15 @@ class UserAccount {
   // Active Menu Duties/Permissions
   final Set<String> enabledPermissions;
   final Set<String> newlyAddedPermissions;
+
+  // Salary fields
+  final double? salaryAmount;
+  final int? salaryDay; // Day of the month (1-31)
+  final DateTime? lastSalaryDate;
+
+  // Theme preferences
+  final String? themeMode; // 'light', 'dark', 'system'
+  final int? themePrimaryColor;
 
   UserAccount({
     required this.id,
@@ -40,9 +50,10 @@ class UserAccount {
     this.branchCode,
     this.secondaryRoles = const [],
     this.shopLocation,
-    this.status = AccountStatus.approved,
+    this.status = AccountStatus.pending, // Default to pending for all new accounts
     DateTime? createdAt,
     this.isDeleted = false,
+    this.lastSeen,
     this.temporaryRole,
     this.tempRoleStart,
     this.tempRoleEnd,
@@ -50,6 +61,11 @@ class UserAccount {
       '/settings' // Everyone gets settings by default
     },
     this.newlyAddedPermissions = const {},
+    this.salaryAmount,
+    this.salaryDay,
+    this.lastSalaryDate,
+    this.themeMode,
+    this.themePrimaryColor,
   }) : createdAt = createdAt ?? DateTime.now();
 
   factory UserAccount.fromJson(Map<String, dynamic> json) {
@@ -71,6 +87,7 @@ class UserAccount {
       status: AccountStatus.values.byName(json['status']),
       createdAt: DateTime.parse(json['created_at']),
       isDeleted: json['is_deleted'] ?? false,
+      lastSeen: json['last_seen'] != null ? DateTime.parse(json['last_seen']) : null,
       temporaryRole: json['temporary_role'] != null 
           ? UserRole.values.byName(json['temporary_role']) 
           : null,
@@ -82,6 +99,11 @@ class UserAccount {
           : null,
       enabledPermissions: Set<String>.from(json['enabled_permissions'] ?? []),
       newlyAddedPermissions: Set<String>.from(json['newly_added_permissions'] ?? []),
+      salaryAmount: json['salary_amount']?.toDouble(),
+      salaryDay: json['salary_day'],
+      lastSalaryDate: json['last_salary_date'] != null ? DateTime.parse(json['last_salary_date']) : null,
+      themeMode: json['theme_mode'],
+      themePrimaryColor: json['theme_primary_color'],
     );
   }
 
@@ -102,15 +124,27 @@ class UserAccount {
       'status': status.name,
       'created_at': createdAt.toIso8601String(),
       'is_deleted': isDeleted,
+      'last_seen': lastSeen?.toIso8601String(),
       'temporary_role': temporaryRole?.name,
       'temp_role_start': tempRoleStart?.toIso8601String(),
       'temp_role_end': tempRoleEnd?.toIso8601String(),
       'enabled_permissions': enabledPermissions.toList(),
       'newly_added_permissions': newlyAddedPermissions.toList(),
+      'salary_amount': salaryAmount,
+      'salary_day': salaryDay,
+      'last_salary_date': lastSalaryDate?.toIso8601String(),
+      'theme_mode': themeMode,
+      'theme_primary_color': themePrimaryColor,
     };
   }
 
   String get name => "$firstName $surname";
+
+  bool get isOnline {
+    if (lastSeen == null) return false;
+    // Consider online if active within last 2 minutes
+    return DateTime.now().difference(lastSeen!).inMinutes < 2;
+  }
 
   /// Returns the current active primary role (temporary role if within valid period, else permanent role)
   UserRole get activePrimaryRole {
@@ -155,11 +189,17 @@ class UserAccount {
     String? shopLocation,
     AccountStatus? status,
     bool? isDeleted,
+    DateTime? lastSeen,
     UserRole? temporaryRole,
     DateTime? tempRoleStart,
     DateTime? tempRoleEnd,
     Set<String>? enabledPermissions,
     Set<String>? newlyAddedPermissions,
+    double? salaryAmount,
+    int? salaryDay,
+    DateTime? lastSalaryDate,
+    String? themeMode,
+    int? themePrimaryColor,
     bool clearPromotion = false,
   }) {
     return UserAccount(
@@ -178,11 +218,17 @@ class UserAccount {
       status: status ?? this.status,
       createdAt: createdAt,
       isDeleted: isDeleted ?? this.isDeleted,
+      lastSeen: lastSeen ?? this.lastSeen,
       temporaryRole: clearPromotion ? null : (temporaryRole ?? this.temporaryRole),
       tempRoleStart: clearPromotion ? null : (tempRoleStart ?? this.tempRoleStart),
       tempRoleEnd: clearPromotion ? null : (tempRoleEnd ?? this.tempRoleEnd),
       enabledPermissions: enabledPermissions ?? this.enabledPermissions,
       newlyAddedPermissions: newlyAddedPermissions ?? this.newlyAddedPermissions,
+      salaryAmount: salaryAmount ?? this.salaryAmount,
+      salaryDay: salaryDay ?? this.salaryDay,
+      lastSalaryDate: lastSalaryDate ?? this.lastSalaryDate,
+      themeMode: themeMode ?? this.themeMode,
+      themePrimaryColor: themePrimaryColor ?? this.themePrimaryColor,
     );
   }
 }

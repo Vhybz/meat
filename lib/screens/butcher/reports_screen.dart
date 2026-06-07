@@ -99,13 +99,13 @@ class ReportsScreen extends ConsumerWidget {
     
     double avgYieldRate = 0;
     if (completed.isNotEmpty) {
-      final totalIntake = completed.fold(0.0, (sum, l) => sum + l.weight);
-      final totalYield = completed.fold(0.0, (sum, l) => sum + l.estimatedYield);
+      final totalIntake = completed.fold(0.0, (sum, l) => sum + l.liveWeight);
+      final totalYield = completed.fold(0.0, (sum, l) => sum + l.meatWeight);
       avgYieldRate = (totalYield / totalIntake) * 100;
     }
 
     final totalWasteWeight = waste.fold(0.0, (sum, w) => sum + (w['weight'] as num).toDouble());
-    final totalIntakeAll = logs.fold(0.0, (sum, l) => sum + l.weight);
+    final totalIntakeAll = logs.fold(0.0, (sum, l) => sum + l.liveWeight);
     final wasteRatio = totalIntakeAll > 0 ? (totalWasteWeight / totalIntakeAll) * 100 : 0.0;
 
     final isMobile = MediaQuery.of(context).size.width < 600;

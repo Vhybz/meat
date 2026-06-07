@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants.dart';
 import '../../models/butcher_models.dart';
 import '../../services/butcher_service.dart';
 import '../../services/user_provider.dart';
+import '../../services/butcher_navigation_provider.dart';
 import '../../widgets/responsive_layout.dart';
 
 class AnimalIntakeScreen extends ConsumerStatefulWidget {
@@ -16,8 +18,12 @@ class AnimalIntakeScreen extends ConsumerStatefulWidget {
 
 class _AnimalIntakeScreenState extends ConsumerState<AnimalIntakeScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _batchIdController = TextEditingController();
-  final _weightController = TextEditingController();
+  final _tagNumberController = TextEditingController();
+  final _manualFarmTagController = TextEditingController(); 
+  final _liveWeightController = TextEditingController();
+  final _meatWeightController = TextEditingController(); // Added Meat Weight
+  final _priceController = TextEditingController();
+  final _farmPriceController = TextEditingController(); 
   final _sourceNameController = TextEditingController();
   final _sourceLocationController = TextEditingController();
   final _ownerController = TextEditingController();
@@ -28,16 +34,41 @@ class _AnimalIntakeScreenState extends ConsumerState<AnimalIntakeScreen> {
   bool _isSubmitting = false;
   DateTime _intakeDate = DateTime.now();
 
+  double _weightLoss = 0;
+  double _yieldPercent = 0;
+
   @override
   void initState() {
     super.initState();
-    _generateBatchID();
+    _tagNumberController.text = _generateTagID();
+    
+    // Add listeners to calculate loss and yield in real-time
+    _liveWeightController.addListener(_calculateMetrics);
+    _meatWeightController.addListener(_calculateMetrics);
   }
 
-  void _generateBatchID() {
-    final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
-    final String suffix = timestamp.substring(timestamp.length - 12);
-    _batchIdController.text = '00000000-0000-0000-0000-$suffix';
+  void _calculateMetrics() {
+    final live = double.tryParse(_liveWeightController.text) ?? 0;
+    final meat = double.tryParse(_meatWeightController.text) ?? 0;
+    
+    setState(() {
+      _weightLoss = live - meat;
+      _yieldPercent = live > 0 ? (meat / live) * 100 : 0;
+    });
+  }
+
+  @override
+  void dispose() {
+    _liveWeightController.removeListener(_calculateMetrics);
+    _meatWeightController.removeListener(_calculateMetrics);
+    super.dispose();
+  }
+
+  String _generateTagID() {
+    final typeCode = _selectedType?.shortCode ?? 'ANM';
+    final date = DateFormat('yyyyMMdd').format(DateTime.now());
+    final random = (100 + (DateTime.now().millisecond % 900)).toString();
+    return '$typeCode-$date-$random';
   }
 
   Widget _buildTypeDropdown() {
@@ -56,7 +87,7 @@ class _AnimalIntakeScreenState extends ConsumerState<AnimalIntakeScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         DropdownButtonFormField<dynamic>(
-          value: _isChicken ? 'chicken' : _selectedType,
+          initialValue: _isChicken ? 'chicken' : _selectedType,
           isExpanded: true,
           decoration: const InputDecoration(labelText: 'Animal Type', border: OutlineInputBorder(), isDense: true),
           items: categories.map((c) => DropdownMenuItem(value: c['type'], child: Text(c['label'], overflow: TextOverflow.ellipsis))).toList(),
@@ -69,7 +100,7 @@ class _AnimalIntakeScreenState extends ConsumerState<AnimalIntakeScreen> {
                 _isChicken = false;
                 _selectedType = v as AnimalType;
               }
-              _generateBatchID();
+              _tagNumberController.text = _generateTagID();
             });
           },
           validator: (v) => v == null ? 'Required' : null,
@@ -117,23 +148,72 @@ class _AnimalIntakeScreenState extends ConsumerState<AnimalIntakeScreen> {
     );
   }
 
-  Widget _buildBatchField() {
+  Widget _buildTagNumberField() {
     return TextFormField(
-      controller: _batchIdController,
-      readOnly: true,
-      decoration: const InputDecoration(labelText: 'Generated Batch ID', border: OutlineInputBorder(), prefixIcon: Icon(Icons.qr_code), isDense: true),
+      controller: _tagNumberController,
+      decoration: const InputDecoration(labelText: 'Tag Number', border: OutlineInputBorder(), prefixIcon: Icon(Icons.tag), isDense: true),
+      validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
     );
   }
 
-  Widget _buildWeightField() {
+  Widget _buildLiveWeightField() {
     return TextFormField(
-      controller: _weightController,
-      decoration: const InputDecoration(labelText: 'Intake Weight (kg)', border: OutlineInputBorder(), prefixIcon: Icon(Icons.scale), isDense: true),
-      keyboardType: TextInputType.number,
+      controller: _liveWeightController,
+      decoration: const InputDecoration(
+        labelText: 'Live Weight (kg)', 
+        hintText: 'e.g. 250.5',
+        border: OutlineInputBorder(), 
+        prefixIcon: Icon(Icons.scale), 
+        isDense: true
+      ),
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
       validator: (v) {
         if (v == null || v.isEmpty) return 'Required';
         final n = double.tryParse(v);
-        if (n == null || n <= 0) return 'Invalid weight';
+        if (n == null || n <= 0) return 'Invalid';
+        return null;
+      },
+    );
+  }
+
+  Widget _buildMeatWeightField() {
+    return TextFormField(
+      controller: _meatWeightController,
+      decoration: const InputDecoration(
+        labelText: 'Meat Weight (kg)', 
+        hintText: 'e.g. 180.2',
+        border: OutlineInputBorder(), 
+        prefixIcon: Icon(Icons.shopping_basket_outlined), 
+        isDense: true
+      ),
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+      validator: (v) {
+        if (v == null || v.isEmpty) return 'Required';
+        final n = double.tryParse(v);
+        if (n == null || n < 0) return 'Invalid';
+        return null;
+      },
+    );
+  }
+
+  Widget _buildPriceField() {
+    return TextFormField(
+      controller: _priceController,
+      decoration: const InputDecoration(
+        labelText: 'Price (₵)', 
+        hintText: 'Purchase price e.g. 1500',
+        border: OutlineInputBorder(), 
+        prefixIcon: Icon(Icons.payments_outlined), 
+        isDense: true
+      ),
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+      validator: (v) {
+        if (v == null || v.isEmpty) return 'Required';
+        final n = double.tryParse(v);
+        if (n == null || n < 0) return 'Invalid';
         return null;
       },
     );
@@ -224,40 +304,101 @@ class _AnimalIntakeScreenState extends ConsumerState<AnimalIntakeScreen> {
                   children: [
                     Expanded(child: _buildTypeDropdown()),
                     const SizedBox(width: AppSpacing.m),
-                    Expanded(child: _buildBatchField()),
+                    Expanded(child: _buildTagNumberField()),
                   ],
                 )
               : Column(
                   children: [
                     _buildTypeDropdown(),
                     const SizedBox(height: AppSpacing.m),
-                    _buildBatchField(),
+                    _buildTagNumberField(),
                   ],
                 ),
+            const SizedBox(height: AppSpacing.l),
+            // Row for Optional Farm Info
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _manualFarmTagController,
+                    decoration: const InputDecoration(
+                      labelText: 'Farm Tag ID (Optional)', 
+                      border: OutlineInputBorder(), 
+                      prefixIcon: Icon(Icons.tag_faces_outlined), 
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.m),
+                Expanded(
+                  child: TextFormField(
+                    controller: _farmPriceController,
+                    decoration: const InputDecoration(
+                      labelText: 'Farm Price (Optional Cost)', 
+                      border: OutlineInputBorder(), 
+                      prefixIcon: Icon(Icons.money_off_outlined), 
+                      prefixText: '₵ ',
+                      isDense: true,
+                    ),
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: AppSpacing.l),
             isDesktop 
               ? Row(
                   children: [
-                    Expanded(child: _buildWeightField()),
+                    Expanded(child: _buildLiveWeightField()),
                     const SizedBox(width: AppSpacing.m),
-                    Expanded(child: _buildDateField()),
+                    Expanded(child: _buildMeatWeightField()),
+                    const SizedBox(width: AppSpacing.m),
+                    Expanded(child: _buildPriceField()),
                   ],
                 )
               : Column(
                   children: [
-                    _buildWeightField(),
+                    _buildLiveWeightField(),
                     const SizedBox(height: AppSpacing.m),
-                    _buildDateField(),
+                    _buildMeatWeightField(),
+                    const SizedBox(height: AppSpacing.m),
+                    _buildPriceField(),
                   ],
                 ),
+            if (_liveWeightController.text.isNotEmpty && _meatWeightController.text.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.m),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.primaryMaroon.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(AppRadius.s),
+                  border: Border.all(color: AppColors.primaryMaroon.withValues(alpha: 0.1)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _metricItem('Weight Loss', '${_weightLoss.toStringAsFixed(1)} kg', Colors.red),
+                    _metricItem('Yield', '${_yieldPercent.toStringAsFixed(1)}%', Colors.green),
+                  ],
+                ),
+              ),
+            ],
+            const SizedBox(height: AppSpacing.l),
+            _buildDateField(),
             const SizedBox(height: AppSpacing.xl),
             const Divider(),
             const SizedBox(height: AppSpacing.xl),
             const Align(alignment: Alignment.centerLeft, child: Text('Supply Source (Traceability)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
             const SizedBox(height: AppSpacing.l),
-            TextFormField(
-              controller: _sourceNameController,
-              decoration: const InputDecoration(labelText: 'Source Farm/Name', border: OutlineInputBorder(), prefixIcon: Icon(Icons.house_siding)),
+      TextFormField(
+        controller: _sourceNameController,
+        decoration: const InputDecoration(
+          labelText: 'Source Farm/Name', 
+          hintText: 'e.g. Clifford Green Farms',
+          border: OutlineInputBorder(), 
+          prefixIcon: Icon(Icons.house_siding)
+        ),
               validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
             ),
             const SizedBox(height: AppSpacing.m),
@@ -285,7 +426,7 @@ class _AnimalIntakeScreenState extends ConsumerState<AnimalIntakeScreen> {
                 icon: _isSubmitting 
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                   : const Icon(Icons.save_rounded),
-                label: Text(_isSubmitting ? 'Processing...' : 'Confirm Intake & Create Batch', 
+                label: Text(_isSubmitting ? 'Processing...' : 'Confirm Intake & Queue for Slaughter',
                   style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMaroon, foregroundColor: Colors.white),
               ),
@@ -329,7 +470,7 @@ class _AnimalIntakeScreenState extends ConsumerState<AnimalIntakeScreen> {
     if (user?.branchCode == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Error: No branch code assigned. Please contact Admin.'),
+          content: Text('Error: No branch or shop location assigned. Please contact Admin.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -347,50 +488,54 @@ class _AnimalIntakeScreenState extends ConsumerState<AnimalIntakeScreen> {
       setState(() => _isSubmitting = true);
 
       try {
-        final batchId = _batchIdController.text;
+        final tagNumber = _tagNumberController.text;
+        final manualFarmTag = _manualFarmTagController.text.isNotEmpty ? _manualFarmTagController.text : null;
         final type = _selectedType!;
-        final weight = double.tryParse(_weightController.text) ?? 0;
+        final liveWeight = double.tryParse(_liveWeightController.text) ?? 0;
+        final meatWeight = double.tryParse(_meatWeightController.text) ?? 0;
+        final price = double.tryParse(_priceController.text) ?? 0;
+        final farmPrice = double.tryParse(_farmPriceController.text);
         final branchCode = user!.branchCode!;
 
         final String timestamp = DateTime.now().millisecondsSinceEpoch.toString();
         final String suffix = timestamp.substring(timestamp.length - 12);
-        final String animalUuid = 'aaaaaaaa-aaaa-aaaa-aaaa-$suffix';
+        
+        // Generate valid UUID formats
+        final String batchId = 'aaaaaaaa-aaaa-aaaa-aaaa-$suffix';
+        final String animalUuid = 'bbbbbbbb-bbbb-bbbb-bbbb-$suffix';
 
         final log = SlaughterLog(
           id: batchId,
-          animalId: animalUuid,
+          animalId: animalUuid, 
+          tagNumber: tagNumber, 
+          manualFarmTag: manualFarmTag,
           type: type,
-          weight: weight,
-          status: SlaughterStatus.pending,
+          liveWeight: liveWeight,
+          meatWeight: meatWeight, // This acts as the estimated meat weight from intake
+          price: price,
+          farmPrice: farmPrice,
+          status: SlaughterStatus.pending, 
+          slaughterTime: null,
+          branchCode: branchCode,
         );
 
-        final batch = MeatBatch(
-          id: batchId,
-          meatType: type.displayName,
-          weight: weight,
-          createdAt: DateTime.now(),
-          status: 'waiting', 
-          source: BatchSource(
-            name: _sourceNameController.text,
-            location: _sourceLocationController.text,
-            owner: _ownerController.text,
-          ),
+        // 0. Record the animal first (Queued for safety)
+        await ref.read(slaughterLogsProvider.notifier).queueAnimalRecord(
+          animalUuid: animalUuid,
+          tagNumber: tagNumber,
+          manualFarmTag: manualFarmTag,
+          type: type,
+          weight: liveWeight,
+          price: price,
+          farmPrice: farmPrice,
+          sourceFarm: _sourceNameController.text,
+          branchCode: branchCode,
         );
 
-        // 0. Record the animal first (Satisfies Foreign Key constraints)
-        await ref.read(butcherServiceProvider).addAnimal(
-          branchCode,
-          animalUuid, 
-          type, 
-          weight, 
-          _sourceNameController.text
-        );
-
-        // 1. Create the slaughter log
+        // 1. Create the slaughter log (Status: Pending)
         await ref.read(slaughterLogsProvider.notifier).addLog(log);
         
-        // 2. Create the corresponding meat batch
-        await ref.read(meatBatchesProvider.notifier).addBatch(batch);
+        // Note: Batch is created ONLY after "Transport and Receive" in the flow
         
         if (mounted) {
           showDialog(
@@ -402,7 +547,7 @@ class _AnimalIntakeScreenState extends ConsumerState<AnimalIntakeScreen> {
                 children: [
                   Icon(Icons.check_circle, color: Colors.green),
                   SizedBox(width: 12),
-                  Expanded(child: Text('Intake Successful')),
+                  Expanded(child: Text('Livestock Purchased')),
                 ],
               ),
               content: ConstrainedBox(
@@ -412,42 +557,39 @@ class _AnimalIntakeScreenState extends ConsumerState<AnimalIntakeScreen> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Intake has been recorded successfully.', style: TextStyle(fontSize: 13)),
+                      const Text('The livestock record has been added. It is now listed in the Slaughter Log for the next phase.', style: TextStyle(fontSize: 13)),
                       const SizedBox(height: 12),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(AppRadius.s),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('GENERATED BATCH ID', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.textLight)),
-                            const SizedBox(height: 4),
-                            SelectableText(
-                              batchId, 
-                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'monospace')
-                            ),
-                          ],
-                        ),
-                      ),
+                      _detailRow('Tag Number', tagNumber),
+                      _detailRow('Purchase Wt.', '${liveWeight.toStringAsFixed(1)} kg'),
+                      _detailRow('Source', _sourceNameController.text),
                       const SizedBox(height: 16),
-                      const Text('Traceability records have been synchronized with the master database.', 
+                      const Text('Traceability records have been synchronized.',
                         style: TextStyle(fontSize: 11, color: AppColors.textLight)),
                     ],
                   ),
                 ),
               ),
               actions: [
-                ElevatedButton(
+                TextButton(
                   onPressed: () {
                     Navigator.pop(context);
                     _resetForm();
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMaroon, foregroundColor: Colors.white),
                   child: const Text('Done'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _resetForm();
+                    // Navigate to Slaughter Log screen
+                    ref.read(butcherNavProvider.notifier).setScreen(ButcherScreen.slaughterLog);
+                  },
+                  icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+                  label: const Text('Next: Slaughter Log', style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryMaroon,
+                    foregroundColor: Colors.white,
+                  ),
                 ),
               ],
             ),
@@ -471,10 +613,33 @@ class _AnimalIntakeScreenState extends ConsumerState<AnimalIntakeScreen> {
 
   void _resetForm() {
     _formKey.currentState!.reset();
-    _weightController.clear();
+    _liveWeightController.clear();
+    _priceController.clear();
     _sourceNameController.clear();
     _sourceLocationController.clear();
     _ownerController.clear();
-    _generateBatchID();
+    _tagNumberController.text = _generateTagID();
+  }
+
+  Widget _detailRow(String label, String value, {Color? color, bool isBold = false}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 12, color: AppColors.textLight)),
+          Text(value, style: TextStyle(fontSize: 12, fontWeight: isBold ? FontWeight.bold : FontWeight.normal, color: color)),
+        ],
+      ),
+    );
+  }
+
+  Widget _metricItem(String label, String value, Color color) {
+    return Column(
+      children: [
+        Text(label, style: const TextStyle(fontSize: 10, color: AppColors.textLight)),
+        Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: color)),
+      ],
+    );
   }
 }

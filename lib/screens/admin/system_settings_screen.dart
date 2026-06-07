@@ -6,6 +6,9 @@ import '../../widgets/responsive_layout.dart';
 import '../../widgets/app_sidebar.dart';
 import '../../services/menu_service.dart';
 import '../../services/user_provider.dart';
+import '../../models/user_model.dart';
+import '../../services/theme_provider.dart';
+import '../../services/branch_provider.dart';
 import '../../services/product_seeder.dart';
 import '../../widgets/role_pop_scope.dart';
 
@@ -27,6 +30,7 @@ class _SystemSettingsScreenState extends ConsumerState<SystemSettingsScreen> {
     final theme = Theme.of(context);
     final isDesktop = ResponsiveLayout.isDesktop(context);
     const currentRoute = '/admin/settings';
+    final currentBranch = ref.watch(currentBranchProvider);
 
     return RolePopScope(
       currentRoute: currentRoute,
@@ -69,16 +73,34 @@ class _SystemSettingsScreenState extends ConsumerState<SystemSettingsScreen> {
                         const SizedBox(height: AppSpacing.xl),
                         _buildSection(
                           context,
+                          'Branding & Theme',
+                          Icons.palette_rounded,
+                          [
+                            _buildThemeColorSelector(context),
+                            _buildThemeModeToggle(context),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.xl),
+                        _buildSection(
+                          context,
+                          'Personal Profile',
+                          Icons.person_outline_rounded,
+                          [
+                            _buildProfileSection(context, user, theme),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.xl),
+                        _buildSection(
+                          context,
                           'Shop Identification',
                           Icons.business_rounded,
                           [
-                            _settingTile(context, Icons.store_rounded, 'Legal Shop Name', 'Mi CORAZON FRESHMEAT BUTCHERY'),
-                            _settingTile(context, Icons.location_on_rounded, 'Physical Location', 'New Town, Road linking Water Works to Atronie Road'),
+                            _settingTile(context, Icons.store_rounded, 'Branch Name', currentBranch?.name ?? 'Mi~CORAZON FRESHMEAT BUTCHERY'),
+                            _settingTile(context, Icons.location_on_rounded, 'Branch Location', currentBranch?.location ?? 'HQ'),
                             _settingTile(context, Icons.gps_fixed_rounded, 'Digital Address (GPS)', 'BS-0006-1566'),
                             _settingTile(context, Icons.phone_android_rounded, 'Emergency Contacts', '0209276200 / 0243672146'),
                           ],
                         ),
-                        const SizedBox(height: AppSpacing.xl),
                         _buildSection(
                           context,
                           'Configuration & Defaults',
@@ -124,13 +146,13 @@ class _SystemSettingsScreenState extends ConsumerState<SystemSettingsScreen> {
           end: Alignment.bottomRight,
           colors: [
             theme.colorScheme.primary,
-            theme.colorScheme.primary.withOpacity(0.8),
+            theme.colorScheme.primary.withValues(alpha: 0.8),
           ],
         ),
         borderRadius: BorderRadius.circular(AppRadius.l),
         boxShadow: [
           BoxShadow(
-            color: theme.colorScheme.primary.withOpacity(0.3),
+            color: theme.colorScheme.primary.withValues(alpha: 0.3),
             blurRadius: 15,
             offset: const Offset(0, 5),
           ),
@@ -146,8 +168,8 @@ class _SystemSettingsScreenState extends ConsumerState<SystemSettingsScreen> {
             style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
           ),
           Text(
-            'Configure global parameters, branding, and maintenance tasks for Mi Corazon.',
-            style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 13),
+            'Configure global parameters, branding, and theme for Mi~Corazon.',
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 13),
           ),
         ],
       ),
@@ -183,7 +205,7 @@ class _SystemSettingsScreenState extends ConsumerState<SystemSettingsScreen> {
           color: theme.cardTheme.color,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadius.l),
-            side: BorderSide(color: theme.dividerColor.withOpacity(0.5)),
+            side: BorderSide(color: theme.dividerColor.withValues(alpha: 0.5)),
           ),
           child: Column(children: children),
         ),
@@ -200,7 +222,7 @@ class _SystemSettingsScreenState extends ConsumerState<SystemSettingsScreen> {
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: (color ?? theme.colorScheme.primary).withOpacity(isDark ? 0.15 : 0.08),
+          color: (color ?? theme.colorScheme.primary).withValues(alpha: isDark ? 0.15 : 0.08),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Icon(icon, color: color ?? theme.colorScheme.primary, size: 22),
@@ -221,7 +243,7 @@ class _SystemSettingsScreenState extends ConsumerState<SystemSettingsScreen> {
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: theme.colorScheme.secondary.withOpacity(isDark ? 0.15 : 0.08),
+          color: theme.colorScheme.secondary.withValues(alpha: isDark ? 0.15 : 0.08),
           borderRadius: BorderRadius.circular(10),
         ),
         child: Icon(Icons.inventory_2_rounded, color: theme.colorScheme.secondary, size: 22),
@@ -260,6 +282,128 @@ class _SystemSettingsScreenState extends ConsumerState<SystemSettingsScreen> {
     );
   }
 
+  Widget _buildThemeColorSelector(BuildContext context) {
+    final theme = Theme.of(context);
+    final themeState = ref.watch(themeProvider);
+    
+    final List<Color> themeColors = [
+      AppColors.primaryMaroon,
+      AppColors.primaryPink,
+      AppColors.primaryBlue,
+      AppColors.primaryGreen,
+      Colors.teal.shade700,
+      Colors.indigo.shade700,
+      Colors.deepPurple.shade700,
+      Colors.brown.shade700,
+      Colors.black87,
+    ];
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.l, vertical: 8),
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.primary.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(Icons.color_lens_rounded, color: theme.colorScheme.primary, size: 22),
+      ),
+      title: const Text('Primary Theme Color', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+      subtitle: Padding(
+        padding: const EdgeInsets.only(top: 8.0),
+        child: Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: themeColors.map((color) {
+            final isSelected = themeState.primaryColor == color;
+            return InkWell(
+              onTap: () => ref.read(themeProvider.notifier).setPrimaryColor(color),
+              child: Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  color: color,
+                  shape: BoxShape.circle,
+                  border: isSelected 
+                    ? Border.all(color: theme.colorScheme.onSurface, width: 2)
+                    : Border.all(color: Colors.white24, width: 1),
+                  boxShadow: [
+                    if (isSelected)
+                      BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 8, spreadRadius: 1)
+                  ],
+                ),
+                child: isSelected 
+                  ? const Icon(Icons.check, color: Colors.white, size: 16)
+                  : null,
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThemeModeToggle(BuildContext context) {
+    final theme = Theme.of(context);
+    final themeState = ref.watch(themeProvider);
+    final isDark = themeState.mode == ThemeMode.dark;
+
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: AppSpacing.l, vertical: 4),
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: theme.colorScheme.primary.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(
+          isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded, 
+          color: theme.colorScheme.primary, 
+          size: 22
+        ),
+      ),
+      title: const Text('Dark Mode Appearance', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+      subtitle: Text(isDark ? 'Deep dark workspace' : 'Clean light workspace', style: const TextStyle(fontSize: 12)),
+      trailing: Switch(
+        value: isDark,
+        onChanged: (val) => ref.read(themeProvider.notifier).toggleTheme(val),
+        activeThumbColor: theme.colorScheme.primary,
+      ),
+    );
+  }
+
+  Widget _buildProfileSection(BuildContext context, UserAccount user, ThemeData theme) {
+    return ListTile(
+      contentPadding: const EdgeInsets.all(AppSpacing.l),
+      leading: CircleAvatar(
+        radius: 30,
+        backgroundImage: user.photoUrl != null ? NetworkImage(user.photoUrl!) : null,
+        child: user.photoUrl == null ? const Icon(Icons.person, size: 30) : null,
+      ),
+      title: Text(user.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(user.email, style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
+          const SizedBox(height: 4),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.primary.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(user.role.name.toUpperCase(), 
+              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: theme.colorScheme.primary)),
+          ),
+        ],
+      ),
+      trailing: OutlinedButton(
+        onPressed: () => Navigator.pushNamed(context, '/profile'),
+        child: const Text('EDIT'),
+      ),
+    );
+  }
+
   Widget _buildFooter(ThemeData theme) {
     return Center(
       child: Column(
@@ -267,14 +411,14 @@ class _SystemSettingsScreenState extends ConsumerState<SystemSettingsScreen> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: theme.dividerColor.withOpacity(0.1),
+              color: theme.dividerColor.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
-            child: Icon(Icons.verified_user_rounded, color: theme.colorScheme.primary.withOpacity(0.5), size: 24),
+            child: Icon(Icons.verified_user_rounded, color: theme.colorScheme.primary.withValues(alpha: 0.5), size: 24),
           ),
           const SizedBox(height: 12),
           Text(
-            'Mi Corazon Freshmeat Butchery Management',
+            'Mi~Corazon Freshmeat Butchery Management',
             style: TextStyle(color: theme.colorScheme.onSurface, fontWeight: FontWeight.bold, fontSize: 14),
           ),
           Text(

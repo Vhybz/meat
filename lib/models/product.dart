@@ -13,6 +13,20 @@ class PriceBracket {
     required this.maxWeight, 
     required this.price
   });
+
+  factory PriceBracket.fromJson(Map<String, dynamic> json) {
+    return PriceBracket(
+      minWeight: (json['minWeight'] as num).toDouble(),
+      maxWeight: (json['maxWeight'] as num).toDouble(),
+      price: (json['price'] as num).toDouble(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'minWeight': minWeight,
+    'maxWeight': maxWeight,
+    'price': price,
+  };
 }
 
 class Product {
@@ -21,6 +35,7 @@ class Product {
   final String name;
   final double retailPrice;
   final double wholesalePrice;
+  final double costPrice;
   final List<PriceBracket>? retailBrackets;
   final List<PriceBracket>? wholesaleBrackets;
   final String imageUrl;
@@ -43,6 +58,7 @@ class Product {
     required this.name,
     required this.retailPrice,
     required this.wholesalePrice,
+    this.costPrice = 0,
     this.retailBrackets,
     this.wholesaleBrackets,
     required this.imageUrl,
@@ -115,6 +131,7 @@ class Product {
     String? branchCode,
     double? retailPrice,
     double? wholesalePrice,
+    double? costPrice,
     double? stockQuantity,
     double? discountPercentage,
     DateTime? promoStartDate,
@@ -135,6 +152,7 @@ class Product {
       name: name ?? this.name,
       retailPrice: retailPrice ?? this.retailPrice,
       wholesalePrice: wholesalePrice ?? this.wholesalePrice,
+      costPrice: costPrice ?? this.costPrice,
       retailBrackets: retailBrackets,
       wholesaleBrackets: wholesaleBrackets,
       imageUrl: imageUrl ?? this.imageUrl,
@@ -160,6 +178,13 @@ class Product {
       name: json['name'] as String,
       retailPrice: (json['retail_price'] as num).toDouble(),
       wholesalePrice: (json['wholesale_price'] as num).toDouble(),
+      costPrice: (json['cost_price'] as num? ?? 0).toDouble(),
+      retailBrackets: (json['retail_brackets'] as List?)
+          ?.map((e) => PriceBracket.fromJson(e))
+          .toList(),
+      wholesaleBrackets: (json['wholesale_brackets'] as List?)
+          ?.map((e) => PriceBracket.fromJson(e))
+          .toList(),
       imageUrl: json['image_url'] as String? ?? '',
       category: json['category'] as String,
       stockQuantity: (json['stock_quantity'] as num? ?? 0).toDouble(),
@@ -182,6 +207,9 @@ class Product {
         'name': name,
         'retail_price': retailPrice,
         'wholesale_price': wholesalePrice,
+        'cost_price': costPrice,
+        'retail_brackets': retailBrackets?.map((e) => e.toJson()).toList(),
+        'wholesale_brackets': wholesaleBrackets?.map((e) => e.toJson()).toList(),
         'image_url': imageUrl,
         'category': category,
         'stock_quantity': stockQuantity,

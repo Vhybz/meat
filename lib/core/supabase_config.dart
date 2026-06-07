@@ -7,18 +7,6 @@ class SupabaseConfig {
     try {
       debugPrint('Starting Supabase initialization...');
       
-      // Load .env only if not on web or if we really want to try
-      // On web release, loading .env can be flaky depending on hosting
-      try {
-        await dotenv.load(fileName: ".env");
-      } catch (e) {
-        try {
-          await dotenv.load(fileName: "assets/.env");
-        } catch (e2) {
-          debugPrint('Dotenv load failed (Expected on some web hosts): $e2');
-        }
-      }
-      
       // Credentials with multiple fallback layers
       String url = const String.fromEnvironment('SUPABASE_URL');
       if (url.isEmpty || url == 'your_url') {

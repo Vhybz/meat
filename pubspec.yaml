@@ -1,5 +1,5 @@
 name: mi_corazon
-description: "Mi Corazon Freshmeat Butchery Management System"
+description: "Mi~Corazon Freshmeat Butchery Management System"
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
@@ -45,6 +45,8 @@ dependencies:
   fl_chart: ^0.70.2
   google_fonts: ^6.2.1
   flutter_local_notifications: ^17.2.2
+  font_awesome_flutter: ^10.7.0
+  material_design_icons_flutter: ^7.0.7296
   permission_handler: ^11.3.1
   drift: ^2.16.0
   sqlite3_flutter_libs: ^0.5.20
@@ -65,8 +67,8 @@ dev_dependencies:
   msix: ^3.16.1
 
 msix_config:
-  display_name: Mi Corazon Butchery
-  publisher_display_name: Mi Corazon Freshmeat
+  display_name: Mi~Corazon Butchery
+  publisher_display_name: Mi~Corazon Freshmeat
   title_bar_background_color: "#6B1111"
   logo_path: assets/logo/logo.jpg
   capabilities: internetClient, location, privateNetworkClientServer

@@ -16,13 +16,14 @@ class MenuService {
     final List<SidebarItem> adminItems = [
       SidebarItem(icon: Icons.dashboard_rounded, label: 'Admin Dashboard', route: '/admin'),
       SidebarItem(icon: Icons.bar_chart_rounded, label: 'Sales Analytics', route: '/admin/sales'),
+      SidebarItem(icon: Icons.inventory_2_rounded, label: 'Master Stock Control', route: '/admin/stock'),
+      SidebarItem(icon: Icons.account_balance_wallet_rounded, label: 'Debt Tracker', route: '/admin/debts'),
       SidebarItem(icon: Icons.receipt_long_rounded, label: 'Business Expenses', route: '/admin/expenses'),
       SidebarItem(icon: Icons.people_outline_rounded, label: 'Customer Directory', route: '/admin/customers'),
-      SidebarItem(icon: Icons.account_balance_wallet_rounded, label: 'Debt Tracker', route: '/admin/debts'),
       SidebarItem(icon: Icons.account_balance_rounded, label: 'GRA Tax Compliance', route: '/admin/tax'),
-      SidebarItem(icon: Icons.folder_open_rounded, label: 'Compliance Documents', route: '/admin/documents'),
-      SidebarItem(icon: Icons.inventory_2_rounded, label: 'Master Stock Control', route: '/admin/stock'),
       SidebarItem(icon: Icons.people_alt_rounded, label: 'Staff Management', route: '/admin/users'),
+      SidebarItem(icon: Icons.payments_rounded, label: 'Salary Management', route: '/admin/salaries'),
+      SidebarItem(icon: Icons.folder_open_rounded, label: 'Compliance Documents', route: '/admin/documents'),
       SidebarItem(icon: Icons.history_rounded, label: 'Company Recents', route: '/admin/recents'),
       SidebarItem(icon: Icons.build_circle_rounded, label: 'System Maintenance', route: '/admin/maintenance'),
     ];
@@ -46,8 +47,10 @@ class MenuService {
         final bool isSystemTool = item.route == '/admin' || 
                                   item.route == '/admin/tax' ||
                                   item.route == '/admin/documents' ||
+                                  item.route == '/admin/salaries' ||
                                   item.route == '/admin/recents' || 
-                                  item.route == '/admin/maintenance';
+                                  item.route == '/admin/maintenance' ||
+                                  item.route == '/admin/settings';
         
         final hasSpecificRestrictions = user.enabledPermissions.isNotEmpty && 
                                          user.enabledPermissions.any((p) => p.startsWith('/admin'));
@@ -88,6 +91,15 @@ class MenuService {
         route: '/cashier', 
         isCatchy: user.newlyAddedPermissions.contains('/cashier'),
       ));
+      
+      // NEW: Cashiers get Daily Sales Report access
+      if (roles.contains(UserRole.cashier)) {
+        items.add(SidebarItem(
+          icon: Icons.bar_chart_rounded,
+          label: 'Daily Sales Report',
+          route: '/admin/sales', // Reusing sales report screen
+        ));
+      }
     }
 
     // 3. Butcher Module
@@ -97,20 +109,19 @@ class MenuService {
 
     if (hasButcherAccess) {
       if (inButcherShell) {
-        // Detailed Butcher Menu
         items.addAll([
           SidebarItem(icon: Icons.dashboard_rounded, label: 'Butcher Home', route: 'butcher:dashboard'),
+          SidebarItem(icon: Icons.assignment_rounded, label: 'Processing Orders', route: 'butcher:orders'),
           SidebarItem(icon: Icons.pets_rounded, label: 'Animal Intake', route: 'butcher:animalIntake'),
           SidebarItem(icon: Icons.history_edu_rounded, label: 'Slaughter Logs', route: 'butcher:slaughterLog'),
           SidebarItem(icon: Icons.outdoor_grill, label: 'Meat Processing', route: 'butcher:meatProcessing'),
           SidebarItem(icon: Icons.layers_rounded, label: 'Batch Management', route: 'butcher:batchManagement'),
           SidebarItem(icon: Icons.local_shipping_rounded, label: 'Stock Transfer', route: 'butcher:stockTransfer'),
           SidebarItem(icon: Icons.inventory_2_rounded, label: 'Internal Inventory', route: 'butcher:inventory'),
-          SidebarItem(icon: Icons.assignment_rounded, label: 'Processing Orders', route: 'butcher:orders'),
-          SidebarItem(icon: Icons.delete_outline_rounded, label: 'Waste Management', route: 'butcher:wasteManagement'),
-          SidebarItem(icon: Icons.receipt_long_rounded, label: 'Unit Expenses', route: 'butcher:expenses'),
-          SidebarItem(icon: Icons.folder_open_rounded, label: 'Documents', route: 'butcher:documents'),
           SidebarItem(icon: Icons.bar_chart_rounded, label: 'Operational Reports', route: 'butcher:reports'),
+          SidebarItem(icon: Icons.receipt_long_rounded, label: 'Unit Expenses', route: 'butcher:expenses'),
+          SidebarItem(icon: Icons.delete_outline_rounded, label: 'Waste Management', route: 'butcher:wasteManagement'),
+          SidebarItem(icon: Icons.folder_open_rounded, label: 'Documents', route: 'butcher:documents'),
         ]);
       } else {
         items.add(SidebarItem(
@@ -122,8 +133,10 @@ class MenuService {
       }
     }
 
-    // 4. System Settings (Always visible)
-    items.add(SidebarItem(icon: Icons.settings_suggest_rounded, label: 'System Settings', route: '/settings'));
+    // 4. System Access (Always visible to all users)
+    items.add(SidebarItem(icon: Icons.info_outline_rounded, label: 'About System', route: '/about'));
+    items.add(SidebarItem(icon: Icons.settings_rounded, label: 'User Settings', route: '/settings'));
+    // Removed "My Profile" as requested. Details are now inside System Settings.
 
     // Special: Super Admin Root Access
     if (roles.contains(UserRole.superAdmin)) {
@@ -142,6 +155,7 @@ class MenuService {
       {'route': '/admin/documents', 'label': 'Compliance Documents'},
       {'route': '/admin/debts', 'label': 'Debt Tracker'},
       {'route': '/admin/stock', 'label': 'Master Stock Control'},
+      {'route': '/admin/salaries', 'label': 'Salary Management'},
       {'route': '/admin/users', 'label': 'Staff Management'},
       {'route': '/admin/recents', 'label': 'Company Recents'},
       {'route': '/admin/maintenance', 'label': 'System Maintenance'},

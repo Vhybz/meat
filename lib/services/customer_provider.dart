@@ -73,22 +73,30 @@ class CustomerNotifier extends StateNotifier<List<Customer>> {
       }
 
       final customerWithBranch = customer.copyWith(branchCode: user?.branchCode);
-      final savedCustomer = await _service.addCustomer(customerWithBranch);
       
-      state = [...state, savedCustomer];
+      // 1. Add to Offline Queue (Hive)
+      await OfflineSyncService.addToQueue(
+        actionType: 'CUSTOMER', 
+        data: customerWithBranch.toJson(),
+      );
+
+      // 2. Optimistic local update
+      state = [...state, customerWithBranch];
       
-      // Send Welcome SMS
+      // 3. (Optional) Send Welcome SMS if online
       final currentBranch = ref.read(currentBranchProvider);
       
-      await SmsService.sendCustomerWelcomeSms(
-        savedCustomer.name, 
-        savedCustomer.phone, 
-        currentBranch?.name
-      );
+      try {
+        await SmsService.sendCustomerWelcomeSms(
+          customerWithBranch.name, 
+          customerWithBranch.phone, 
+          currentBranch?.name
+        );
+      } catch (_) {}
       
-      return savedCustomer;
+      return customerWithBranch;
     } catch (e) {
-      debugPrint('Error adding customer: $e');
+      debugPrint('Error adding customer (Queue): $e');
       rethrow;
     }
   }
@@ -102,14 +110,14 @@ class CustomerNotifier extends StateNotifier<List<Customer>> {
         for (final c in state)
           if (c.id == id) updatedCustomer else c
       ];
-    } catch (e) {}
+    } catch (_) {}
   }
 
   Future<void> deleteCustomer(String id) async {
     try {
       await _service.deleteCustomer(id);
       state = state.where((c) => c.id != id).toList();
-    } catch (e) {}
+    } catch (_) {}
   }
 
   Future<void> awardLoyaltyPoints(String customerId, double amount) async {

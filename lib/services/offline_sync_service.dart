@@ -4,13 +4,15 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'dart:async';
 
-/// This service manages the "Offline-First" logic for Mi Corazon.
+/// This service manages the "Offline-First" logic for Mi~Corazon.
 /// It uses Hive as a fast, schema-less storage for pending cloud actions.
 class OfflineSyncService {
   static const String queueBoxName = 'sync_queue';
   static const String productsBoxName = 'products_cache';
   static const String customersBoxName = 'customers_cache';
   static const String salesBoxName = 'sales_cache';
+  static const String notificationsBoxName = 'notifications_cache';
+  static const String settingsBoxName = 'app_settings';
   static StreamSubscription<List<ConnectivityResult>>? _connectivitySubscription;
   static bool _isProcessing = false;
 
@@ -22,6 +24,8 @@ class OfflineSyncService {
       await Hive.openBox(productsBoxName);
       await Hive.openBox(customersBoxName);
       await Hive.openBox(salesBoxName);
+      await Hive.openBox(notificationsBoxName);
+      await Hive.openBox(settingsBoxName);
       
       // Listen for connectivity changes to trigger sync automatically
       _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
@@ -85,30 +89,94 @@ class OfflineSyncService {
     for (final key in keys) {
       final item = box.get(key);
       final String type = item['type'];
-      final Map<String, dynamic> payload = item['payload'];
+      final Map<String, dynamic> payload = Map<String, dynamic>.from(item['payload']);
+
+      // Helper to clean temporary IDs before insertion
+      void cleanId() {
+        if (payload['id'] != null && payload['id'].toString().startsWith('00000000-0000-0000-0000-')) {
+          payload.remove('id');
+        }
+      }
 
       try {
         bool success = false;
+        debugPrint('Sync Monitor: Pushing $type action (Payload keys: ${payload.keys.join(",")})');
         
         switch (type) {
           case 'SALE':
-            await Supabase.instance.client.from('sales').insert(payload);
+            await Supabase.instance.client.from('sales').upsert(payload);
+            success = true;
+            break;
+          case 'ANIMAL':
+            cleanId();
+            await Supabase.instance.client.from('animals').upsert(payload);
             success = true;
             break;
           case 'INTAKE':
-            await Supabase.instance.client.from('slaughter_logs').insert(payload);
+            cleanId();
+            await Supabase.instance.client.from('slaughter_logs').upsert(payload);
+            success = true;
+            break;
+          case 'UPDATE_SLAUGHTER':
+            await Supabase.instance.client.from('slaughter_logs').upsert(payload);
+            success = true;
+            break;
+          case 'CREATE_BATCH':
+            cleanId();
+            await Supabase.instance.client.from('meat_batches').upsert(payload);
+            success = true;
+            break;
+          case 'UPDATE_BATCH':
+            await Supabase.instance.client.from('meat_batches').upsert(payload);
+            success = true;
+            break;
+          case 'CUT':
+            cleanId();
+            await Supabase.instance.client.from('meat_cuts').upsert(payload);
             success = true;
             break;
           case 'WASTE':
-            await Supabase.instance.client.from('waste_records').insert(payload);
+            cleanId();
+            await Supabase.instance.client.from('butcher_waste').upsert(payload);
             success = true;
             break;
           case 'EXPENSE':
-            await Supabase.instance.client.from('expenses').insert(payload);
+            cleanId();
+            await Supabase.instance.client.from('expenses').upsert(payload);
             success = true;
             break;
           case 'CUSTOMER':
-            await Supabase.instance.client.from('customers').insert(payload);
+            cleanId();
+            await Supabase.instance.client.from('customers').upsert(payload);
+            success = true;
+            break;
+          case 'TRANSFER':
+            cleanId();
+            await Supabase.instance.client.from('stock_transfers').upsert(payload);
+            success = true;
+            break;
+          case 'UPDATE_TRANSFER':
+            await Supabase.instance.client.from('stock_transfers').upsert(payload);
+            success = true;
+            break;
+          case 'AUDIT':
+            cleanId();
+            await Supabase.instance.client.from('audit_logs').insert(payload);
+            success = true;
+            break;
+          case 'NOTIFICATION':
+            cleanId();
+            await Supabase.instance.client.from('notifications').insert(payload);
+            success = true;
+            break;
+          case 'CUSTOMER_PAYMENT':
+            cleanId();
+            await Supabase.instance.client.from('customer_payments').insert(payload);
+            success = true;
+            break;
+          case 'STOCK_HISTORY':
+            cleanId();
+            await Supabase.instance.client.from('stock_history').insert(payload);
             success = true;
             break;
           default:

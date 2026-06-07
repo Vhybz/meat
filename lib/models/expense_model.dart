@@ -6,6 +6,7 @@ class ExpenseRecord {
   final double amount;
   final DateTime date;
   final String? notes;
+  final String? receiptUrl;
 
   ExpenseRecord({
     required this.id,
@@ -15,6 +16,7 @@ class ExpenseRecord {
     required this.amount,
     required this.date,
     this.notes,
+    this.receiptUrl,
   });
 
   factory ExpenseRecord.fromJson(Map<String, dynamic> json) {
@@ -26,6 +28,7 @@ class ExpenseRecord {
       amount: (json['amount'] as num).toDouble(),
       date: DateTime.parse(json['date']),
       notes: json['notes'],
+      receiptUrl: json['receipt_url'],
     );
   }
 
@@ -36,6 +39,8 @@ class ExpenseRecord {
     'category': category,
     'amount': amount,
     'date': date.toIso8601String(),
+    'notes': notes,
+    'receipt_url': receiptUrl,
   };
 
   ExpenseRecord copyWith({
@@ -46,6 +51,7 @@ class ExpenseRecord {
     double? amount,
     DateTime? date,
     String? notes,
+    String? receiptUrl,
   }) {
     return ExpenseRecord(
       id: id ?? this.id,
@@ -55,6 +61,7 @@ class ExpenseRecord {
       amount: amount ?? this.amount,
       date: date ?? this.date,
       notes: notes ?? this.notes,
+      receiptUrl: receiptUrl ?? this.receiptUrl,
     );
   }
 }

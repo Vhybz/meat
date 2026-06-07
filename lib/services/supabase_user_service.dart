@@ -26,6 +26,13 @@ class SupabaseUserService {
         .eq('id', account.id);
   }
 
+  Future<void> updateUserFields(String userId, Map<String, dynamic> fields) async {
+    await _client
+        .from('users')
+        .update(fields)
+        .eq('id', userId);
+  }
+
   Future<void> deleteUser(String id) async {
     await _client
         .from('users')
@@ -88,11 +95,12 @@ class SupabaseUserService {
       try {
         final List<FileObject> existingFiles = await _client.storage.from('user-profiles').list(path: 'profiles');
         final List<String> userFiles = existingFiles
-            .map((f) => f.name)
-            .where((name) => name.startsWith(userId))
+            .where((f) => f.name.startsWith(userId))
+            .map((f) => 'profiles/${f.name}')
             .toList();
+        
         if (userFiles.isNotEmpty) {
-          await _client.storage.from('user-profiles').remove(userFiles.map((name) => 'profiles/$name').toList());
+          await _client.storage.from('user-profiles').remove(userFiles);
         }
       } catch (e) {
         debugPrint('Cleanup old profiles error (non-critical): $e');

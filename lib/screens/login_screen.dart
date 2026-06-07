@@ -134,7 +134,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               color: isError ? Colors.red : (isWarning ? Colors.orange : AppColors.primaryMaroon),
             ),
             const SizedBox(width: 12),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+            Expanded(
+              child: Text(
+                title, 
+                style: const TextStyle(fontWeight: FontWeight.bold),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         content: Text(message, style: const TextStyle(fontSize: 14)),
@@ -166,7 +172,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               end: Alignment.bottomCenter,
               colors: isDark 
                 ? [const Color(0xFF121212), const Color(0xFF000000)]
-                : [AppColors.primaryMaroon, const Color(0xFF4A0808)],
+                : [theme.colorScheme.primary, HSLColor.fromColor(theme.colorScheme.primary).withLightness(0.15).toColor()],
             ),
           ),
           child: Center(
@@ -204,7 +210,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             offset: const Offset(0, 10),
                           ),
                         ],
-                        border: Border.all(color: AppColors.primaryMaroon.withValues(alpha: 0.1), width: 6),
+                        border: Border.all(color: theme.colorScheme.primary.withValues(alpha: 0.1), width: 6),
                       ),
                       child: ClipOval(
                         child: Image.asset(
@@ -220,7 +226,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       style: TextStyle(
                         fontSize: isMobile ? 24 : 28, 
                         fontWeight: FontWeight.bold, 
-                        color: isDark ? theme.colorScheme.primary : AppColors.primaryMaroon,
+                        color: theme.colorScheme.primary,
                         letterSpacing: 1.2,
                       ),
                     ),
@@ -230,7 +236,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       style: TextStyle(
                         fontSize: 10, 
                         fontWeight: FontWeight.w600, 
-                        color: isDark ? theme.colorScheme.primary.withValues(alpha: 0.8) : AppColors.primaryMaroon, 
+                        color: theme.colorScheme.primary.withValues(alpha: 0.8), 
                       letterSpacing: 2.5,
                       ),
                     ),
@@ -238,7 +244,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     Container(
                       height: 2,
                       width: 40,
-                      color: (isDark ? theme.colorScheme.primary : AppColors.primaryMaroon).withValues(alpha: 0.2),
+                      color: theme.colorScheme.primary.withValues(alpha: 0.2),
                     ),
                     const SizedBox(height: 16),
                     Text(
