@@ -298,19 +298,41 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                               ),
                               const SizedBox(height: AppSpacing.m),
                               
-                              if (_selectedRole == UserRole.admin || noBranchesExist) ...[
-                                CheckboxListTile(
-                                  title: Text('Setup New Branch?', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
-                                  subtitle: Text(noBranchesExist ? 'Required: No branches found.' : 'Create a separate business unit', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant)),
-                                  value: _isCreatingBranch || noBranchesExist,
-                                  onChanged: noBranchesExist ? null : (v) => setState(() => _isCreatingBranch = v!),
-                                  activeColor: theme.colorScheme.primary,
-                                  dense: true,
+                              if (_selectedRole == UserRole.admin) ...[
+                              CheckboxListTile(
+                                title: Text('Setup New Branch?', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: theme.colorScheme.onSurface)),
+                                subtitle: Text(noBranchesExist ? 'Required: No branches found in system.' : 'Create a separate business unit', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant)),
+                                value: _isCreatingBranch || noBranchesExist,
+                                onChanged: noBranchesExist ? null : (v) => setState(() => _isCreatingBranch = v!),
+                                activeColor: theme.colorScheme.primary,
+                                dense: true,
+                              ),
+                              const SizedBox(height: AppSpacing.m),
+                            ] else if (noBranchesExist) ...[
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
                                 ),
-                                const SizedBox(height: AppSpacing.m),
-                              ],
+                                child: const Row(
+                                  children: [
+                                    Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 20),
+                                    SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        'No branches found. Please register as an Admin to setup the first shop location.',
+                                        style: TextStyle(color: Colors.orange, fontSize: 11, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: AppSpacing.m),
+                            ],
 
-                              if (_isCreatingBranch || noBranchesExist) ...[
+                              if (_selectedRole == UserRole.admin && (_isCreatingBranch || noBranchesExist)) ...[
                                 _buildTextField(context, _branchNameController, 'Shop/Branch Name', Icons.store_mall_directory_outlined),
                                 const SizedBox(height: AppSpacing.m),
                                 _buildTextField(context, _branchLocationController, 'Branch Location (City/Town)', Icons.location_on_outlined),
@@ -470,7 +492,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         final existingProfiles = ref.read(userProvider);
         final existingProfile = existingProfiles.where((u) => u.email.toLowerCase() == email.toLowerCase()).firstOrNull;
 
-        if (_isCreatingBranch || noBranchesExist) {
+        if (_selectedRole == UserRole.admin && (_isCreatingBranch || noBranchesExist)) {
           final String firstName = _firstNameController.text.trim();
           final String location = _branchLocationController.text.trim();
           final String random = (100 + (DateTime.now().millisecond % 900)).toString();
@@ -524,7 +546,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
           try {
             await userNotifier.addAccount(newUser);
-            if (_isCreatingBranch || noBranchesExist) {
+            if (_selectedRole == UserRole.admin && (_isCreatingBranch || noBranchesExist)) {
               await ref.read(branchesProvider.notifier).setBranchAdmin(branchCode!, newUser.id);
             }
             

@@ -24,142 +24,127 @@ class _MeatProcessingScreenState extends ConsumerState<MeatProcessingScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final recentCutsAsync = ref.watch(recentCutsProvider);
-    final activeBatchesAsync = ref.watch(meatBatchesProvider);
+    final theme = Theme.of(context);
     final slaughterLogsAsync = ref.watch(slaughterLogsProvider);
+    final activeBatchesAsync = ref.watch(meatBatchesProvider);
+    final recentCutsAsync = ref.watch(recentCutsProvider);
 
-    return DefaultTabController(
-      length: 2,
-      child: Scaffold(
-        backgroundColor: Colors.transparent,
-        appBar: const TabBar(
-          tabs: [
-            Tab(text: 'OPERATIONS', icon: Icon(Icons.precision_manufacturing_outlined, size: 18)),
-            Tab(text: 'PRODUCTION LOGS', icon: Icon(Icons.history_edu_rounded, size: 18)),
-          ],
-          labelColor: AppColors.primaryMaroon,
-          unselectedLabelColor: Colors.grey,
-          indicatorColor: AppColors.primaryMaroon,
-          indicatorWeight: 3,
-        ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: () => _showRecordCutDialog(context, ref),
-          label: const Text('Add Part/Cut', style: TextStyle(fontWeight: FontWeight.bold)),
-          icon: const Icon(Icons.add_shopping_cart_rounded),
-          backgroundColor: AppColors.primaryMaroon,
-          foregroundColor: Colors.white,
-        ),
-        body: TabBarView(
-          children: [
-            // WORKFLOW TAB
-            SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSpacing.l),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildStatsHeader(slaughterLogsAsync, activeBatchesAsync),
-                  const SizedBox(height: AppSpacing.xl),
-                  
-                  _buildSectionHeader('1. CARCASS PIPELINE (Awaiting Receipt)', Icons.local_shipping_rounded),
-                  const SizedBox(height: AppSpacing.m),
-                  slaughterLogsAsync.when(
-                    data: (logs) {
-                      final theme = Theme.of(context);
-                      final awaiting = logs.where((l) => l.status == SlaughterStatus.completed).toList();
-                      if (awaiting.isEmpty) {
-                        return Container(
-                          padding: const EdgeInsets.all(AppSpacing.l),
-                          decoration: BoxDecoration(
-                            color: theme.cardColor.withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(AppRadius.m),
-                            border: Border.all(color: theme.dividerColor),
-                          ),
-                          child: const Center(
-                            child: Text('No carcasses awaiting receipt.', 
-                              style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey)),
-                          ),
-                        );
-                      }
-                      return _buildAwaitingReceiveList(context, ref, logs);
-                    },
-                    loading: () => const Center(child: LinearProgressIndicator()),
-                    error: (err, _) => Text('Error: $err'),
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
-                  
-                  Row(
-                    children: [
-                      _buildSectionHeader('2. PRODUCTION FLOOR (Active Dissection)', Icons.restaurant_rounded),
-                      const Spacer(),
-                      IconButton(
-                        onPressed: () => ref.read(meatBatchesProvider.notifier).loadBatches(),
-                        icon: const Icon(Icons.refresh, size: 18),
-                        tooltip: 'Refresh Active Batches',
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.m),
-                  activeBatchesAsync.when(
-                    data: (batches) => _buildActiveBatchesList(ref, batches),
-                    loading: () => const Center(child: CircularProgressIndicator()),
-                    error: (err, _) => Text('Error: $err'),
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
-                  
-                  _buildSectionHeader('3. FINAL PACKAGING & FREEZING', Icons.ac_unit_rounded),
-                  const SizedBox(height: AppSpacing.m),
-                  activeBatchesAsync.when(
-                    data: (batches) => _buildPackagingSection(ref, batches),
-                    loading: () => const Center(child: CircularProgressIndicator()),
-                    error: (err, _) => Text('Error: $err'),
-                  ),
-                  const SizedBox(height: 80), // Space for FAB
-                ],
+    return Scaffold(
+      backgroundColor: theme.scaffoldBackgroundColor,
+      appBar: AppBar(
+        title: const Text('MEAT PROCESSING', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        backgroundColor: theme.cardColor,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              ref.read(slaughterLogsProvider.notifier).loadLogs();
+              ref.read(meatBatchesProvider.notifier).loadBatches();
+              ref.read(recentCutsProvider.notifier).loadCuts();
+            },
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showRecordCutDialog(context, ref),
+        label: const Text('Add Part/Cut', style: TextStyle(fontWeight: FontWeight.bold)),
+        icon: const Icon(Icons.add_shopping_cart_rounded),
+        backgroundColor: AppColors.primaryMaroon,
+        foregroundColor: Colors.white,
+      ),
+      body: RefreshIndicator(
+        onRefresh: () async {
+          await ref.read(slaughterLogsProvider.notifier).loadLogs();
+          await ref.read(meatBatchesProvider.notifier).loadBatches();
+          await ref.read(recentCutsProvider.notifier).loadCuts();
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(AppSpacing.l),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildStatsHeader(slaughterLogsAsync, activeBatchesAsync),
+              const SizedBox(height: AppSpacing.xl),
+              
+              _buildSectionHeader('1. CARCASS PIPELINE (Awaiting Receipt)', Icons.local_shipping_rounded),
+              const SizedBox(height: AppSpacing.m),
+              slaughterLogsAsync.when(
+                data: (logs) {
+                  final awaiting = logs.where((l) => l.status == SlaughterStatus.completed).toList();
+                  if (awaiting.isEmpty) return const SizedBox.shrink();
+                  return _buildAwaitingReceiveList(context, ref, awaiting);
+                },
+                loading: () => const Center(child: Padding(padding: EdgeInsets.all(10), child: LinearProgressIndicator())),
+                error: (err, _) => const SizedBox.shrink(),
               ),
-            ),
-            // HISTORY TAB
-            SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSpacing.l),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHistorySummary(recentCutsAsync),
-                  const SizedBox(height: AppSpacing.xl),
-                  Row(
-                    children: [
-                      _buildSectionHeader('Production History', Icons.history),
-                      const Spacer(),
-                      SizedBox(
-                        width: 250,
-                        child: TextField(
-                          onChanged: (v) => setState(() => _historySearchQuery = v),
-                          decoration: InputDecoration(
-                            hintText: 'Filter by cut name...',
-                            prefixIcon: const Icon(Icons.search, size: 18),
-                            isDense: true,
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(AppRadius.s)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.m),
-                  recentCutsAsync.when(
-                    data: (cuts) {
-                      final filtered = cuts.where((c) => 
-                        c.name.toLowerCase().contains(_historySearchQuery.toLowerCase()) ||
-                        c.batchId.toLowerCase().contains(_historySearchQuery.toLowerCase())
-                      ).toList();
-                      return _buildCutProductionList(filtered);
-                    },
-                    loading: () => const Center(child: CircularProgressIndicator()),
-                    error: (err, _) => Text('Error: $err'),
-                  ),
-                ],
+              
+              const SizedBox(height: AppSpacing.xl),
+              _buildSectionHeader('2. PRODUCTION FLOOR (Active Batches)', Icons.restaurant_rounded),
+              const SizedBox(height: AppSpacing.m),
+              activeBatchesAsync.when(
+                data: (batches) {
+                  final processing = batches.where((b) => 
+                    b.status != 'completed' && 
+                    b.status != 'frozen' &&
+                    b.status != 'packaging'
+                  ).toList();
+                  
+                  if (processing.isEmpty) {
+                    return _buildEmptyPlaceholder(theme, 'No active batches. Go to Slaughter Log to start a breakdown.');
+                  }
+                  return _buildActiveBatchesList(ref, processing);
+                },
+                loading: () => const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator())),
+                error: (err, _) => Center(child: Text('Error: $err')),
               ),
-            ),
-          ],
+              
+              const SizedBox(height: AppSpacing.xl),
+              _buildSectionHeader('3. PACKAGING & DISPATCH READY', Icons.ac_unit_rounded),
+              const SizedBox(height: AppSpacing.m),
+              activeBatchesAsync.when(
+                data: (batches) {
+                  final packaging = batches.where((b) => 
+                    b.status == 'packaging' || 
+                    b.status == 'frozen'
+                  ).toList();
+                  if (packaging.isEmpty) return const SizedBox.shrink();
+                  return _buildPackagingSection(ref, packaging);
+                },
+                loading: () => const SizedBox.shrink(),
+                error: (err, _) => const SizedBox.shrink(),
+              ),
+              
+              const Divider(height: 60),
+              _buildSectionHeader('PRODUCTION HISTORY (Today)', Icons.history),
+              const SizedBox(height: AppSpacing.m),
+              _buildHistorySummary(recentCutsAsync),
+              const SizedBox(height: 100),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyPlaceholder(ThemeData theme, String message) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl, horizontal: AppSpacing.l),
+      decoration: BoxDecoration(
+        color: theme.cardColor.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(AppRadius.m),
+        border: Border.all(color: theme.dividerColor.withValues(alpha: 0.1)),
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.inventory_2_outlined, color: theme.disabledColor, size: 32),
+          const SizedBox(height: 12),
+          Text(message, 
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: theme.disabledColor)),
+        ],
       ),
     );
   }
@@ -318,13 +303,7 @@ class _MeatProcessingScreenState extends ConsumerState<MeatProcessingScreen> {
     );
   }
 
-  Widget _buildActiveBatchesList(WidgetRef ref, List<MeatBatch> batches) {
-    final processing = batches.where((b) => 
-      b.status == MeatBatchStatus.preparing.name || 
-      b.status == MeatBatchStatus.mincing.name || 
-      b.status == MeatBatchStatus.cutting.name
-    ).toList();
-
+  Widget _buildActiveBatchesList(WidgetRef ref, List<MeatBatch> processing) {
     if (processing.isEmpty) return const Text('No batches currently in active processing.', style: TextStyle(color: Colors.grey, fontSize: 12, fontStyle: FontStyle.italic));
     
     final recentCuts = ref.watch(recentCutsProvider).value ?? [];
@@ -723,8 +702,7 @@ class _MeatProcessingScreenState extends ConsumerState<MeatProcessingScreen> {
     );
   }
 
-  Widget _buildPackagingSection(WidgetRef ref, List<MeatBatch> batches) {
-    final packaging = batches.where((b) => b.status == MeatBatchStatus.packaging.name || b.status == MeatBatchStatus.frozen.name).toList();
+  Widget _buildPackagingSection(WidgetRef ref, List<MeatBatch> packaging) {
     if (packaging.isEmpty) return const Text('No batches currently being packaged.', style: TextStyle(color: Colors.grey, fontSize: 12, fontStyle: FontStyle.italic));
 
     return ListView.builder(

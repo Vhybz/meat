@@ -1046,33 +1046,45 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('STATUS', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.bold)),
-                                  const SizedBox(height: 4),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: _getStatusColor(sale.status).withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(4),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text('STATUS', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.bold)),
+                                    const SizedBox(height: 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: _getStatusColor(sale.status).withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        sale.status.name.toUpperCase(),
+                                        style: TextStyle(color: _getStatusColor(sale.status), fontSize: 10, fontWeight: FontWeight.bold),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                     ),
-                                    child: Text(
-                                      sale.status.name.toUpperCase(),
-                                      style: TextStyle(color: _getStatusColor(sale.status), fontSize: 10, fontWeight: FontWeight.bold),
-                                    ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text('DATE', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.bold)),
-                                  const SizedBox(height: 4),
-                                  Text(DateFormat('MMM dd, yyyy HH:mm').format(sale.timestamp), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                                ],
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text('DATE', style: TextStyle(fontSize: 10, color: theme.colorScheme.onSurfaceVariant, fontWeight: FontWeight.bold)),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      DateFormat('MMM dd, yyyy HH:mm').format(sale.timestamp), 
+                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                                      textAlign: TextAlign.right,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ],
                           ),
@@ -1303,62 +1315,71 @@ class _CashierPOSState extends ConsumerState<CashierPOS> {
             children: [
               Icon(Icons.account_balance, color: Colors.purple),
               SizedBox(width: 12),
-              Text('Complete Bank Deposit'),
+              Expanded(
+                child: Text(
+                  'Complete Bank Deposit',
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
             ],
           ),
-          content: SizedBox(
-            width: 400,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Please provide the bank transaction reference/ID and a photo of the deposit slip.',
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                const SizedBox(height: 24),
-                TextField(
-                  controller: receiptIdController,
-                  decoration: const InputDecoration(
-                    labelText: 'Bank Receipt ID / Reference',
-                    hintText: 'e.g. UMB-123456',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.tag),
+          content: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Please provide the bank transaction reference/ID and a photo of the deposit slip.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
-                ),
-                const SizedBox(height: 16),
-                InkWell(
-                  onTap: () async {
-                    final picker = ImagePicker();
-                    final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
-                    if (image != null) {
-                      final bytes = await image.readAsBytes();
-                      setState(() => selectedImageBytes = bytes);
-                    }
-                  },
-                  child: Container(
-                    height: 150,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.withValues(alpha: 0.05),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: selectedImageBytes != null ? Colors.purple : Colors.grey.shade300),
+                  const SizedBox(height: 24),
+                  TextField(
+                    controller: receiptIdController,
+                    decoration: const InputDecoration(
+                      labelText: 'Bank Receipt ID / Reference',
+                      hintText: 'e.g. UMB-123456',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.tag),
                     ),
-                    child: selectedImageBytes != null
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.memory(selectedImageBytes!, fit: BoxFit.cover),
-                          )
-                        : const Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.add_a_photo_outlined, color: Colors.purple, size: 32),
-                              SizedBox(height: 8),
-                              Text('Select Deposit Slip Photo', style: TextStyle(fontSize: 11, color: Colors.purple)),
-                            ],
-                          ),
+                    onChanged: (_) => setState(() {}), // Refresh to enable/disable button
                   ),
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  InkWell(
+                    onTap: () async {
+                      final picker = ImagePicker();
+                      final XFile? image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+                      if (image != null) {
+                        final bytes = await image.readAsBytes();
+                        setState(() => selectedImageBytes = bytes);
+                      }
+                    },
+                    child: Container(
+                      height: 150,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: selectedImageBytes != null ? Colors.purple : Colors.grey.shade300),
+                      ),
+                      child: selectedImageBytes != null
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.memory(selectedImageBytes!, fit: BoxFit.cover),
+                            )
+                          : const Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.add_a_photo_outlined, color: Colors.purple, size: 32),
+                                SizedBox(height: 8),
+                                Text('Select Deposit Slip Photo', style: TextStyle(fontSize: 11, color: Colors.purple)),
+                              ],
+                            ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [

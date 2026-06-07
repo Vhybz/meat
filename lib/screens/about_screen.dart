@@ -231,7 +231,6 @@ class AboutScreen extends ConsumerWidget {
   }
 
   Widget _buildDeveloperSection(BuildContext context, user) {
-    final theme = Theme.of(context);
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -281,7 +280,7 @@ class AboutScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 8),
               const Text(
-                '\"My objective with Mi~Corazon was to create a system that doesn\'t just record data, but actively protects and grows the business. I believe that engineering excellence should be invisible—allowing the business to operate with absolute precision while the staff focuses on quality service.\"',
+                '"My objective with Mi~Corazon was to create a system that doesn\'t just record data, but actively protects and grows the business. I believe that engineering excellence should be invisible—allowing the business to operate with absolute precision while the staff focuses on quality service."',
                 style: TextStyle(color: Colors.white70, height: 1.6, fontSize: 15, fontStyle: FontStyle.italic),
               ),
             ],

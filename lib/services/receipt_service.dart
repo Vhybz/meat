@@ -85,6 +85,32 @@ class ReceiptService {
                         ],
                       ),
                     ),
+                  
+                  if (sale.isVerified && sale.bankReceiptUrl != null)
+                    pw.Container(
+                      width: double.infinity,
+                      margin: const pw.EdgeInsets.symmetric(vertical: 8),
+                      padding: const pw.EdgeInsets.all(8),
+                      decoration: pw.BoxDecoration(
+                        color: PdfColors.green50,
+                        borderRadius: const pw.BorderRadius.all(pw.Radius.circular(4)),
+                        border: pw.Border.all(color: PdfColors.green, width: 1),
+                      ),
+                      child: pw.Column(
+                        children: [
+                          pw.Row(
+                            mainAxisAlignment: pw.MainAxisAlignment.center,
+                            children: [
+                              pw.Text('PAYMENT VERIFIED', style: pw.TextStyle(font: boldFont, fontSize: 10, color: PdfColors.green)),
+                            ],
+                          ),
+                          pw.SizedBox(height: 2),
+                          if (sale.bankReceiptId != null)
+                            pw.Text('Bank Ref: ${sale.bankReceiptId}', style: pw.TextStyle(font: boldFont, fontSize: 9, color: PdfColors.green)),
+                          pw.Text('Receipt Uploaded & Confirmed', style: pw.TextStyle(font: font, fontSize: 8, color: PdfColors.green700)),
+                        ],
+                      ),
+                    ),
                     
                   pw.Divider(thickness: 0.5),
                   pw.Row(

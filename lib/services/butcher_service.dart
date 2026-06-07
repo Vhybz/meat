@@ -371,7 +371,7 @@ class MeatBatchNotifier extends StateNotifier<AsyncValue<List<MeatBatch>>> {
         weight: totalCarcassWeight,
         costPrice: log.farmPrice ?? 0.0,
         createdAt: DateTime.now(),
-        status: 'transporting',
+        status: MeatBatchStatus.preparing.name, // Changed from transporting to preparing
         source: BatchSource(
           name: 'Direct Slaughter',
           location: branchCode,
@@ -394,9 +394,9 @@ class MeatBatchNotifier extends StateNotifier<AsyncValue<List<MeatBatch>>> {
         await ref.read(butcherWasteProvider.notifier).addWaste(log.id, 'Slaughter Waste/Bones', waste);
       }
 
-      // 4. Mark Slaughter as Slaughtered/Completed
+      // 4. Mark Slaughter as fully Processed (removes from pipeline, moves to production floor)
       final updatedLog = log.copyWith(
-        status: SlaughterStatus.completed,
+        status: SlaughterStatus.processed, // Changed from completed to processed
         meatWeight: totalCarcassWeight,
         slaughterTime: DateTime.now(),
       );

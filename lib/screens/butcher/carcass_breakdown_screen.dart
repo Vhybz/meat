@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 import '../../core/constants.dart';
 import '../../models/butcher_models.dart';
 import '../../services/butcher_service.dart';
 import '../../services/butcher_navigation_provider.dart';
 import '../../services/label_service.dart';
-import '../../widgets/status_chip.dart';
 import '../../widgets/responsive_layout.dart';
 
 class CarcassBreakdownScreen extends ConsumerStatefulWidget {
@@ -21,7 +19,6 @@ class _CarcassBreakdownScreenState extends ConsumerState<CarcassBreakdownScreen>
   final TextEditingController _wasteController = TextEditingController();
   bool _isSaving = false;
   String? _errorMessage;
-  double _currentYield = 0;
   double _totalAccounted = 0;
 
   @override
@@ -34,7 +31,6 @@ class _CarcassBreakdownScreenState extends ConsumerState<CarcassBreakdownScreen>
         _controllers[cut]!.addListener(_calculateTotals);
       }
       _wasteController.addListener(_calculateTotals);
-      _currentYield = log.meatWeight;
     }
   }
 
@@ -64,7 +60,6 @@ class _CarcassBreakdownScreenState extends ConsumerState<CarcassBreakdownScreen>
     if (log == null) return const Center(child: Text('No active animal selected.'));
 
     final theme = Theme.of(context);
-    final isMobile = ResponsiveLayout.isMobile(context);
     final progress = (log.meatWeight > 0) ? (_totalAccounted / log.meatWeight).clamp(0.0, 1.2) : 0.0;
     final remaining = log.meatWeight - _totalAccounted;
 
@@ -473,43 +468,64 @@ class _CarcassBreakdownScreenState extends ConsumerState<CarcassBreakdownScreen>
             const Expanded(
               child: Text(
                 'Weights Recorded',
-                style: TextStyle(fontWeight: FontWeight.bold),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
         ),
-        content: const Text('The carcass breakdown has been successfully logged. The next step is to receive the animal at the Processing Workstation for dissection.'),
+        content: const Text(
+          'The carcass breakdown has been successfully logged. The next step is to receive the animal at the Processing Workstation for dissection.',
+          style: TextStyle(fontSize: 13),
+        ),
+        actionsPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         actions: [
-          TextButton.icon(
-            onPressed: () => LabelService.printSlaughterLabel(log),
-            icon: const Icon(Icons.print, size: 18),
-            label: const Text('PRINT BATCH LABEL'),
-          ),
-          const Divider(),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  ref.read(activeSlaughterLogProvider.notifier).state = null;
-                  ref.read(butcherNavProvider.notifier).setScreen(ButcherScreen.slaughterLog);
-                },
-                child: const Text('Back to Logs'),
-              ),
-              ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.pop(context);
-                  ref.read(activeSlaughterLogProvider.notifier).state = null;
-                  ref.read(butcherNavProvider.notifier).setScreen(ButcherScreen.meatProcessing);
-                },
-                icon: const Icon(Icons.arrow_forward_rounded, size: 18),
-                label: const Text('TO PROCESSING', style: TextStyle(fontWeight: FontWeight.bold)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryMaroon, 
-                  foregroundColor: Colors.white,
+              SizedBox(
+                width: double.infinity,
+                child: TextButton.icon(
+                  onPressed: () => LabelService.printSlaughterLabel(log),
+                  icon: const Icon(Icons.print, size: 18),
+                  label: const Text('PRINT BATCH LABEL'),
                 ),
+              ),
+              const Divider(),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        ref.read(activeSlaughterLogProvider.notifier).state = null;
+                        ref.read(butcherNavProvider.notifier).setScreen(ButcherScreen.slaughterLog);
+                      },
+                      child: const Text('Back to Logs'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        ref.read(activeSlaughterLogProvider.notifier).state = null;
+                        ref.read(butcherNavProvider.notifier).setScreen(ButcherScreen.meatProcessing);
+                      },
+                      icon: const Icon(Icons.arrow_forward_rounded, size: 14),
+                      label: const Text('TO PROCESSING', 
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryMaroon, 
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
